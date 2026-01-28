@@ -15,12 +15,14 @@ See @PRD.md for complete product requirements and specifications.
 ```
 aleo/              Leo smart contract (program: zk_factor_11765.aleo)
 └── CLAUDE.md      Aleo-specific development guide
-client/            React frontend (to be added)
+client/            React frontend with Vite + TypeScript + shadcn/ui
+└── CLAUDE.md      Frontend development guide
 docs/              Context-specific documentation
-└── prd.md         Full product requirements
-└── spec.md        Project technical specifications
+PRD.md             Full product requirements and specifications
 ```
 
 ## Module-Specific Guides
 
 **When working in `aleo/`:** Refer to @aleo/CLAUDE.md for smart contract architecture, development commands, and Aleo platform constraints.
+
+**When working in `client/`:** Refer to @client/CLAUDE.md for frontend tech stack, component structure, routing, and Aleo wallet integration.
