@@ -14,11 +14,11 @@ See @PRD.md for complete product requirements and specifications.
 
 ```
 aleo/              Leo smart contract (program: zk_factor_11765.aleo)
-  └── CLAUDE.md    Aleo-specific development guide
+└── CLAUDE.md      Aleo-specific development guide
 client/            React frontend (to be added)
-docs/              Language-specific guides and documentation
-  └── leo.md       Leo language guide
-PRD.md             Full product requirements and specifications
+docs/              Context-specific documentation
+└── prd.md         Full product requirements
+└── spec.md        Project technical specifications
 ```
 
 ## Module-Specific Guides
