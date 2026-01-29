@@ -1,0 +1,1112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZK Factor - Privacy-Preserving Invoice Factoring</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    <style>
+        /* ==========================
+           CUSTOMIZE COLORS HERE
+           ========================== */
+        :root {
+            --primary: #1a5490;
+            --secondary: #0ea5e9;
+            --accent: #06b6d4;
+            --dark: #0f172a;
+            --light: #f8fafc;
+            --success: #10b981;
+            --danger: #ef4444;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            line-height: 1.6;
+            color: var(--dark);
+            background: var(--light);
+            font-weight: 400;
+        }
+
+        .slide {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 80px 40px;
+            page-break-after: always;
+        }
+
+        .slide-content {
+            max-width: 1100px;
+            width: 100%;
+        }
+
+        /* Typography */
+        h1, h2, h3, h4 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+
+        h1 {
+            font-size: 4.5rem;
+            letter-spacing: -3px;
+        }
+
+        h2 {
+            font-size: 3rem;
+            color: var(--primary);
+            margin-bottom: 50px;
+            letter-spacing: -1px;
+        }
+
+        h3 {
+            font-size: 1.8rem;
+            margin-bottom: 20px;
+        }
+
+        h4 {
+            font-size: 1.3rem;
+            margin-bottom: 10px;
+        }
+
+        p {
+            font-size: 1.15rem;
+            color: #334155;
+            margin-bottom: 15px;
+        }
+
+        /* Title Slide */
+        .title-slide {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            color: white;
+            text-align: center;
+        }
+
+        .title-slide h1 {
+            margin-bottom: 24px;
+        }
+
+        .tagline {
+            font-size: 1.6rem;
+            font-weight: 300;
+            margin-bottom: 40px;
+            opacity: 0.95;
+        }
+
+        .subtitle {
+            font-size: 1.1rem;
+            opacity: 0.85;
+            font-weight: 300;
+        }
+
+        /* Layout */
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 50px;
+            align-items: start;
+        }
+
+        /* Stats */
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 30px;
+            margin: 40px 0;
+        }
+
+        .stat {
+            background: white;
+            padding: 40px 30px;
+            border-radius: 16px;
+            text-align: center;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        .stat-num {
+            font-size: 3.5rem;
+            font-weight: 800;
+            color: var(--secondary);
+            line-height: 1;
+            font-family: 'Space Grotesk', sans-serif;
+            margin-bottom: 8px;
+        }
+
+        .stat-label {
+            font-size: 1rem;
+            color: #64748b;
+            font-weight: 500;
+        }
+
+        /* Cards */
+        .card {
+            background: white;
+            padding: 30px;
+            border-radius: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            margin-bottom: 20px;
+        }
+
+        .card-danger {
+            border-left: 4px solid var(--danger);
+        }
+
+        .card-success {
+            border-left: 4px solid var(--success);
+        }
+
+        .card h4 {
+            color: var(--primary);
+        }
+
+        .card p {
+            margin-bottom: 0;
+            font-size: 1.05rem;
+        }
+
+        /* Features */
+        .features {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 25px;
+            margin: 40px 0;
+        }
+
+        .feature {
+            background: white;
+            padding: 30px;
+            border-radius: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        .feature-icon {
+            font-size: 2rem;
+            margin-bottom: 12px;
+        }
+
+        /* Steps */
+        .steps {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 30px;
+            margin: 40px 0;
+        }
+
+        .step {
+            text-align: center;
+        }
+
+        .step-num {
+            width: 60px;
+            height: 60px;
+            background: var(--secondary);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin: 0 auto 16px;
+            font-family: 'Space Grotesk', sans-serif;
+        }
+
+        .step h4 {
+            font-size: 1.1rem;
+            margin-bottom: 8px;
+        }
+
+        .step p {
+            font-size: 0.95rem;
+            margin-bottom: 0;
+        }
+
+        /* Highlight Box */
+        .highlight {
+            background: linear-gradient(135deg, var(--secondary), var(--accent));
+            color: white;
+            padding: 35px;
+            border-radius: 16px;
+            margin: 30px 0;
+        }
+
+        .highlight h3 {
+            color: white;
+            margin-bottom: 12px;
+        }
+
+        .highlight p {
+            color: white;
+            margin-bottom: 0;
+            font-size: 1.1rem;
+        }
+
+        /* Table */
+        .table {
+            background: white;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            margin: 30px 0;
+        }
+
+        .table table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .table th {
+            background: var(--primary);
+            color: white;
+            padding: 18px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 1rem;
+        }
+
+        .table td {
+            padding: 18px;
+            border-bottom: 1px solid #e2e8f0;
+            font-size: 0.95rem;
+        }
+
+        .table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .check { color: var(--success); font-weight: bold; font-size: 1.2rem; }
+        .x { color: var(--danger); font-weight: bold; font-size: 1.2rem; }
+
+        /* Timeline */
+        .timeline-item {
+            background: white;
+            padding: 25px 30px;
+            border-radius: 16px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            border-left: 4px solid var(--secondary);
+        }
+
+        .timeline-item .date {
+            color: var(--secondary);
+            font-weight: 600;
+            font-size: 0.9rem;
+            margin-bottom: 8px;
+        }
+
+        .timeline-item h4 {
+            color: var(--primary);
+            margin-bottom: 8px;
+        }
+
+        .timeline-item p {
+            font-size: 0.95rem;
+            margin-bottom: 0;
+        }
+
+        /* List */
+        .list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .list li {
+            padding: 10px 0 10px 30px;
+            position: relative;
+            font-size: 1.05rem;
+        }
+
+        .list li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: var(--success);
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+
+        /* CTA Slide */
+        .cta-slide {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            color: white;
+            text-align: center;
+        }
+
+        .cta-slide h2 {
+            color: white;
+            margin-bottom: 25px;
+        }
+
+        .cta-btn {
+            display: inline-block;
+            background: white;
+            color: var(--primary);
+            padding: 16px 40px;
+            border-radius: 50px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            text-decoration: none;
+            margin: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .logo {
+            font-size: 1.3rem;
+            font-weight: 800;
+            color: white;
+            margin-bottom: 24px;
+            letter-spacing: 3px;
+            font-family: 'Space Grotesk', sans-serif;
+        }
+
+        @media print {
+            .slide { page-break-after: always; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Slide 1: Title -->
+<div class="slide title-slide">
+    <div class="slide-content">
+        <div class="logo">ZK FACTOR</div>
+        <h1>Privacy-Preserving<br>Invoice Factoring</h1>
+        <p class="tagline">Cryptographically Eliminating Double-Factoring Fraud</p>
+        <p class="subtitle">Built on Aleo Blockchain • Protecting $2.5T in Factoring Volume</p>
+    </div>
+</div>
+
+<!-- Slide 2: The Problem -->
+<div class="slide">
+    <div class="slide-content">
+        <h2>The $375B Fraud Problem</h2>
+        
+        <div class="stats">
+            <div class="stat">
+                <div class="stat-num">$2.5T</div>
+                <div class="stat-label">Global Factoring Market</div>
+            </div>
+            <div class="stat">
+                <div class="stat-num">15%</div>
+                <div class="stat-label">Fraudulent Invoices</div>
+            </div>
+            <div class="stat">
+                <div class="stat-num">$375B</div>
+                <div class="stat-label">Annual Fraud Exposure</div>
+            </div>
+        </div>
+
+        <div class="card card-danger">
+            <h4>🚨 Double-Factoring Fraud</h4>
+            <p>Companies sell the same invoice to multiple factors. Only one gets paid.</p>
+        </div>
+
+        <div class="two-col">
+            <div class="card card-danger">
+                <h4>Centralized Registries Fail</h4>
+                <ul class="list">
+                    <li>Siloed between competitors</li>
+                    <li>Require trust in operators</li>
+                    <li>Not real-time</li>
+                    <li>Manual verification takes days</li>
+                </ul>
+            </div>
+            <div class="card card-danger">
+                <h4>Privacy Destroyed</h4>
+                <ul class="list">
+                    <li>Customer relationships exposed</li>
+                    <li>Invoice amounts revealed</li>
+                    <li>Cash flow problems visible</li>
+                    <li>Competitive intelligence leaked</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Slide 3: Solution -->
+<div class="slide">
+    <div class="slide-content">
+        <h2>Cryptographic Solution</h2>
+        
+        <div class="highlight">
+            <h3>Zero-Knowledge Proofs + UTXO Model = Impossible to Double-Factor</h3>
+            <p>Invoices become cryptographic assets that are consumed during factoring. Their serial numbers are published on-chain, making re-use mathematically impossible.</p>
+        </div>
+
+        <div class="two-col">
+            <div>
+                <div class="card card-success">
+                    <h4>1. Invoice as Digital Asset</h4>
+                    <p>Encrypted record on Aleo. Only owner can spend it.</p>
+                </div>
+                <div class="card card-success">
+                    <h4>2. Atomic Factoring</h4>
+                    <p>One transaction: invoice consumed, serial published, payment sent.</p>
+                </div>
+                <div class="card card-success">
+                    <h4>3. Automatic Prevention</h4>
+                    <p>Re-factoring attempts fail automatically. Protocol checks serial number.</p>
+                </div>
+            </div>
+            <div>
+                <h3>Complete Privacy</h3>
+                <ul class="list" style="margin-top: 30px;">
+                    <li>Invoice amounts encrypted</li>
+                    <li>Customer identities hidden</li>
+                    <li>Business relationships confidential</li>
+                    <li>Only legitimacy proof is public</li>
+                    <li>Zero-knowledge cryptography</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Slide 4: How It Works -->
+<div class="slide">
+    <div class="slide-content">
+        <h2>How It Works</h2>
+        
+        <div class="steps">
+            <div class="step">
+                <div class="step-num">1</div>
+                <h4>Create Invoice</h4>
+                <p>Encrypted record minted on-chain</p>
+            </div>
+            <div class="step">
+                <div class="step-num">2</div>
+                <h4>Browse Factors</h4>
+                <p>Compare rates and terms</p>
+            </div>
+            <div class="step">
+                <div class="step-num">3</div>
+                <h4>Factor Verifies</h4>
+                <p>Check serial unspent</p>
+            </div>
+            <div class="step">
+                <div class="step-num">4</div>
+                <h4>Instant Payment</h4>
+                <p>Atomic swap completes</p>
+            </div>
+        </div>
+
+        <div class="highlight" style="margin-top: 60px;">
+            <h3>⚡ Atomic Transaction</h3>
+            <p>Invoice consumed → Serial published → Payment sent → Fraud prevented. All or nothing.</p>
+        </div>
+
+        <div class="two-col" style="margin-top: 40px;">
+            <div class="card card-success">
+                <h4>✓ First Factoring (Succeeds)</h4>
+                <p>Invoice #1234 → Factor A<br>Serial SN-1234 published</p>
+            </div>
+            <div class="card card-danger">
+                <h4>✗ Double-Factor (Fails)</h4>
+                <p>Same Invoice #1234 → Factor B<br>SN-1234 already spent → Rejected</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Slide 5: Technical Stack -->
+<div class="slide">
+    <div class="slide-content">
+        <h2>Built on Aleo</h2>
+        
+        <div class="two-col">
+            <div>
+                <h3>Why Aleo?</h3>
+                <ul class="list">
+                    <li>Layer-1 privacy blockchain</li>
+                    <li>Zero-knowledge proofs native</li>
+                    <li>Instant finality (&lt;2 seconds)</li>
+                    <li>UTXO prevents double-spend</li>
+                    <li>Encrypted on-chain storage</li>
+                    <li>$200M+ funded (a16z, SoftBank)</li>
+                </ul>
+            </div>
+            <div>
+                <div class="card" style="margin-bottom: 15px;">
+                    <h4>Smart Contracts (Leo)</h4>
+                    <p>Zero-knowledge circuits for private computation</p>
+                </div>
+                <div class="card" style="margin-bottom: 15px;">
+                    <h4>Private State (Records)</h4>
+                    <p>Encrypted invoice records with UTXO semantics</p>
+                </div>
+                <div class="card" style="margin-bottom: 15px;">
+                    <h4>Public State (Mappings)</h4>
+                    <p>Factor registry, settlement tracking</p>
+                </div>
+                <div class="card">
+                    <h4>Client Layer</h4>
+                    <p>Web UI, wallet integration, local proofs</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="highlight" style="margin-top: 40px;">
+            <h3>🔐 Cryptographic Security</h3>
+            <p>zkSNARKs prove legitimacy without revealing details. Atomic execution guarantees no partial failures.</p>
+        </div>
+    </div>
+</div>
+
+<!-- Slide 6: Privacy -->
+<div class="slide">
+    <div class="slide-content">
+        <h2>Privacy Architecture</h2>
+        
+        <div class="table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Data</th>
+                        <th>Visibility</th>
+                        <th>Protection</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Invoice Amount</strong></td>
+                        <td>Business + Factor Only</td>
+                        <td>Record encryption</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Customer Identity</strong></td>
+                        <td>Business + Factor Only</td>
+                        <td>Record encryption</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Factoring Terms</strong></td>
+                        <td>Business + Factor Only</td>
+                        <td>Record encryption</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Business Relationships</strong></td>
+                        <td>Obfuscated</td>
+                        <td>Pseudonymous addresses</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Serial Numbers</strong></td>
+                        <td>Public</td>
+                        <td>Required for fraud prevention</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="two-col" style="margin-top: 40px;">
+            <div class="card card-success">
+                <h4>🔒 Private</h4>
+                <p>Invoice amounts, customer IDs, payment terms, business relationships, cash flow patterns</p>
+            </div>
+            <div class="card">
+                <h4>👁️ Public</h4>
+                <p>Transaction occurrence, serial numbers, program function, transaction fees</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Slide 7: Features -->
+<div class="slide">
+    <div class="slide-content">
+        <h2>Key Features</h2>
+        
+        <div class="features">
+            <div class="feature">
+                <div class="feature-icon">🛡️</div>
+                <h4>Cryptographic Fraud Prevention</h4>
+                <p>Mathematically impossible to double-factor. No trust required.</p>
+            </div>
+            
+            <div class="feature">
+                <div class="feature-icon">🔐</div>
+                <h4>Complete Privacy</h4>
+                <p>Amounts, identities, relationships stay encrypted.</p>
+            </div>
+            
+            <div class="feature">
+                <div class="feature-icon">⚡</div>
+                <h4>Real-Time Verification</h4>
+                <p>Instant invoice status checks. No waiting days.</p>
+            </div>
+            
+            <div class="feature">
+                <div class="feature-icon">🔄</div>
+                <h4>Atomic Swaps</h4>
+                <p>Payment and transfer happen simultaneously. No risk.</p>
+            </div>
+            
+            <div class="feature">
+                <div class="feature-icon">🌐</div>
+                <h4>Decentralized Registry</h4>
+                <p>Works across competitors without cooperation.</p>
+            </div>
+            
+            <div class="feature">
+                <div class="feature-icon">💰</div>
+                <h4>Lower Costs</h4>
+                <p>20-30% cost reduction vs traditional factoring.</p>
+            </div>
+            
+            <div class="feature">
+                <div class="feature-icon">🚀</div>
+                <h4>Instant Settlement</h4>
+                <p>Finality in &lt;2 seconds. No settlement risk.</p>
+            </div>
+            
+            <div class="feature">
+                <div class="feature-icon">📊</div>
+                <h4>Transparent Stats</h4>
+                <p>Public protocol metrics without compromising privacy.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Slide 8: Competitive Advantage -->
+<div class="slide">
+    <div class="slide-content">
+        <h2>Why We Win</h2>
+        
+        <div class="table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Feature</th>
+                        <th>Traditional</th>
+                        <th>Transparent Blockchain</th>
+                        <th style="background: var(--success);">ZK Factor</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Fraud Prevention</strong></td>
+                        <td><span class="x">✗</span> Manual</td>
+                        <td><span class="check">✓</span> Automatic</td>
+                        <td><span class="check">✓</span> Cryptographic</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Privacy</strong></td>
+                        <td><span class="x">✗</span> None</td>
+                        <td><span class="x">✗</span> Public</td>
+                        <td><span class="check">✓</span> Encrypted</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Real-time</strong></td>
+                        <td><span class="x">✗</span> Days</td>
+                        <td><span class="check">✓</span> Instant</td>
+                        <td><span class="check">✓</span> Instant</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Decentralized</strong></td>
+                        <td><span class="x">✗</span> Central</td>
+                        <td><span class="check">✓</span> Yes</td>
+                        <td><span class="check">✓</span> Yes</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Transaction Cost</strong></td>
+                        <td>High</td>
+                        <td>Low</td>
+                        <td>~$0.01</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="highlight" style="margin-top: 40px;">
+            <h3>🎯 The Only Complete Solution</h3>
+            <p>Traditional systems can't prevent fraud without centralization. Transparent blockchains destroy privacy. We're the first to solve both.</p>
+        </div>
+    </div>
+</div>
+
+<!-- Slide 9: Market -->
+<div class="slide">
+    <div class="slide-content">
+        <h2>Market Opportunity</h2>
+        
+        <div class="stats">
+            <div class="stat">
+                <div class="stat-num">$2.5T</div>
+                <div class="stat-label">Global Market (2024)</div>
+            </div>
+            <div class="stat">
+                <div class="stat-num">8.5%</div>
+                <div class="stat-label">Annual Growth</div>
+            </div>
+            <div class="stat">
+                <div class="stat-num">$4.2T</div>
+                <div class="stat-label">By 2028</div>
+            </div>
+        </div>
+
+        <div class="two-col" style="margin-top: 40px;">
+            <div>
+                <h3>Market Drivers</h3>
+                <ul class="list">
+                    <li>SMB cash flow needs rising</li>
+                    <li>Bank lending declining</li>
+                    <li>Supply chain growth</li>
+                    <li>Regulatory pressure</li>
+                    <li>Digital transformation</li>
+                </ul>
+            </div>
+            <div>
+                <h3>Target Segments</h3>
+                <div class="feature" style="margin-bottom: 15px;">
+                    <h4>SMBs</h4>
+                    <p>Need capital, vulnerable to fraud, value privacy</p>
+                </div>
+                <div class="feature" style="margin-bottom: 15px;">
+                    <h4>Factoring Firms</h4>
+                    <p>Lose millions to fraud, need verification</p>
+                </div>
+                <div class="feature">
+                    <h4>Supply Chain</h4>
+                    <p>Complex relationships, high fraud risk</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Slide 10: Business Model -->
+<div class="slide">
+    <div class="slide-content">
+        <h2>Revenue Model</h2>
+        
+        <div class="features">
+            <div class="feature" style="border-left: 4px solid var(--success);">
+                <h4>💰 Transaction Fees</h4>
+                <p><strong>0.1-0.25%</strong> of invoice value</p>
+            </div>
+            
+            <div class="feature" style="border-left: 4px solid var(--secondary);">
+                <h4>🏢 Factor Subscriptions</h4>
+                <p><strong>$500-$5K/mo</strong> based on volume</p>
+            </div>
+            
+            <div class="feature" style="border-left: 4px solid var(--accent);">
+                <h4>📊 Analytics (Privacy-Preserving)</h4>
+                <p><strong>$1K-$10K/mo</strong> aggregate insights</p>
+            </div>
+            
+            <div class="feature" style="border-left: 4px solid var(--primary);">
+                <h4>🔧 Enterprise</h4>
+                <p><strong>Custom</strong> private deployments, APIs</p>
+            </div>
+        </div>
+
+        <div class="highlight" style="margin-top: 40px;">
+            <h3>📈 Revenue Projections</h3>
+            <div class="stats" style="margin-top: 20px;">
+                <div>
+                    <p style="color: white; opacity: 0.9; margin-bottom: 5px;">Year 1</p>
+                    <p style="color: white; font-size: 2.5rem; font-weight: 700; font-family: 'Space Grotesk', sans-serif;">$2M</p>
+                    <p style="color: white; opacity: 0.8; font-size: 0.9rem;">100 factors, $100M factored</p>
+                </div>
+                <div>
+                    <p style="color: white; opacity: 0.9; margin-bottom: 5px;">Year 2</p>
+                    <p style="color: white; font-size: 2.5rem; font-weight: 700; font-family: 'Space Grotesk', sans-serif;">$12M</p>
+                    <p style="color: white; opacity: 0.8; font-size: 0.9rem;">500 factors, $750M factored</p>
+                </div>
+                <div>
+                    <p style="color: white; opacity: 0.9; margin-bottom: 5px;">Year 3</p>
+                    <p style="color: white; font-size: 2.5rem; font-weight: 700; font-family: 'Space Grotesk', sans-serif;">$45M</p>
+                    <p style="color: white; opacity: 0.8; font-size: 0.9rem;">2,000 factors, $3B factored</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Slide 11: Roadmap -->
+<div class="slide">
+    <div class="slide-content">
+        <h2>Product Roadmap</h2>
+        
+        <div class="timeline-item">
+            <div class="date">Q2 2026 - Phase 1</div>
+            <h4>MVP Launch</h4>
+            <p>Core platform: invoice creation, fraud prevention, atomic swaps, marketplace, settlement</p>
+        </div>
+        
+        <div class="timeline-item">
+            <div class="date">Q3 2026 - Phase 2</div>
+            <h4>Enhanced Features</h4>
+            <p>Partial factoring, recourse, syndication, mobile wallets, API integration</p>
+        </div>
+        
+        <div class="timeline-item">
+            <div class="date">Q4 2026 - Phase 3</div>
+            <h4>Enterprise Scale</h4>
+            <p>Credit scoring, analytics, cross-border, white-label, delegated proving</p>
+        </div>
+        
+        <div class="timeline-item">
+            <div class="date">2027 - Phase 4</div>
+            <h4>Ecosystem Expansion</h4>
+            <p>L2 scaling, supply chain integration, banking partnerships, multi-chain</p>
+        </div>
+    </div>
+</div>
+
+<!-- Slide 12: Validation -->
+<div class="slide">
+    <div class="slide-content">
+        <h2>Technical Validation</h2>
+        
+        <div class="two-col">
+            <div>
+                <div class="card card-success">
+                    <h4>✅ Aleo Mainnet Live</h4>
+                    <p>Since Sept 2024, 6.6M+ transactions</p>
+                </div>
+                <div class="card card-success">
+                    <h4>✅ zkSNARKs Proven</h4>
+                    <p>10+ years via Zcash, now programmable</p>
+                </div>
+                <div class="card card-success">
+                    <h4>✅ UTXO Model</h4>
+                    <p>15+ years preventing Bitcoin double-spend</p>
+                </div>
+                <div class="card card-success">
+                    <h4>✅ Strong Backing</h4>
+                    <p>$200M+ from a16z, SoftBank, Samsung</p>
+                </div>
+            </div>
+            <div>
+                <div class="stats" style="grid-template-columns: 1fr;">
+                    <div class="stat">
+                        <div class="stat-num">&lt;2s</div>
+                        <div class="stat-label">Transaction Finality</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-num">$0.01</div>
+                        <div class="stat-label">Typical Cost</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-num">10K+</div>
+                        <div class="stat-label">TPS Capacity</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-num">100%</div>
+                        <div class="stat-label">Fraud Prevention</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="highlight" style="margin-top: 40px;">
+            <h3>🔬 Production Ready</h3>
+            <p>Smart contracts deployed and tested on testnet. Double-factoring prevention works flawlessly with zero false positives.</p>
+        </div>
+    </div>
+</div>
+
+<!-- Slide 13: Go-to-Market -->
+<div class="slide">
+    <div class="slide-content">
+        <h2>Go-to-Market Strategy</h2>
+        
+        <div class="steps" style="margin-bottom: 50px;">
+            <div class="step">
+                <div class="step-num">1</div>
+                <h4>Pilot</h4>
+                <p>5-10 progressive factors</p>
+            </div>
+            <div class="step">
+                <div class="step-num">2</div>
+                <h4>Prove</h4>
+                <p>100% fraud prevention</p>
+            </div>
+            <div class="step">
+                <div class="step-num">3</div>
+                <h4>Network</h4>
+                <p>Value compounds</p>
+            </div>
+            <div class="step">
+                <div class="step-num">4</div>
+                <h4>Scale</h4>
+                <p>Adjacent markets</p>
+            </div>
+        </div>
+
+        <div class="features">
+            <div class="feature">
+                <h4>🎯 Target</h4>
+                <p>Mid-size factors ($50M-$500M AUM) losing $5M-$50M/yr to fraud</p>
+            </div>
+            
+            <div class="feature">
+                <h4>📣 Channels</h4>
+                <p>Industry conferences, trade pubs, direct outreach, partnerships</p>
+            </div>
+            
+            <div class="feature">
+                <h4>💪 Moat</h4>
+                <p>First-mover, network effects, technical complexity, patents</p>
+            </div>
+            
+            <div class="feature">
+                <h4>🤝 Partners</h4>
+                <p>Accounting software, credit bureaus, trade associations, regulators</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Slide 14: The Ask -->
+<div class="slide">
+    <div class="slide-content">
+        <h2>The Ask: $3M Seed</h2>
+        
+        <div class="two-col">
+            <div>
+                <h3>Use of Funds</h3>
+                <div class="feature" style="margin-bottom: 15px; border-left: 4px solid var(--secondary);">
+                    <h4>💻 Product (40%)</h4>
+                    <p><strong>$1.2M</strong> - Development, audits, platform</p>
+                </div>
+                <div class="feature" style="margin-bottom: 15px; border-left: 4px solid var(--success);">
+                    <h4>👥 Team (35%)</h4>
+                    <p><strong>$1.05M</strong> - 5-7 engineers, 2-3 BD, ops</p>
+                </div>
+                <div class="feature" style="margin-bottom: 15px; border-left: 4px solid var(--accent);">
+                    <h4>📈 GTM (20%)</h4>
+                    <p><strong>$600K</strong> - Pilots, conferences, marketing</p>
+                </div>
+                <div class="feature" style="border-left: 4px solid var(--primary);">
+                    <h4>⚖️ Legal (5%)</h4>
+                    <p><strong>$150K</strong> - Compliance, contracts, IP</p>
+                </div>
+            </div>
+            <div>
+                <h3>18-Month Milestones</h3>
+                <div class="timeline-item">
+                    <div class="date">Month 3</div>
+                    <h4>MVP Live</h4>
+                    <p>Core platform on mainnet</p>
+                </div>
+                <div class="timeline-item">
+                    <div class="date">Month 6</div>
+                    <h4>10 Factors</h4>
+                    <p>$10M invoices processed</p>
+                </div>
+                <div class="timeline-item">
+                    <div class="date">Month 12</div>
+                    <h4>$100M Factored</h4>
+                    <p>50+ factors, proven model</p>
+                </div>
+                <div class="timeline-item">
+                    <div class="date">Month 18</div>
+                    <h4>Series A Ready</h4>
+                    <p>$2M ARR, 100+ factors</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Slide 15: Why Invest -->
+<div class="slide">
+    <div class="slide-content">
+        <h2>Why Invest Now</h2>
+        
+        <div class="features">
+            <div class="feature" style="border-left: 4px solid var(--success);">
+                <div class="feature-icon">🚀</div>
+                <h4>Massive Market</h4>
+                <p>$2.5T growing 8.5% annually. 1% = $25B TAM.</p>
+            </div>
+            
+            <div class="feature" style="border-left: 4px solid var(--success);">
+                <div class="feature-icon">🔐</div>
+                <h4>Unique Tech</h4>
+                <p>Only solution with fraud prevention + privacy.</p>
+            </div>
+            
+            <div class="feature" style="border-left: 4px solid var(--success);">
+                <div class="feature-icon">💎</div>
+                <h4>Clear Problem-Solution</h4>
+                <p>$375B fraud problem, immediate ROI for customers.</p>
+            </div>
+            
+            <div class="feature" style="border-left: 4px solid var(--success);">
+                <div class="feature-icon">📈</div>
+                <h4>Network Effects</h4>
+                <p>Winner-take-most market dynamics.</p>
+            </div>
+            
+            <div class="feature" style="border-left: 4px solid var(--success);">
+                <div class="feature-icon">🏗️</div>
+                <h4>Platform Play</h4>
+                <p>Infrastructure for entire industry, expandable.</p>
+            </div>
+            
+            <div class="feature" style="border-left: 4px solid var(--success);">
+                <div class="feature-icon">⏱️</div>
+                <h4>Perfect Timing</h4>
+                <p>Aleo live, industry needs solutions, regulations tightening.</p>
+            </div>
+        </div>
+
+        <div class="highlight" style="margin-top: 40px;">
+            <h3>💰 Exit Potential</h3>
+            <p><strong>Strategic acquirers:</strong> Major factors, financial services, blockchain platforms, supply chain providers. <strong>IPO path:</strong> B2B fintech multiples (Marqeta $8.8B, Bill.com $10B+, Flywire $2.5B).</p>
+        </div>
+    </div>
+</div>
+
+<!-- Slide 16: CTA -->
+<div class="slide cta-slide">
+    <div class="slide-content">
+        <h2>Transform Invoice Factoring</h2>
+        
+        <div class="highlight" style="background: rgba(255,255,255,0.15); margin: 40px 0;">
+            <div class="stats">
+                <div>
+                    <p style="color: white; font-size: 1.2rem; margin-bottom: 5px;">Seeking</p>
+                    <p style="color: white; font-size: 2.5rem; font-weight: 800; font-family: 'Space Grotesk', sans-serif;">$3M Seed</p>
+                </div>
+                <div>
+                    <p style="color: white; font-size: 1.2rem; margin-bottom: 5px;">Market</p>
+                    <p style="color: white; font-size: 2.5rem; font-weight: 800; font-family: 'Space Grotesk', sans-serif;">$2.5T</p>
+                </div>
+                <div>
+                    <p style="color: white; font-size: 1.2rem; margin-bottom: 5px;">Timeline</p>
+                    <p style="color: white; font-size: 2.5rem; font-weight: 800; font-family: 'Space Grotesk', sans-serif;">18 Months</p>
+                </div>
+            </div>
+        </div>
+
+        <div style="margin-top: 50px;">
+            <p style="color: white; font-size: 1.5rem; font-weight: 600; margin-bottom: 30px;">Let's Eliminate Factoring Fraud</p>
+            <div style="display: flex; gap: 20px; justify-content: center; flex-wrap: wrap;">
+                <a href="mailto:contact@zkfactor.com" class="cta-btn">📧 Contact</a>
+                <a href="#" class="cta-btn">📄 Demo</a>
+                <a href="#" class="cta-btn">📊 Deck</a>
+            </div>
+        </div>
+
+        <p style="color: white; margin-top: 50px; font-size: 1rem; opacity: 0.8;">
+            <strong>ZK Factor</strong> • Built on Aleo • Privacy-Preserving Invoice Factoring
+        </p>
+    </div>
+</div>
+
+</body>
+</html>
