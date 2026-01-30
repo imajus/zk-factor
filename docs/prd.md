@@ -1,12 +1,10 @@
 ## Table of Contents
 
-- [Confidential Invoice Factoring on Aleo: Deep Dive](#confidential-invoice-factoring-on-aleo-deep-dive)
 - [What is Invoice Factoring?](#what-is-invoice-factoring)
 - [What is Double-Factoring Fraud?](#what-is-double-factoring-fraud)
 - [Why Aleo is Perfect for This](#why-aleo-is-perfect-for-this)
 - [Target Audience](#target-audience)
 - [Pain Points by User Type](#pain-points-by-user-type)
-- [Market Size](#market-size)
 - [MVP Features](#mvp-features)
 - [User Flows](#user-flows)
 - [Competitive Advantage vs. Current Solutions](#competitive-advantage-vs-current-solutions)
@@ -94,21 +92,6 @@ No central database needed. No trust required. Cryptographically impossible to d
 ### For the Ecosystem:
 
 - The lack of preventive mechanisms incentivizes fraudulent behavior, leading to a higher overall risk profile for the industry.
-
-## Market Size
-
-|Metric|Value|Source|
-|---|---|---|
-|Global market (2024)|USD 2,856.4 Billion|Market.us|
-|Projected (2034)|USD 7,752 Billion|Market.us|
-|CAGR|10.50%|Market.us|
-|Europe share|Over 41.9% with revenues reaching USD 1,196 billion|Market.us|
-|SME segment growth|Expected to grow at the highest CAGR of 11.2%|Maximize Market Research|
-
-**Key growth drivers:**
-
-- Working capital shortage is becoming a serious problem, which forces small and medium-sized enterprises to opt for alternative sources of financing
-- Digital transformation is reshaping the Invoice Factoring landscape through automated credit checks, AI-driven risk assessment, and seamless integration with accounting software
 
 ## MVP Features
 
