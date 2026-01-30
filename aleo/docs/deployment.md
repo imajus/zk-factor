@@ -44,3 +44,45 @@ leo deploy
 - [ ] Mainnet deployment keys funded
 - [ ] Deployment transaction confirmed
 - [ ] Program ID published in documentation
+
+### Admin Key Management
+
+**Admin Address Setup:**
+
+The program uses a single admin address that can deploy upgrades.
+
+**Before deployment:**
+
+```bash
+# Use an existing secure account or generate new one
+aleo account new
+```
+
+**Update constructor in `src/main.leo`:**
+
+```leo
+@admin(address="aleo1your_actual_admin_address_here")
+async constructor() {}
+```
+
+**Key Storage:**
+- Store admin private key securely (hardware wallet recommended)
+- Create encrypted backups
+- Document recovery procedures
+- Consider upgrading to multi-sig governance later
+
+**Upgrade Execution Process:**
+
+1. Develop upgrade on testnet
+2. Test thoroughly (integration tests, manual testing)
+3. Optional: External security audit for critical changes
+4. Deploy upgrade from admin account
+5. New code is live immediately
+
+**Future Governance Upgrades:**
+
+Can add complexity later via program upgrade:
+- Multi-signature (2-of-3 or 3-of-5)
+- Timelock delays
+- Community voting
+- Ossification (permanent immutability)

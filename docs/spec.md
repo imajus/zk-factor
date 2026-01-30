@@ -741,27 +741,58 @@ leo run factor_invoice \
 
 ### Upgrade Procedures
 
-**Smart Contract Upgrades:** Aleo programs are immutable once deployed. Upgrades require deploying a new program version.
+**Smart Contract Upgrades:** ZK-Factor program is upgradable through an admin-controlled constructor.
+
+**Governance Model (MVP):**
+
+The program is deployed with a simple admin-based constructor:
+
+- **Admin Address:** Single address authorized to deploy upgrades
+- **Upgrade Process:** Admin deploys new program version, no timelock required
+- **Transparency:** Upgrade history tracked via `protocol_stats` mapping
+
+**What Can Be Upgraded:**
+
+Allowed modifications:
+- Function/transition logic (signatures unchanged)
+- Gas optimizations and fee calculations
+- Add new transitions, mappings, structs, record types
+- Protocol statistics tracking improvements
+- Internal business logic improvements
+
+Cannot be modified (Aleo platform constraints):
+- Existing record structures (breaks compatibility with existing records)
+- Transition signatures (breaks compatibility with dependent programs)
+- Existing mapping key/value types (would lose existing data)
+- The constructor itself (immutable once deployed)
+
+**Critical Constraint:** Constructor logic is immutable once deployed. The constructor must be minimal and well-tested before deployment. Any bugs in the constructor require deploying an entirely new program.
+
+**Upgrade Flow:**
 
 ```mermaid
 graph TD
-    A[Identify upgrade need] --> B[Develop new program version]
-    B --> C[Deploy to testnet]
-    C --> D[Migration testing]
-    D --> E{Tests pass?}
-    E -->|No| B
-    E -->|Yes| F[Deploy new program to mainnet]
-    F --> G[Announce migration timeline]
-    G --> H[User migration period]
-    H --> I[Deprecate old program]
+    A[Bug Fix or Feature Needed] --> B[Develop & Test on Testnet]
+    B --> C[Security Audit]
+    C --> D[Admin Deploys Upgrade]
+    D --> E[New Code Live Immediately]
 ```
 
-**Migration Strategy:**
+**Future Enhancements:**
 
-1. Deploy new program with migration functions
-2. Users trigger migration to move records to new program
-3. Maintain old program in read-only mode for settlements
-4. Archive old program after all records migrated
+The admin governance can be upgraded to add:
+- Multi-signature requirements (2-of-3 or 3-of-5)
+- Timelock delays (e.g., 7-day waiting period)
+- Community voting mechanisms
+- Permanent ossification (disable future upgrades)
+
+These can be added later without redeploying the entire program.
+
+**Migration Strategy:**
+1. Deploy `zk_factor_v2.aleo` with migration transitions
+2. Users opt-in to migrate records (gas cost per record)
+3. V1 program continues operating indefinitely
+4. Factors support both programs during transition
 
 ### Backup & Recovery
 

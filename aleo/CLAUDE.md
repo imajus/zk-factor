@@ -6,7 +6,15 @@ This file provides guidance for working with the Leo smart contract in this dire
 
 **Program ID:** `zk_factor_11765.aleo`
 **Leo Version:** 3.4.0
-**Constructor:** `@noupgrade` (prevents program upgrades after deployment)
+**Constructor:** Admin-controlled upgradable constructor (simple governance for MVP)
+
+## Upgradability Model
+
+**Status:** Fully upgradable via admin address
+**Governance:** Single admin address (can be upgraded to multi-sig later)
+**What Can Change:** Function logic, gas optimizations, add new features
+**What Cannot Change:** Record structures, transition signatures, constructor logic
+**See:** @docs/spec.md for complete upgradability details
 
 ## Development Commands
 
