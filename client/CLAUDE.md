@@ -317,7 +317,7 @@ const network = import.meta.env.VITE_ALEO_NETWORK;
 4. Build serial number verification UI
 5. Add settlement workflow
 
-**Phase 2 Features** (see @PRD.md):
+**Phase 2 Features** (see @../docs/PRD.md):
 - Partial factoring UI
 - Recourse tracking
 - Multi-factor syndication
@@ -326,6 +326,4 @@ const network = import.meta.env.VITE_ALEO_NETWORK;
 ## Related Documentation
 
 - Root project overview: @CLAUDE.md
-- Product requirements: @PRD.md
-- Smart contract guide: @aleo/CLAUDE.md
-- Leo language guide: @aleo/docs/coding.md
+- Product requirements: @../docs/PRD.md

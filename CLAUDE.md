@@ -8,7 +8,7 @@ ZK-Factor: Confidential invoice factoring platform on Aleo blockchain that crypt
 
 **Core Innovation:** Leverages Aleo's UTXO-based record model where invoice records are cryptographically consumed during factoring. Once spent, the serial number is published on-chain, making re-use impossible without centralized registries.
 
-See @PRD.md for complete product requirements and specifications.
+See @docs/PRD.md for complete product requirements and specifications.
 
 ## Repository Structure
 
@@ -18,7 +18,7 @@ aleo/              Leo smart contract (program: zk_factor_11765.aleo)
 client/            React frontend with Vite + TypeScript + shadcn/ui
 └── CLAUDE.md      Frontend development guide
 docs/              Context-specific documentation
-PRD.md             Full product requirements and specifications
+└── PRD.md         Full product requirements and specifications
 ```
 
 ## Module-Specific Guides

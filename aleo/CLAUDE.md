@@ -14,7 +14,7 @@ This file provides guidance for working with the Leo smart contract in this dire
 **Governance:** Single admin address (can be upgraded to multi-sig later)
 **What Can Change:** Function logic, gas optimizations, add new features
 **What Cannot Change:** Record structures, transition signatures, constructor logic
-**See:** @docs/spec.md for complete upgradability details
+**See:** @docs/SPEC.md for complete upgradability details
 
 ## Development Commands
 
