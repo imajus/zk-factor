@@ -1,3 +1,18 @@
+## Table of Contents
+
+- [System Overview](#system-overview)
+- [Data Models](#data-models)
+- [Program Transitions](#program-transitions)
+- [System Sequences](#system-sequences)
+- [Privacy Architecture](#privacy-architecture)
+- [API Specifications](#api-specifications)
+- [Security Specifications](#security-specifications)
+- [Error Handling](#error-handling)
+- [Testing Specifications](#testing-specifications)
+- [Maintenance & Operations](#maintenance--operations)
+- [Constraints & Limitations](#constraints--limitations)
+- [Appendices](#appendices)
+
 ## System Overview
 
 ### Purpose

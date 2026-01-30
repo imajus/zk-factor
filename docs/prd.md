@@ -1,6 +1,20 @@
-## Confidential Invoice Factoring on Aleo: Deep Dive
+## Table of Contents
 
-### What is Invoice Factoring?
+- [Confidential Invoice Factoring on Aleo: Deep Dive](#confidential-invoice-factoring-on-aleo-deep-dive)
+- [What is Invoice Factoring?](#what-is-invoice-factoring)
+- [What is Double-Factoring Fraud?](#what-is-double-factoring-fraud)
+- [Why Aleo is Perfect for This](#why-aleo-is-perfect-for-this)
+- [Target Audience](#target-audience)
+- [Pain Points by User Type](#pain-points-by-user-type)
+- [Market Size](#market-size)
+- [MVP Features](#mvp-features)
+- [User Flows](#user-flows)
+- [Competitive Advantage vs. Current Solutions](#competitive-advantage-vs-current-solutions)
+- [Revenue Model Ideas](#revenue-model-ideas)
+- [Why This Wins the Buildathon](#why-this-wins-the-buildathon)
+- [Next Steps for MVP](#next-steps-for-mvp)
+
+## What is Invoice Factoring?
 
 Invoice factoring is when a business **sells its unpaid invoices** to a third party (the "factor") at a discount to get immediate cash instead of waiting 30-90 days for customers to pay.
 
@@ -11,7 +25,7 @@ Invoice factoring is when a business **sells its unpaid invoices** to a third pa
 3. Supplier needs cash now → sells invoice to Factor for $95,000 (5% discount)
 4. Factor collects $100,000 from Retailer after 60 days → keeps $5,000 profit
 
-### What is Double-Factoring Fraud?
+## What is Double-Factoring Fraud?
 
 Double Factoring Fraud occurs when a company sells the same invoice to more than one factoring company. When the debtor pays the invoice, only one factoring company will receive the payment, leaving the others at a loss.
 
@@ -35,7 +49,7 @@ But these databases are:
 - Not real-time
 - Privacy-compromising (reveals business relationships)
 
-### Why Aleo is Perfect for This
+## Why Aleo is Perfect for This
 
 **The killer insight:** When a business factors an invoice on Aleo, the invoice record is **consumed**. It literally cannot be double-factored because:
 
@@ -45,7 +59,7 @@ But these databases are:
 
 No central database needed. No trust required. Cryptographically impossible to double-factor.
 
-### Target Audience
+## Target Audience
 
 |Segment|Size|Pain Points|
 |---|---|---|
@@ -60,27 +74,27 @@ No central database needed. No trust required. Cryptographically impossible to d
 2. **Factor Operations Teams** — Need fraud prevention, fast verification
 3. **Corporate Treasury** — Managing receivables across multiple factors
 
-### Pain Points by User Type
+## Pain Points by User Type
 
-#### For Businesses Seeking Financing:
+### For Businesses Seeking Financing:
 
 - **Privacy exposure**: Current factoring reveals customer relationships to factors
 - **Slow approval**: Manual verification takes days
 - **High fees**: Fraud risk priced into discount rates (typically 1-5%)
 - **Relationship damage**: Customers learn you're factoring (sign of distress)
 
-#### For Factoring Companies:
+### For Factoring Companies:
 
 - Fraud undermines trust between businesses, financiers, and other stakeholders. It creates uncertainty and discourages participation in the factoring market.
 - Resolving disputes can involve lengthy and costly legal battles, further straining resources and damaging reputations.
 - No way to verify if invoice was already factored elsewhere
 - Manual debtor verification is expensive
 
-#### For the Ecosystem:
+### For the Ecosystem:
 
 - The lack of preventive mechanisms incentivizes fraudulent behavior, leading to a higher overall risk profile for the industry.
 
-### Market Size
+## Market Size
 
 |Metric|Value|Source|
 |---|---|---|
@@ -95,9 +109,9 @@ No central database needed. No trust required. Cryptographically impossible to d
 - Working capital shortage is becoming a serious problem, which forces small and medium-sized enterprises to opt for alternative sources of financing
 - Digital transformation is reshaping the Invoice Factoring landscape through automated credit checks, AI-driven risk assessment, and seamless integration with accounting software
 
-### MVP Features
+## MVP Features
 
-#### Must Have (Wave 1-2):
+### Must Have (Wave 1-2):
 
 |Feature|Description|Aleo Implementation|
 |---|---|---|
@@ -107,7 +121,7 @@ No central database needed. No trust required. Cryptographically impossible to d
 |**Anti-Double-Factor**|Cryptographic guarantee|Serial number published on-chain = spent|
 |**Payment Settlement**|Debtor pays, factor receives|`settle_invoice()` releases escrowed funds|
 
-#### Should Have (Wave 3-4):
+### Should Have (Wave 3-4):
 
 |Feature|Description|
 |---|---|
@@ -116,7 +130,7 @@ No central database needed. No trust required. Cryptographically impossible to d
 |**Multi-Factor Syndication**|Large invoices split across multiple factors|
 |**Credit Scoring**|ZK proof of payment history without revealing details|
 
-#### Nice to Have (Wave 5+):
+### Nice to Have (Wave 5+):
 
 |Feature|Description|
 |---|---|
@@ -124,9 +138,9 @@ No central database needed. No trust required. Cryptographically impossible to d
 |**Supply Chain Integration**|Auto-generate invoices from delivery confirmation|
 |**Debtor Notification**|Privacy-preserving payment instructions|
 
-### User Flows
+## User Flows
 
-#### Flow 1: Business Factors an Invoice
+### Flow 1: Business Factors an Invoice
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -171,7 +185,7 @@ No central database needed. No trust required. Cryptographically impossible to d
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-#### Flow 2: Attempted Double-Factoring (BLOCKED)
+### Flow 2: Attempted Double-Factoring (BLOCKED)
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -189,7 +203,7 @@ No central database needed. No trust required. Cryptographically impossible to d
 No central database. No trust. Cryptographically impossible.
 ```
 
-#### Flow 3: Factor Verifies Invoice Authenticity
+### Flow 3: Factor Verifies Invoice Authenticity
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -205,9 +219,7 @@ No central database. No trust. Cryptographically impossible.
 └─────────────────────────────────────────────────────────────────┘
 ```
 
----
-
-### Competitive Advantage vs. Current Solutions
+## Competitive Advantage vs. Current Solutions
 
 |Aspect|Traditional Factoring|Blockchain (Transparent)|Aleo Confidential|
 |---|---|---|---|
@@ -217,18 +229,14 @@ No central database. No trust. Cryptographically impossible.
 |Trust requirement|High (central registries)|Medium (public data)|**Zero**|
 |Competitive intel leakage|High|Extreme|**None**|
 
----
-
-### Revenue Model Ideas
+## Revenue Model Ideas
 
 1. **Protocol fee**: 0.1-0.5% of factored amount
 2. **Factor subscription**: Monthly fee for unlimited verifications
 3. **Premium features**: Credit scoring, analytics, API access
 4. **White-label licensing**: Banks/fintechs deploy private instances
 
----
-
-### Why This Wins the Buildathon
+## Why This Wins the Buildathon
 
 |Judging Criteria (40% Privacy)|How This Scores|
 |---|---|
@@ -238,9 +246,7 @@ No central database. No trust. Cryptographically impossible.
 |**Practicality**|$2.8T market with documented fraud problem|
 |**Novelty**|First ZK-native factoring protocol, unique to Aleo|
 
----
-
-### Next Steps for MVP
+## Next Steps for MVP
 
 **Wave 1 deliverables:**
 
