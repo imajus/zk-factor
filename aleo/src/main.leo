@@ -1,15 +1,10 @@
 // The 'zk_factor' program.
 program zk_factor_11765.aleo {
-    // This is the constructor for the program.
-    // The constructor allows you to manage program upgrades.
-    // It is called when the program is deployed or upgraded.
-    // It is currently configured to **prevent** upgrades.
-    // Other configurations include:
-    //  - @admin(address="aleo1...")
-    //  - @checksum(mapping="credits.aleo/fixme", key="0field")
-    //  - @custom
-    // For more information, please refer to the documentation: `https://docs.leo-lang.org/guides/upgradability`
-    @noupgrade
+    // Simple admin-controlled upgradable constructor for MVP
+    // Can be upgraded to multi-sig governance later
+    // IMPORTANT: Replace with actual admin address before deployment
+    // See aleo/docs/deployment.md for admin key management
+    @admin(address="aleo1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq3ljyzc")
     async constructor() {}
 
     transition main(public a: u32, b: u32) -> u32 {
