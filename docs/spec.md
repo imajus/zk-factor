@@ -14,7 +14,7 @@ graph TB
     end
     
     subgraph "Application Layer"
-        SDK[@provablehq/sdk]
+        SDK["@provablehq/sdk"]
         ProofGen[Proof Generator]
         RecordMgr[Record Manager]
     end
