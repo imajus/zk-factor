@@ -99,19 +99,7 @@
 |Trust requirement|High (central registries)|Medium (public data)|**Zero**|
 |Competitive intel leakage|High|Extreme|**None**|
 
-## Why This Wins in the Market
-
-### Buildathon Positioning (40% Privacy Focus)
-
-|Judging Criteria|How This Scores|
-|---|---|
-|**Privacy Usage**|Core value prop — invoices, amounts, relationships all private|
-|**Technical Implementation**|Record consumption = anti-fraud primitive, atomic swaps|
-|**User Experience**|Simpler than current: no paperwork, instant verification|
-|**Practicality**|[$4.2T market](https://fci.nl/en/news/fci-release-2024-world-industry-statistics-showing-factoring-market-remains-stable) with [documented fraud problem ($2.3B+ losses)](https://www.funderintel.com/post/the-2-3-billion-vanishing-act-first-brands-and-the-factoring-fraud-that-shocked-wall-street)|
-|**Novelty**|First ZK-native factoring protocol vs existing blockchain solutions ([Centrifuge $500M+ financed](https://research.contrary.com/company/goldfinch), [Trade Finance Market's Invoice Check](https://www.gtreview.com/news/asia/invoice-finance-platform-adopts-blockchain-tool-to-stop-fraud-and-double-financing/))|
-
-### Market Positioning
+## Market Positioning
 
 **Tagline:** "Eliminate Invoice Fraud. Protect Business Privacy. Factor with Confidence."
 

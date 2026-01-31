@@ -67,7 +67,7 @@ graph TB
 | Smart Contract | Leo                        |
 | SDK            | @provablehq/sdk            |
 | Frontend       | React + TypeScript         |
-| Wallet         | Leo Wallet / Puzzle Wallet |
+| Wallet         | Shield Wallet              |
 | Proving        | WASM-based (browser)       |
 
 ## Data Models

@@ -179,7 +179,7 @@
 
 ### Phase 1: Technology Partners
 - **Aleo ecosystem**: Co-marketing with Aleo Labs
-- **Wallet providers**: Integration with Leo Wallet, Puzzle Wallet
+- **Wallet providers**: Integration with Shield Wallet
 - **Developer tools**: SDK and API partners
 - **Competitive positioning**: Differentiate from existing blockchain solutions ([Centrifuge's $500M+ Tinlake marketplace](https://research.contrary.com/company/goldfinch), [Goldfinch's $102M in loans](https://research.contrary.com/company/goldfinch), [Credix's $26M+ on Solana](https://solana.com/news/case-study-credix)) through superior privacy via ZK proofs
 
