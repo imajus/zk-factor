@@ -99,6 +99,57 @@
 |Trust requirement|High (central registries)|Medium (public data)|**Zero**|
 |Competitive intel leakage|High|Extreme|**None**|
 
+## Competitive Landscape Analysis
+
+### Direct Competitors
+
+|Competitor|Type|Funding Speed|Key Features|Unique Position|Customer Rating|
+|---|---|---|---|---|---|
+|**RTS Financial**|Traditional + Tech|24 hours|Bundled services (factoring + fuel + software), trucking specialization|Industry-leading bundled ecosystem|4.5★ (1,900+ reviews), 80 NPS|
+|**Riviera Finance**|Traditional|24 hours guaranteed|Non-recourse factoring, 25+ physical locations, 55+ years in business|Face-to-face service, assumes credit risk|4.9★ (813 reviews)|
+|**FundThrough**|Tech-First|"Days"|AI-enabled platform, accounting integrations (QuickBooks, Xero), one flat fee|Highest customer satisfaction, tech-native|4.6★ (Google)|
+|**eCapital**|Enterprise Tech|1 hour available|$5M-$250M facilities, multi-product (ABL, SCF, factoring), embedded lending|Largest scale, fastest funding|Not disclosed|
+
+### Competitive Gaps & ZK-Factor Advantage
+
+**What Competitors Offer:**
+- ✅ Fast funding (1-24 hours)
+- ✅ Technology platforms (AI, mobile apps, integrations)
+- ✅ Non-recourse options (some)
+- ✅ Transparent pricing (some)
+
+**What Competitors DON'T Offer:**
+- ❌ **Cryptographic fraud prevention** - All rely on manual checks, AI detection, or centralized databases
+- ❌ **Privacy preservation** - Traditional factors see all invoice details; blockchain solutions expose data publicly
+- ❌ **Zero-trust verification** - All require trust in central operators or public registries
+- ❌ **Real-time double-factor prevention** - No instant, cryptographic guarantee against re-use
+
+**ZK-Factor's Unique Position:**
+- **Only solution** combining fraud prevention + privacy via zero-knowledge proofs
+- **Only blockchain-native** platform with confidential transactions (vs. FundThrough's AI or eCapital's tech platform)
+- **Only cryptographic guarantee** against double-factoring (vs. manual/AI detection that [fails to catch fraud for 12 months on average](https://legacy.acfe.com/report-to-the-nations/2024/))
+
+### Competitive Positioning Matrix
+
+```
+                    High Privacy
+                         |
+                         |
+                   ZK-Factor (Aleo)
+                         |
+    Low Tech ————————————+———————————— High Tech
+                         |
+        Riviera          |    FundThrough
+        (Traditional)    |    (AI-enabled)
+                         |
+                    Low Privacy
+```
+
+**Quadrant Strategy:**
+- **Upper-Right Quadrant (High Tech + High Privacy)**: ZK-Factor owns this space exclusively
+- **Differentiation**: Privacy-preserving technology vs. AI transparency (FundThrough) or traditional opacity (Riviera)
+- **Market Gap**: No competitor offers cryptographic fraud prevention with privacy preservation
+
 ## Market Positioning
 
 **Tagline:** "Eliminate Invoice Fraud. Protect Business Privacy. Factor with Confidence."
@@ -110,6 +161,12 @@ ZK-Factor is the only invoice factoring platform that cryptographically prevents
 1. **For Businesses:** Get funded faster without exposing your customer relationships
 2. **For Factors:** Verify invoice authenticity instantly, eliminate fraud risk
 3. **For the Industry:** Finally solve the [$4.2T market's](https://fci.nl/en/news/fci-release-2024-world-industry-statistics-showing-factoring-market-remains-stable) biggest problem—fraud
+
+**Competitive Messaging:**
+- **vs. Traditional (RTS, Riviera):** "Same-day funding, but with cryptographic fraud prevention instead of manual checks"
+- **vs. Tech-First (FundThrough):** "AI detects fraud after it happens. We prevent it cryptographically before it's possible"
+- **vs. Enterprise (eCapital):** "1-hour funding is fast. Instant fraud verification is permanent"
+- **vs. Blockchain (Centrifuge, Goldfinch):** "Privacy-preserving ZK proofs vs. transparent on-chain data exposure"
 
 ## Key Data Sources
 
@@ -137,3 +194,9 @@ ZK-Factor is the only invoice factoring platform that cryptographically prevents
 - [Trade Finance Global - Invoice Check](https://www.gtreview.com/news/asia/invoice-finance-platform-adopts-blockchain-tool-to-stop-fraud-and-double-financing/) - Blockchain fraud prevention solutions
 - [Goldfinch Research (Contrary)](https://research.contrary.com/company/goldfinch) - DeFi factoring competitor data
 - [Credix/Solana Case Study](https://solana.com/news/case-study-credix) - Blockchain factoring on Solana
+
+**Direct Competitor Analysis (February 2026):**
+- [RTS Financial](https://www.rtsinc.com/) - Traditional factoring with bundled services (trucking specialization)
+- [Riviera Finance](https://www.rivierafinance.com/) - Full-service non-recourse factoring since 1969
+- [FundThrough](https://www.fundthrough.com/) - AI-enabled invoice factoring platform
+- [eCapital](https://ecapital.com/) - Enterprise-scale asset-based finance and factoring
