@@ -80,7 +80,7 @@ graph TB
 record Invoice {
     owner: address,              // Business that created invoice
     debtor: address,             // Customer who owes payment
-    amount: u64,                 // Amount in microcredits (1M = 1 ALEO)
+    amount: u64,                 // Amount in microcredits
     due_date: u64,              // Unix timestamp (seconds)
     invoice_hash: field,         // Poseidon hash of invoice details
     nonce: field,               // Unique identifier
@@ -90,7 +90,7 @@ record Invoice {
 
 **Field Specifications:**
 
-- `amount`: Range 1 to 18,446,744,073,709,551,615 microcredits
+- `amount`: Amount in microcredits (1M = 1 ALEO)
 - `due_date`: Must be > current block timestamp
 - `invoice_hash`: Poseidon hash of off-chain invoice document
 - `nonce`: Generated from invoice number + timestamp + random salt
