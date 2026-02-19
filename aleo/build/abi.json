@@ -1,0 +1,540 @@
+{
+  "program": "zk_factor_11765.aleo",
+  "structs": [
+    {
+      "path": [
+        "FactorInfo"
+      ],
+      "fields": [
+        {
+          "name": "is_active",
+          "ty": {
+            "Primitive": "Boolean"
+          }
+        },
+        {
+          "name": "min_advance_rate",
+          "ty": {
+            "Primitive": {
+              "UInt": "U16"
+            }
+          }
+        },
+        {
+          "name": "max_advance_rate",
+          "ty": {
+            "Primitive": {
+              "UInt": "U16"
+            }
+          }
+        },
+        {
+          "name": "total_factored",
+          "ty": {
+            "Primitive": {
+              "UInt": "U64"
+            }
+          }
+        },
+        {
+          "name": "registration_date",
+          "ty": {
+            "Primitive": {
+              "UInt": "U64"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": [
+        "SettlementInfo"
+      ],
+      "fields": [
+        {
+          "name": "is_settled",
+          "ty": {
+            "Primitive": "Boolean"
+          }
+        },
+        {
+          "name": "settlement_date",
+          "ty": {
+            "Primitive": {
+              "UInt": "U64"
+            }
+          }
+        },
+        {
+          "name": "factor",
+          "ty": {
+            "Primitive": "Address"
+          }
+        }
+      ]
+    }
+  ],
+  "records": [
+    {
+      "path": [
+        "Invoice"
+      ],
+      "fields": [
+        {
+          "name": "owner",
+          "ty": {
+            "Primitive": "Address"
+          },
+          "mode": "None"
+        },
+        {
+          "name": "debtor",
+          "ty": {
+            "Primitive": "Address"
+          },
+          "mode": "None"
+        },
+        {
+          "name": "amount",
+          "ty": {
+            "Primitive": {
+              "UInt": "U64"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "due_date",
+          "ty": {
+            "Primitive": {
+              "UInt": "U64"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "invoice_hash",
+          "ty": {
+            "Primitive": "Field"
+          },
+          "mode": "None"
+        },
+        {
+          "name": "nonce",
+          "ty": {
+            "Primitive": "Field"
+          },
+          "mode": "None"
+        },
+        {
+          "name": "metadata",
+          "ty": {
+            "Primitive": {
+              "UInt": "U128"
+            }
+          },
+          "mode": "None"
+        }
+      ]
+    },
+    {
+      "path": [
+        "FactoredInvoice"
+      ],
+      "fields": [
+        {
+          "name": "owner",
+          "ty": {
+            "Primitive": "Address"
+          },
+          "mode": "None"
+        },
+        {
+          "name": "original_creditor",
+          "ty": {
+            "Primitive": "Address"
+          },
+          "mode": "None"
+        },
+        {
+          "name": "debtor",
+          "ty": {
+            "Primitive": "Address"
+          },
+          "mode": "None"
+        },
+        {
+          "name": "amount",
+          "ty": {
+            "Primitive": {
+              "UInt": "U64"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "advance_amount",
+          "ty": {
+            "Primitive": {
+              "UInt": "U64"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "due_date",
+          "ty": {
+            "Primitive": {
+              "UInt": "U64"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "factoring_date",
+          "ty": {
+            "Primitive": {
+              "UInt": "U64"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "advance_rate",
+          "ty": {
+            "Primitive": {
+              "UInt": "U16"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "invoice_hash",
+          "ty": {
+            "Primitive": "Field"
+          },
+          "mode": "None"
+        },
+        {
+          "name": "recourse",
+          "ty": {
+            "Primitive": "Boolean"
+          },
+          "mode": "None"
+        }
+      ]
+    }
+  ],
+  "mappings": [
+    {
+      "name": "active_factors",
+      "key": {
+        "Primitive": "Address"
+      },
+      "value": {
+        "Struct": {
+          "path": [
+            "FactorInfo"
+          ],
+          "program": "zk_factor_11765"
+        }
+      }
+    },
+    {
+      "name": "settled_invoices",
+      "key": {
+        "Primitive": "Field"
+      },
+      "value": {
+        "Struct": {
+          "path": [
+            "SettlementInfo"
+          ],
+          "program": "zk_factor_11765"
+        }
+      }
+    },
+    {
+      "name": "protocol_stats",
+      "key": {
+        "Primitive": {
+          "UInt": "U8"
+        }
+      },
+      "value": {
+        "Primitive": {
+          "UInt": "U64"
+        }
+      }
+    }
+  ],
+  "storage_variables": [],
+  "transitions": [
+    {
+      "name": "mint_invoice",
+      "is_async": true,
+      "inputs": [
+        {
+          "name": "debtor",
+          "ty": {
+            "Plaintext": {
+              "Primitive": "Address"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "amount",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "due_date",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "invoice_hash",
+          "ty": {
+            "Plaintext": {
+              "Primitive": "Field"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "metadata",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U128"
+              }
+            }
+          },
+          "mode": "None"
+        }
+      ],
+      "outputs": [
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "Invoice"
+              ],
+              "program": "zk_factor_11765"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "ty": "Future",
+          "mode": "None"
+        }
+      ]
+    },
+    {
+      "name": "register_factor",
+      "is_async": true,
+      "inputs": [
+        {
+          "name": "min_advance_rate",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U16"
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "max_advance_rate",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U16"
+              }
+            }
+          },
+          "mode": "None"
+        }
+      ],
+      "outputs": [
+        {
+          "ty": "Future",
+          "mode": "None"
+        }
+      ]
+    },
+    {
+      "name": "deregister_factor",
+      "is_async": true,
+      "inputs": [],
+      "outputs": [
+        {
+          "ty": "Future",
+          "mode": "None"
+        }
+      ]
+    },
+    {
+      "name": "factor_invoice",
+      "is_async": true,
+      "inputs": [
+        {
+          "name": "invoice",
+          "ty": {
+            "Record": {
+              "path": [
+                "Invoice"
+              ],
+              "program": "zk_factor_11765"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "factor",
+          "ty": {
+            "Plaintext": {
+              "Primitive": "Address"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "advance_rate",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U16"
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "payment",
+          "ty": {
+            "Record": {
+              "path": [
+                "credits"
+              ],
+              "program": "credits"
+            }
+          },
+          "mode": "None"
+        }
+      ],
+      "outputs": [
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "FactoredInvoice"
+              ],
+              "program": "zk_factor_11765"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "credits"
+              ],
+              "program": "credits"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "credits"
+              ],
+              "program": "credits"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "ty": "Future",
+          "mode": "None"
+        }
+      ]
+    },
+    {
+      "name": "settle_invoice",
+      "is_async": true,
+      "inputs": [
+        {
+          "name": "factored",
+          "ty": {
+            "Record": {
+              "path": [
+                "FactoredInvoice"
+              ],
+              "program": "zk_factor_11765"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "payment",
+          "ty": {
+            "Record": {
+              "path": [
+                "credits"
+              ],
+              "program": "credits"
+            }
+          },
+          "mode": "None"
+        }
+      ],
+      "outputs": [
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "credits"
+              ],
+              "program": "credits"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "credits"
+              ],
+              "program": "credits"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "ty": "Future",
+          "mode": "None"
+        }
+      ]
+    }
+  ]
+}

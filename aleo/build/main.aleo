@@ -169,4 +169,4 @@ finalize settle_invoice:
     set r7 into protocol_stats[2u8];
 
 constructor:
-    assert.eq program_owner aleo1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq3ljyzc;
+    assert.eq program_owner aleo19rn544c49da9z2vz52q5f7lm7nsjhp890ahmre6cz94qawdscgps6kq3cu;

@@ -94,8 +94,8 @@
 
 ## 9. Testnet Deployment
 
-- [ ] 9.1 Configure .env file with testnet network and endpoint
-- [ ] 9.2 Ensure PRIVATE_KEY is set for deployment account
+- [x] 9.1 Configure .env file with testnet network and endpoint
+- [x] 9.2 Ensure PRIVATE_KEY is set for deployment account
 - [ ] 9.3 Run `leo deploy --network testnet` to deploy program
 - [ ] 9.4 Verify deployment transaction confirmed on testnet
 - [ ] 9.5 Document deployed program ID and transaction hash
