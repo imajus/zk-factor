@@ -205,10 +205,45 @@ import { cn } from "@/lib/utils";
 
 ### Wallet Connection
 
-**Current**: Mock implementation in `WalletContext.tsx`
+**Current**: Integrated with Shield wallet via `@provablehq/aleo-wallet-adaptor-shield`.
 
-**Required**:
-- Integrate Leo Wallet SDK or Puzzle Wallet SDK
+### Shield Wallet Record Shape (`requestRecords` return)
+
+`requestRecords(programId, true)` returns `AleoRecord[]` with this shape — **not** a `{ type, data, plaintext }` object:
+
+```typescript
+interface AleoRecord {
+  recordName: string;       // e.g. "Invoice" — NOT "type"
+  recordPlaintext: string;  // full Leo plaintext — NOT "plaintext" or nested "data"
+  spent: boolean;           // always filter !r.spent for active records
+  commitment: string;       // unique record ID — NOT "id"
+  owner: string;            // field-element encoded (not an aleo1... address)
+  sender: string;           // the aleo1... address that submitted the tx
+  programName: string;
+  blockHeight?: number;
+  transactionId?: string;
+  tag?: string;
+}
+```
+
+Parse individual fields from `recordPlaintext` (format: `field: value.private,`):
+
+```typescript
+function getField(plaintext: string, field: string): string {
+  for (const line of plaintext.split('\n')) {
+    const trimmed = line.trimStart();
+    if (!trimmed.startsWith(`${field}:`)) continue;
+    const m = trimmed.match(/^[^:]+:\s*(.+?)\.(?:private|public)/);
+    if (m) return m[1].trim();
+  }
+  return '';
+}
+```
+
+Values retain Leo type suffixes: `1000000u64`, `9500u16`, `97440...field`, `aleo1...`.
+Pass `record.recordPlaintext` directly as inputs to `executeTransaction`.
+
+**Required for wallet connection**:
 - Handle wallet connection/disconnection
 - Implement record discovery (scan blockchain for user records)
 - Show sync progress during initial wallet sync
