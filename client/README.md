@@ -1,73 +1,103 @@
-# Welcome to your Lovable project
+# ZK Factor — Frontend
 
-## Project info
+React frontend for ZK Factor: a confidential invoice factoring platform built on the Aleo blockchain. Businesses can sell unpaid invoices to factoring companies with cryptographic guarantees against double-factoring fraud — no central registry, no trust required.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## How it works
 
-## How can I edit this code?
+Invoice records live as private, UTXO-like records on-chain. When a business factors an invoice, the record is consumed and its serial number is published. Any attempt to factor the same invoice a second time fails at the protocol level — it is cryptographically impossible, not just policy.
 
-There are several ways of editing your application.
+The frontend interacts with the `zk_factor_11765.aleo` program deployed on Aleo testnet. All sensitive data (invoice amounts, debtor identity, business relationships) stays encrypted inside private records. Only the occurrence of a transaction is visible on-chain.
 
-**Use Lovable**
+## User roles
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+| Role | What they do |
+|------|--------------|
+| **Business** | Create invoices (`mint_invoice`), browse factors, sell invoices (`factor_invoice`) |
+| **Factor** | Register on-chain (`register_factor`), receive factored invoices, settle payments (`settle_invoice`) |
 
-Changes made via Lovable will be committed automatically to this repo.
+Switch roles in the header after connecting your wallet.
 
-**Use your preferred IDE**
+## Tech stack
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+- **React 18** + **TypeScript** + **Vite**
+- **shadcn/ui** (Radix UI + Tailwind CSS) for components
+- **TanStack React Query** for server state and caching
+- **React Router DOM** for client-side routing
+- **`@provablehq/aleo-wallet-adaptor-react`** + **Shield Wallet** for Aleo wallet connection
+- **Sonner** for toast notifications
+- **Vitest** + **Testing Library** for tests
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+## Prerequisites
 
-Follow these steps:
+- **Node.js 18+** and **npm**
+- **[Shield Wallet](https://www.shield.app/)** browser extension (required to sign Aleo transactions)
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+## Development
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+```bash
+# Install dependencies
+npm install
 
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Start dev server (http://localhost:8080)
 npm run dev
+
+# Run tests
+npm test
+
+# Production build
+npm run build
 ```
 
-**Edit a file directly in GitHub**
+## Environment variables
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+Create a `.env` file in this directory:
 
-**Use GitHub Codespaces**
+```bash
+VITE_ALEO_NETWORK=testnet                          # testnet | mainnet | canary
+VITE_ALEO_PROGRAM_ID=zk_factor_11765.aleo          # on-chain program to interact with
+VITE_API_ENDPOINT=https://api.explorer.aleo.org/v1 # Aleo explorer REST base URL
+```
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+All three variables are read at startup from `src/lib/config.ts` and have the defaults shown above. `VITE_ALEO_NETWORK` controls the network passed to the wallet provider and the network segment in explorer API requests. `VITE_ALEO_PROGRAM_ID` is whitelisted alongside `credits.aleo` for record decryption so the wallet knows which program records to decrypt.
 
-## What technologies are used for this project?
+## Project structure
 
-This project is built with:
+```
+src/
+├── components/
+│   ├── ui/            # shadcn/ui primitives (Button, Card, Table, …)
+│   ├── dashboard/     # BusinessDashboard, FactorDashboard
+│   ├── layout/        # AppLayout, Header
+│   └── wallet/        # WalletConnect screen
+├── contexts/
+│   └── WalletContext.tsx  # Thin facade over the Aleo wallet adapter
+├── hooks/             # use-mobile, use-toast
+├── lib/
+│   ├── format.ts      # Formatting helpers (formatAleo, formatDate, …)
+│   └── utils.ts       # Tailwind class merger (cn)
+├── pages/
+│   ├── CreateInvoice.tsx  # mint_invoice form
+│   ├── Invoices.tsx       # Record browser + settle action
+│   ├── Marketplace.tsx    # Active factors + factor_invoice flow
+│   ├── Transactions.tsx   # Transaction history
+│   ├── Settings.tsx       # Factor registration + preferences
+│   └── Dashboard.tsx      # Role-based landing page
+└── test/
+    └── example.test.ts
+```
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## Aleo-specific notes
 
-## How can I deploy this project?
+**Proving times** — First proof generation can take 5–7 minutes. Subsequent proofs take 30–60 seconds. The UI shows progress toasts throughout.
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+**Record discovery** — After connecting, the wallet scans the blockchain to find your records. This can take a minute on first load.
 
-## Can I connect a custom domain to my Lovable project?
+**No read-only access** — Verifying a record's contents requires consuming it on-chain (gas cost). The app avoids this where possible.
 
-Yes, you can!
+**Wallet requirement** — Shield Wallet is the only supported wallet adapter. If the extension is not installed, the connect screen shows an install link.
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+## Smart contract
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+Program ID: `zk_factor_11765.aleo`, deployed on Aleo testnet.
+
+See [`../aleo/`](../aleo/) for the Leo source code and [`../docs/PRD.md`](../docs/PRD.md) for the full product specification.

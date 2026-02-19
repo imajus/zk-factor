@@ -1,17 +1,16 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { 
-  Wallet, 
-  Bell, 
-  ChevronDown, 
-  RefreshCw, 
-  ExternalLink, 
+import {
+  Wallet,
+  Bell,
+  ChevronDown,
+  ExternalLink,
   Copy,
   LogOut,
   HelpCircle,
   Menu,
   X,
-  Zap
+  Zap,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -36,22 +35,19 @@ const navItems = [
   { label: 'Settings', href: '/settings' },
 ];
 
+const ROLES: Array<'business' | 'factor'> = ['business', 'factor'];
+
 export function Header() {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const {
     isConnected,
     address,
-    balance,
-    roles,
     activeRole,
     setActiveRole,
     connect,
     disconnect,
     formatAddress,
-    isSyncing,
-    syncWallet,
-    lastSyncTime,
     network,
   } = useWallet();
 
@@ -108,50 +104,31 @@ export function Header() {
               </Badge>
 
               {/* Role Switcher */}
-              {roles.length > 1 && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="gap-1">
-                      {activeRole === 'business' ? 'Business' : 'Factor'}
-                      <ChevronDown className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuLabel>Switch Role</DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    {roles.map((role) => (
-                      <DropdownMenuItem
-                        key={role}
-                        onClick={() => setActiveRole(role)}
-                        className={cn(activeRole === role && 'bg-primary/10')}
-                      >
-                        {role.charAt(0).toUpperCase() + role.slice(1)}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-
-              {/* Sync Status */}
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={syncWallet}
-                disabled={isSyncing}
-                className="relative"
-              >
-                <RefreshCw className={cn('h-4 w-4', isSyncing && 'animate-spin')} />
-                {lastSyncTime && !isSyncing && (
-                  <span className="absolute -bottom-1 -right-1 h-2 w-2 rounded-full bg-primary" />
-                )}
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="gap-1">
+                    {activeRole ? activeRole.charAt(0).toUpperCase() + activeRole.slice(1) : 'Select Role'}
+                    <ChevronDown className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuLabel>Switch Role</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {ROLES.map((role) => (
+                    <DropdownMenuItem
+                      key={role}
+                      onClick={() => setActiveRole(role)}
+                      className={cn(activeRole === role && 'bg-primary/10')}
+                    >
+                      {role.charAt(0).toUpperCase() + role.slice(1)}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
 
               {/* Notifications */}
               <Button variant="ghost" size="icon" className="relative">
                 <Bell className="h-4 w-4" />
-                <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] text-destructive-foreground">
-                  3
-                </span>
               </Button>
 
               {/* Wallet Dropdown */}
@@ -173,13 +150,6 @@ export function Header() {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <div className="px-2 py-2">
-                    <div className="text-xs text-muted-foreground mb-1">Balance</div>
-                    <div className="text-lg font-semibold">
-                      {balance.toLocaleString(undefined, { maximumFractionDigits: 2 })} ALEO
-                    </div>
-                  </div>
-                  <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={copyAddress}>
                     <Copy className="h-4 w-4 mr-2" />
                     Copy Address
@@ -187,10 +157,6 @@ export function Header() {
                   <DropdownMenuItem>
                     <ExternalLink className="h-4 w-4 mr-2" />
                     View on Explorer
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={syncWallet}>
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    Sync Wallet
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={disconnect} className="text-destructive">

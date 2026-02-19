@@ -1,14 +1,13 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { 
-  ArrowLeft, 
-  CalendarIcon, 
-  Plus, 
-  Trash2, 
+import {
+  ArrowLeft,
+  CalendarIcon,
+  Plus,
+  Trash2,
   Sparkles,
   FileText,
-  Upload,
-  Info
+  Info,
 } from 'lucide-react';
 import { format, addDays } from 'date-fns';
 import { Button } from '@/components/ui/button';
@@ -31,6 +30,29 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { useWallet } from '@/contexts/WalletContext';
+import { TransactionStatus } from '@provablehq/aleo-types';
+import { PROGRAM_ID } from '@/lib/config';
+const ALEO_FIELD_MODULUS = 8444461749428370424248824938781546531375899335154063827935233455917409239041n;
+
+function computeInvoiceHash(invoiceNumber: string, debtor: string, amountMicrocredits: bigint): string {
+  const canonical = `${invoiceNumber}:${debtor}:${amountMicrocredits}`;
+  const bytes = new TextEncoder().encode(canonical);
+  let value = 0n;
+  for (let i = 0; i < Math.min(16, bytes.length); i++) {
+    value = (value << 8n) | BigInt(bytes[i]);
+  }
+  return `${value % ALEO_FIELD_MODULUS}field`;
+}
+
+function encodeMetadata(invoiceNumber: string): string {
+  const bytes = new TextEncoder().encode(invoiceNumber);
+  let value = 0n;
+  for (let i = 0; i < Math.min(16, bytes.length); i++) {
+    value = (value << 8n) | BigInt(bytes[i]);
+  }
+  return `${value}u128`;
+}
 
 interface InvoiceItem {
   id: string;
@@ -41,9 +63,9 @@ interface InvoiceItem {
 
 export default function CreateInvoice() {
   const navigate = useNavigate();
+  const { isConnected, executeTransaction, transactionStatus } = useWallet();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Form state
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [description, setDescription] = useState('');
   const [debtorAddress, setDebtorAddress] = useState('');
@@ -60,16 +82,11 @@ export default function CreateInvoice() {
   };
 
   const addItem = () => {
-    setItems([
-      ...items,
-      { id: crypto.randomUUID(), description: '', quantity: 1, unitPrice: 0 }
-    ]);
+    setItems([...items, { id: crypto.randomUUID(), description: '', quantity: 1, unitPrice: 0 }]);
   };
 
   const updateItem = (id: string, field: keyof InvoiceItem, value: string | number) => {
-    setItems(items.map(item => 
-      item.id === id ? { ...item, [field]: value } : item
-    ));
+    setItems(items.map(item => item.id === id ? { ...item, [field]: value } : item));
   };
 
   const removeItem = (id: string) => {
@@ -80,21 +97,64 @@ export default function CreateInvoice() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isConnected || !dueDate) return;
+
     setIsSubmitting(true);
 
-    // Simulate proof generation and submission
-    toast.loading('Generating zero-knowledge proof...', { id: 'create-invoice' });
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    toast.loading('Submitting transaction...', { id: 'create-invoice' });
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    toast.success('Invoice created successfully!', { id: 'create-invoice' });
-    setIsSubmitting(false);
-    navigate('/invoices');
+    try {
+      const amountMicrocredits = BigInt(Math.round(parseFloat(amount) * 1_000_000));
+      const dueDateUnix = BigInt(Math.floor(dueDate.getTime() / 1000));
+      const invoiceHash = computeInvoiceHash(invoiceNumber, debtorAddress, amountMicrocredits);
+      const metadata = encodeMetadata(invoiceNumber);
+
+      toast.loading('Generating proof…', { id: 'create-invoice' });
+
+      const result = await executeTransaction({
+        program: PROGRAM_ID,
+        function: 'mint_invoice',
+        inputs: [
+          debtorAddress,
+          `${amountMicrocredits}u64`,
+          `${dueDateUnix}u64`,
+          invoiceHash,
+          metadata,
+        ],
+      });
+
+      if (!result) {
+        throw new Error('Transaction returned no result');
+      }
+
+      const { transactionId } = result;
+
+      toast.loading('Broadcasting…', { id: 'create-invoice' });
+
+      const poll = setInterval(async () => {
+        try {
+          const status = await transactionStatus(transactionId);
+          if (status.status === TransactionStatus.ACCEPTED) {
+            clearInterval(poll);
+            toast.success('Invoice created successfully!', { id: 'create-invoice' });
+            setIsSubmitting(false);
+            navigate('/invoices');
+          } else if (status.status === TransactionStatus.FAILED || status.status === TransactionStatus.REJECTED) {
+            clearInterval(poll);
+            throw new Error(status.error || 'Transaction failed');
+          }
+        } catch (err) {
+          clearInterval(poll);
+          toast.error(err instanceof Error ? err.message : 'Transaction failed', { id: 'create-invoice' });
+          setIsSubmitting(false);
+        }
+      }, 3000);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to create invoice', { id: 'create-invoice' });
+      setIsSubmitting(false);
+    }
   };
 
   const isValidAddress = (addr: string) => addr.startsWith('aleo1') && addr.length === 63;
+  const isFormValid = isConnected && !!invoiceNumber && !!debtorAddress && !!amount && !!dueDate;
 
   return (
     <div className="container py-6 max-w-4xl">
@@ -224,28 +284,13 @@ export default function CreateInvoice() {
                         />
                       </PopoverContent>
                     </Popover>
-                    <Button 
-                      type="button" 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => setDueDate(addDays(new Date(), 30))}
-                    >
+                    <Button type="button" variant="outline" size="sm" onClick={() => setDueDate(addDays(new Date(), 30))}>
                       +30d
                     </Button>
-                    <Button 
-                      type="button" 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => setDueDate(addDays(new Date(), 60))}
-                    >
+                    <Button type="button" variant="outline" size="sm" onClick={() => setDueDate(addDays(new Date(), 60))}>
                       +60d
                     </Button>
-                    <Button 
-                      type="button" 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => setDueDate(addDays(new Date(), 90))}
-                    >
+                    <Button type="button" variant="outline" size="sm" onClick={() => setDueDate(addDays(new Date(), 90))}>
                       +90d
                     </Button>
                   </div>
@@ -262,7 +307,7 @@ export default function CreateInvoice() {
               <CardContent className="space-y-4">
                 {items.length > 0 && (
                   <div className="space-y-3">
-                    {items.map((item, index) => (
+                    {items.map((item) => (
                       <div key={item.id} className="flex gap-2 items-start">
                         <div className="flex-1 space-y-2">
                           <Input
@@ -291,12 +336,7 @@ export default function CreateInvoice() {
                         <div className="w-28 text-right font-mono text-sm py-2">
                           {(item.quantity * item.unitPrice).toLocaleString()} ALEO
                         </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeItem(item.id)}
-                        >
+                        <Button type="button" variant="ghost" size="icon" onClick={() => removeItem(item.id)}>
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
@@ -304,17 +344,10 @@ export default function CreateInvoice() {
                     <Separator />
                     <div className="flex justify-between items-center">
                       <span className="text-sm font-medium">Total</span>
-                      <span className="font-mono font-semibold">
-                        {itemsTotal.toLocaleString()} ALEO
-                      </span>
+                      <span className="font-mono font-semibold">{itemsTotal.toLocaleString()} ALEO</span>
                     </div>
                     {itemsTotal > 0 && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setAmount(itemsTotal.toString())}
-                      >
+                      <Button type="button" variant="outline" size="sm" onClick={() => setAmount(itemsTotal.toString())}>
                         Use as Invoice Amount
                       </Button>
                     )}
@@ -348,7 +381,6 @@ export default function CreateInvoice() {
                     </p>
                   </div>
                 </div>
-
                 <div className="space-y-2">
                   <Label htmlFor="internalNotes">Internal Notes (Optional)</Label>
                   <Textarea
@@ -388,9 +420,7 @@ export default function CreateInvoice() {
                     <span>{dueDate ? format(dueDate, 'MMM d, yyyy') : '—'}</span>
                   </div>
                 </div>
-
                 <Separator />
-
                 <Collapsible open={showPreview} onOpenChange={setShowPreview}>
                   <CollapsibleTrigger asChild>
                     <Button variant="ghost" size="sm" className="w-full justify-between">
@@ -415,25 +445,17 @@ export default function CreateInvoice() {
             {/* Actions */}
             <Card>
               <CardContent className="pt-6 space-y-3">
-                <Button 
-                  type="submit" 
-                  className="w-full" 
-                  size="lg"
-                  disabled={isSubmitting || !invoiceNumber || !debtorAddress || !amount || !dueDate}
-                >
-                  {isSubmitting ? 'Creating...' : 'Create Invoice'}
-                </Button>
-                <Button 
-                  type="button" 
-                  variant="outline" 
+                <Button
+                  type="submit"
                   className="w-full"
-                  onClick={() => toast.success('Draft saved')}
+                  size="lg"
+                  disabled={isSubmitting || !isFormValid}
                 >
-                  Save as Draft
+                  {!isConnected ? 'Connect Wallet' : isSubmitting ? 'Creating…' : 'Create Invoice'}
                 </Button>
-                <Button 
-                  type="button" 
-                  variant="ghost" 
+                <Button
+                  type="button"
+                  variant="ghost"
                   className="w-full"
                   onClick={() => navigate('/invoices')}
                 >
