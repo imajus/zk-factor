@@ -1,19 +1,17 @@
 import { useState } from 'react';
-import { 
-  Wallet, 
-  Bell, 
-  Shield, 
-  Palette, 
-  Settings2, 
+import {
+  Wallet,
+  Bell,
+  Shield,
+  Palette,
   HelpCircle,
   ExternalLink,
-  RefreshCw,
-  Copy,
   Download,
   Trash2,
   Moon,
   Sun,
-  Monitor
+  Monitor,
+  Building2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -36,13 +34,35 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useWallet } from '@/contexts/WalletContext';
-import { formatRelativeTime } from '@/lib/mock-data';
-import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { TransactionStatus } from '@provablehq/aleo-types';
+import { PROGRAM_ID, API_ENDPOINT, NETWORK } from '@/lib/config';
+
+interface FactorStatus {
+  is_active: boolean;
+  min_advance_rate: number;
+  max_advance_rate: number;
+}
+
+async function fetchFactorStatus(address: string): Promise<FactorStatus | null> {
+  const url = `${API_ENDPOINT}/${NETWORK}/program/${PROGRAM_ID}/mapping/active_factors/${address}`;
+  const res = await fetch(url);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Explorer API error: ${res.status}`);
+  const data = await res.json();
+  if (!data) return null;
+  return {
+    is_active: Boolean(data.is_active),
+    min_advance_rate: parseInt(String(data.min_advance_rate ?? '0').replace(/u16$/, ''), 10),
+    max_advance_rate: parseInt(String(data.max_advance_rate ?? '0').replace(/u16$/, ''), 10),
+  };
+}
 
 export default function Settings() {
-  const { address, balance, network, lastSyncTime, syncWallet, isSyncing, disconnect } = useWallet();
+  const queryClient = useQueryClient();
+  const { address, network, disconnect, executeTransaction, transactionStatus, isConnected } = useWallet();
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('dark');
   const [notifications, setNotifications] = useState({
     invoiceCreated: true,
@@ -51,6 +71,23 @@ export default function Settings() {
     paymentReceived: true,
     dueDateReminder: true,
   });
+  const [minRate, setMinRate] = useState('');
+  const [maxRate, setMaxRate] = useState('');
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [isDeregistering, setIsDeregistering] = useState(false);
+
+  const { data: factorStatus, isLoading: statusLoading } = useQuery({
+    queryKey: ['factor_status', address],
+    queryFn: () => fetchFactorStatus(address!),
+    enabled: isConnected && !!address,
+    staleTime: 60_000,
+  });
+
+  const minRateBps = minRate ? parseInt(minRate, 10) : 0;
+  const maxRateBps = maxRate ? parseInt(maxRate, 10) : 0;
+  const registrationValid = minRateBps >= 5000 && minRateBps <= 9900
+    && maxRateBps >= 5000 && maxRateBps <= 9900
+    && minRateBps <= maxRateBps;
 
   const handleThemeChange = (value: 'light' | 'dark' | 'system') => {
     setTheme(value);
@@ -59,7 +96,6 @@ export default function Settings() {
     } else if (value === 'light') {
       document.documentElement.classList.remove('dark');
     } else {
-      // System preference
       if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
         document.documentElement.classList.add('dark');
       } else {
@@ -67,6 +103,72 @@ export default function Settings() {
       }
     }
     toast.success(`Theme changed to ${value}`);
+  };
+
+  const pollStatus = async (transactionId: string, successMsg: string, id: string) => {
+    return new Promise<void>((resolve, reject) => {
+      const poll = setInterval(async () => {
+        try {
+          const status = await transactionStatus(transactionId);
+          if (status.status === TransactionStatus.ACCEPTED) {
+            clearInterval(poll);
+            toast.success(successMsg, { id });
+            queryClient.invalidateQueries({ queryKey: ['factor_status', address] });
+            resolve();
+          } else if (status.status === TransactionStatus.FAILED || status.status === TransactionStatus.REJECTED) {
+            clearInterval(poll);
+            reject(new Error(status.error || 'Transaction failed'));
+          }
+        } catch (err) {
+          clearInterval(poll);
+          reject(err);
+        }
+      }, 3000);
+    });
+  };
+
+  const handleRegister = async () => {
+    if (!registrationValid) return;
+    setIsRegistering(true);
+    toast.loading('Generating proof…', { id: 'register-factor' });
+
+    try {
+      const result = await executeTransaction({
+        program: PROGRAM_ID,
+        function: 'register_factor',
+        inputs: [`${minRateBps}u16`, `${maxRateBps}u16`],
+      });
+
+      if (!result) throw new Error('Transaction returned no result');
+      toast.loading('Broadcasting…', { id: 'register-factor' });
+      await pollStatus(result.transactionId, 'Registered as factor!', 'register-factor');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Registration failed';
+      toast.error(msg.includes('already') || msg.includes('active') ? 'Already registered as factor' : msg, { id: 'register-factor' });
+    } finally {
+      setIsRegistering(false);
+    }
+  };
+
+  const handleDeregister = async () => {
+    setIsDeregistering(true);
+    toast.loading('Generating proof…', { id: 'deregister-factor' });
+
+    try {
+      const result = await executeTransaction({
+        program: PROGRAM_ID,
+        function: 'deregister_factor',
+        inputs: [],
+      });
+
+      if (!result) throw new Error('Transaction returned no result');
+      toast.loading('Broadcasting…', { id: 'deregister-factor' });
+      await pollStatus(result.transactionId, 'Deregistered from factor network!', 'deregister-factor');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Deregistration failed', { id: 'deregister-factor' });
+    } finally {
+      setIsDeregistering(false);
+    }
   };
 
   return (
@@ -83,6 +185,10 @@ export default function Settings() {
             <Wallet className="h-4 w-4" />
             <span className="hidden sm:inline">Wallet</span>
           </TabsTrigger>
+          <TabsTrigger value="factor" className="gap-2">
+            <Building2 className="h-4 w-4" />
+            <span className="hidden sm:inline">Factor</span>
+          </TabsTrigger>
           <TabsTrigger value="notifications" className="gap-2">
             <Bell className="h-4 w-4" />
             <span className="hidden sm:inline">Notifications</span>
@@ -95,10 +201,6 @@ export default function Settings() {
             <Palette className="h-4 w-4" />
             <span className="hidden sm:inline">Display</span>
           </TabsTrigger>
-          <TabsTrigger value="advanced" className="gap-2">
-            <Settings2 className="h-4 w-4" />
-            <span className="hidden sm:inline">Advanced</span>
-          </TabsTrigger>
           <TabsTrigger value="help" className="gap-2">
             <HelpCircle className="h-4 w-4" />
             <span className="hidden sm:inline">Help</span>
@@ -110,7 +212,7 @@ export default function Settings() {
           <Card>
             <CardHeader>
               <CardTitle>Connected Wallet</CardTitle>
-              <CardDescription>Your wallet connection and balance information</CardDescription>
+              <CardDescription>Your wallet connection information</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="flex items-center justify-between">
@@ -123,49 +225,7 @@ export default function Settings() {
                   {network === 'mainnet' ? 'Mainnet' : 'Testnet'}
                 </Badge>
               </div>
-
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">Balance</p>
-                <p className="text-2xl font-bold">
-                  {balance.toLocaleString(undefined, { maximumFractionDigits: 6 })} ALEO
-                </p>
-              </div>
-
               <Separator />
-
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">Last Sync</p>
-                    <p className="text-sm text-muted-foreground">
-                      {lastSyncTime ? formatRelativeTime(lastSyncTime) : 'Never'}
-                    </p>
-                  </div>
-                  <Button variant="outline" onClick={syncWallet} disabled={isSyncing}>
-                    <RefreshCw className={cn('h-4 w-4 mr-2', isSyncing && 'animate-spin')} />
-                    Sync Now
-                  </Button>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">Auto-sync</p>
-                    <p className="text-sm text-muted-foreground">Sync wallet automatically</p>
-                  </div>
-                  <Switch defaultChecked />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">Background Sync</p>
-                    <p className="text-sm text-muted-foreground">Sync while browsing</p>
-                  </div>
-                  <Switch defaultChecked />
-                </div>
-              </div>
-
-              <Separator />
-
               <div className="flex gap-2">
                 <Button variant="outline" className="flex-1">
                   <ExternalLink className="h-4 w-4 mr-2" />
@@ -175,6 +235,108 @@ export default function Settings() {
                   Disconnect
                 </Button>
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Factor Registration */}
+        <TabsContent value="factor" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Factor Registration</CardTitle>
+              <CardDescription>Register your address as a factoring company on the network</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Current status */}
+              <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
+                <div>
+                  <p className="font-medium text-sm">Registration Status</p>
+                  <p className="text-xs text-muted-foreground">
+                    {statusLoading ? 'Checking…' : factorStatus?.is_active ? 'Registered and active' : 'Not registered'}
+                  </p>
+                </div>
+                <Badge variant={factorStatus?.is_active ? 'default' : 'outline'}>
+                  {factorStatus?.is_active ? 'Active' : 'Inactive'}
+                </Badge>
+              </div>
+
+              {factorStatus?.is_active && (
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-muted-foreground">Min Advance Rate</p>
+                    <p className="font-semibold">{(factorStatus.min_advance_rate / 100).toFixed(2)}%</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Max Advance Rate</p>
+                    <p className="font-semibold">{(factorStatus.max_advance_rate / 100).toFixed(2)}%</p>
+                  </div>
+                </div>
+              )}
+
+              <Separator />
+
+              {/* Register form */}
+              {!factorStatus?.is_active && (
+                <div className="space-y-4">
+                  <h3 className="font-medium text-sm">Register as Factor</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="min-rate">Min Advance Rate (basis points)</Label>
+                      <Input
+                        id="min-rate"
+                        type="number"
+                        placeholder="e.g. 7000 for 70%"
+                        value={minRate}
+                        onChange={(e) => setMinRate(e.target.value)}
+                        min="5000"
+                        max="9900"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="max-rate">Max Advance Rate (basis points)</Label>
+                      <Input
+                        id="max-rate"
+                        type="number"
+                        placeholder="e.g. 9500 for 95%"
+                        value={maxRate}
+                        onChange={(e) => setMaxRate(e.target.value)}
+                        min="5000"
+                        max="9900"
+                      />
+                    </div>
+                  </div>
+                  {(minRate || maxRate) && !registrationValid && (
+                    <p className="text-xs text-destructive">
+                      Rates must be between 5000–9900 basis points, and min ≤ max
+                    </p>
+                  )}
+                  <Button
+                    onClick={handleRegister}
+                    disabled={!registrationValid || isRegistering || !isConnected}
+                    className="w-full"
+                  >
+                    {isRegistering ? 'Registering…' : 'Register as Factor'}
+                  </Button>
+                </div>
+              )}
+
+              {/* Deregister */}
+              {factorStatus?.is_active && (
+                <div className="space-y-2">
+                  <h3 className="font-medium text-sm">Deregister</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Remove yourself from the active factors registry. Existing factored invoices are unaffected.
+                  </p>
+                  <Button
+                    variant="destructive"
+                    onClick={handleDeregister}
+                    disabled={isDeregistering || !isConnected}
+                    className="w-full"
+                  >
+                    {isDeregistering ? 'Deregistering…' : 'Deregister'}
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -207,7 +369,7 @@ export default function Settings() {
                   <Switch
                     id={key}
                     checked={notifications[key as keyof typeof notifications]}
-                    onCheckedChange={(checked) => 
+                    onCheckedChange={(checked) =>
                       setNotifications(prev => ({ ...prev, [key]: checked }))
                     }
                   />
@@ -279,7 +441,6 @@ export default function Settings() {
                   ))}
                 </div>
               </div>
-
               <div className="space-y-2">
                 <Label>Date Format</Label>
                 <Select defaultValue="mdy">
@@ -292,45 +453,6 @@ export default function Settings() {
                     <SelectItem value="ymd">YYYY-MM-DD</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Time Format</Label>
-                <Select defaultValue="12">
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="12">12-hour</SelectItem>
-                    <SelectItem value="24">24-hour</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Advanced */}
-        <TabsContent value="advanced" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Developer Options</CardTitle>
-              <CardDescription>Advanced settings for power users</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">Show Transaction Details</p>
-                  <p className="text-sm text-muted-foreground">Display technical transaction info</p>
-                </div>
-                <Switch />
-              </div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">Debug Mode</p>
-                  <p className="text-sm text-muted-foreground">Enable debug logging</p>
-                </div>
-                <Switch />
               </div>
             </CardContent>
           </Card>
@@ -357,7 +479,7 @@ export default function Settings() {
               <CardTitle className="text-destructive">Danger Zone</CardTitle>
               <CardDescription>Irreversible actions</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-2">
+            <CardContent>
               <Button variant="outline" className="w-full justify-start text-destructive hover:text-destructive">
                 <Trash2 className="h-4 w-4 mr-2" />
                 Delete Local Data
@@ -386,12 +508,6 @@ export default function Settings() {
                   Documentation
                 </a>
               </Button>
-              <Button variant="outline" className="w-full justify-start" asChild>
-                <a href="#" target="_blank">
-                  <ExternalLink className="h-4 w-4 mr-2" />
-                  FAQ
-                </a>
-              </Button>
             </CardContent>
           </Card>
 
@@ -406,11 +522,11 @@ export default function Settings() {
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Network</span>
-                <span>Aleo Mainnet</span>
+                <span>Aleo Testnet</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Program ID</span>
-                <span className="font-mono">zkfactor.aleo</span>
+                <span className="font-mono">{PROGRAM_ID}</span>
               </div>
             </CardContent>
           </Card>

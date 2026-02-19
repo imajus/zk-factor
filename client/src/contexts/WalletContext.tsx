@@ -1,125 +1,93 @@
-import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { useWallet as useAdapterWallet } from '@provablehq/aleo-wallet-adaptor-react';
+import { NETWORK } from '@/lib/config';
+import type { Network, TransactionOptions, TransactionStatusResponse, TxHistoryResult } from '@provablehq/aleo-types';
+import type { Wallet } from '@provablehq/aleo-wallet-adaptor-react';
+import type { WalletName } from '@provablehq/aleo-wallet-standard';
 
-export type UserRole = 'business' | 'factor' | 'observer';
+export type UserRole = 'business' | 'factor' | null;
 
-interface WalletState {
+interface AppWalletContextType {
   isConnected: boolean;
   address: string | null;
-  balance: number;
-  roles: UserRole[];
-  activeRole: UserRole | null;
-  lastSyncTime: Date | null;
-  isSyncing: boolean;
-  syncProgress: number;
-  network: 'mainnet' | 'testnet';
-}
-
-interface WalletContextType extends WalletState {
+  network: Network | null;
+  connecting: boolean;
+  wallets: Wallet[];
+  selectWallet: (name: WalletName) => void;
   connect: () => Promise<void>;
-  disconnect: () => void;
+  disconnect: () => Promise<void>;
+  executeTransaction: (options: TransactionOptions) => Promise<{ transactionId: string } | undefined>;
+  transactionStatus: (transactionId: string) => Promise<TransactionStatusResponse>;
+  requestRecords: (program: string, includePlaintext?: boolean) => Promise<unknown[]>;
+  requestTransactionHistory: (program: string) => Promise<TxHistoryResult>;
+  activeRole: UserRole;
   setActiveRole: (role: UserRole) => void;
-  syncWallet: () => Promise<void>;
   formatAddress: (address: string, chars?: number) => string;
 }
 
-const WalletContext = createContext<WalletContextType | undefined>(undefined);
+const AppWalletContext = createContext<AppWalletContextType | undefined>(undefined);
 
-const MOCK_ADDRESS = 'aleo1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq3ljyzc';
+function WalletContextInner({ children }: { children: ReactNode }) {
+  const [activeRole, setActiveRoleState] = useState<UserRole>(null);
+  const adapter = useAdapterWallet();
 
-export function WalletProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<WalletState>({
-    isConnected: false,
-    address: null,
-    balance: 0,
-    roles: [],
-    activeRole: null,
-    lastSyncTime: null,
-    isSyncing: false,
-    syncProgress: 0,
-    network: 'mainnet',
-  });
+  useEffect(() => {
+    if (!adapter.connected) {
+      setActiveRoleState(null);
+    }
+  }, [adapter.connected]);
 
   const connect = useCallback(async () => {
-    // Simulate wallet connection
-    setState(prev => ({ ...prev, isSyncing: true, syncProgress: 0 }));
-    
-    // Simulate sync progress
-    for (let i = 0; i <= 100; i += 10) {
-      await new Promise(resolve => setTimeout(resolve, 100));
-      setState(prev => ({ ...prev, syncProgress: i }));
+    if (adapter.wallets.length > 0 && !adapter.wallet) {
+      adapter.selectWallet(adapter.wallets[0].adapter.name);
     }
+    await adapter.connect(NETWORK);
+  }, [adapter]);
 
-    setState({
-      isConnected: true,
-      address: MOCK_ADDRESS,
-      balance: 125847.523456,
-      roles: ['business', 'factor'],
-      activeRole: 'business',
-      lastSyncTime: new Date(),
-      isSyncing: false,
-      syncProgress: 100,
-      network: 'mainnet',
-    });
-  }, []);
-
-  const disconnect = useCallback(() => {
-    setState({
-      isConnected: false,
-      address: null,
-      balance: 0,
-      roles: [],
-      activeRole: null,
-      lastSyncTime: null,
-      isSyncing: false,
-      syncProgress: 0,
-      network: 'mainnet',
-    });
-  }, []);
+  const disconnect = useCallback(async () => {
+    await adapter.disconnect();
+    setActiveRoleState(null);
+  }, [adapter]);
 
   const setActiveRole = useCallback((role: UserRole) => {
-    setState(prev => ({ ...prev, activeRole: role }));
-  }, []);
-
-  const syncWallet = useCallback(async () => {
-    setState(prev => ({ ...prev, isSyncing: true, syncProgress: 0 }));
-    
-    for (let i = 0; i <= 100; i += 5) {
-      await new Promise(resolve => setTimeout(resolve, 50));
-      setState(prev => ({ ...prev, syncProgress: i }));
-    }
-
-    setState(prev => ({
-      ...prev,
-      isSyncing: false,
-      syncProgress: 100,
-      lastSyncTime: new Date(),
-    }));
+    setActiveRoleState(role);
   }, []);
 
   const formatAddress = useCallback((address: string, chars: number = 6) => {
     if (!address) return '';
-    return `${address.slice(0, chars + 5)}...${address.slice(-chars)}`;
+    return `${address.slice(0, 10)}…${address.slice(-chars)}`;
   }, []);
 
   return (
-    <WalletContext.Provider
-      value={{
-        ...state,
-        connect,
-        disconnect,
-        setActiveRole,
-        syncWallet,
-        formatAddress,
-      }}
-    >
+    <AppWalletContext.Provider value={{
+      isConnected: adapter.connected,
+      address: adapter.address,
+      network: adapter.network,
+      connecting: adapter.connecting,
+      wallets: adapter.wallets,
+      selectWallet: adapter.selectWallet,
+      connect,
+      disconnect,
+      executeTransaction: adapter.executeTransaction,
+      transactionStatus: adapter.transactionStatus,
+      requestRecords: adapter.requestRecords,
+      requestTransactionHistory: adapter.requestTransactionHistory,
+      activeRole,
+      setActiveRole,
+      formatAddress,
+    }}>
       {children}
-    </WalletContext.Provider>
+    </AppWalletContext.Provider>
   );
 }
 
+export function WalletProvider({ children }: { children: ReactNode }) {
+  return <WalletContextInner>{children}</WalletContextInner>;
+}
+
 export function useWallet() {
-  const context = useContext(WalletContext);
-  if (context === undefined) {
+  const context = useContext(AppWalletContext);
+  if (!context) {
     throw new Error('useWallet must be used within a WalletProvider');
   }
   return context;
