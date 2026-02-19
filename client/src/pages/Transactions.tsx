@@ -4,21 +4,26 @@ import {
   AlertCircle,
   RefreshCw,
   FileText,
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
-import { useQuery } from '@tanstack/react-query';
-import { useWallet } from '@/contexts/WalletContext';
-import { PROGRAM_ID } from '@/lib/config';
-const ALEO_EXPLORER = 'https://explorer.aleo.org';
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useQuery } from "@tanstack/react-query";
+import { useWallet } from "@/contexts/WalletContext";
+import { PROGRAM_ID, ALEO_EXPLORER } from "@/lib/config";
 
 export default function Transactions() {
   const { isConnected, requestTransactionHistory } = useWallet();
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['tx_history', PROGRAM_ID],
+    queryKey: ["tx_history", PROGRAM_ID],
     queryFn: () => requestTransactionHistory(PROGRAM_ID),
     enabled: isConnected,
     staleTime: 60_000,
@@ -33,7 +38,9 @@ export default function Transactions() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Transactions</h1>
-          <p className="text-muted-foreground">View your complete transaction history</p>
+          <p className="text-muted-foreground">
+            View your complete transaction history
+          </p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => refetch()}>
@@ -52,8 +59,12 @@ export default function Transactions() {
         <Card className="border-destructive/50">
           <CardContent className="pt-6 flex items-center gap-4">
             <AlertCircle className="h-5 w-5 text-destructive shrink-0" />
-            <p className="text-sm text-destructive">Failed to load transaction history.</p>
-            <Button variant="outline" size="sm" onClick={() => refetch()}>Retry</Button>
+            <p className="text-sm text-destructive">
+              Failed to load transaction history.
+            </p>
+            <Button variant="outline" size="sm" onClick={() => refetch()}>
+              Retry
+            </Button>
           </CardContent>
         </Card>
       )}
@@ -63,7 +74,9 @@ export default function Transactions() {
         <CardHeader>
           <CardTitle>Transaction History</CardTitle>
           <CardDescription>
-            {isLoading ? 'Loading…' : `${transactions.length} transaction${transactions.length !== 1 ? 's' : ''}`}
+            {isLoading
+              ? "Loading…"
+              : `${transactions.length} transaction${transactions.length !== 1 ? "s" : ""}`}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -74,7 +87,10 @@ export default function Transactions() {
               </div>
             ) : isLoading ? (
               Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="flex items-center justify-between p-4 rounded-lg border border-border">
+                <div
+                  key={i}
+                  className="flex items-center justify-between p-4 rounded-lg border border-border"
+                >
                   <div className="flex items-center gap-4">
                     <Skeleton className="h-10 w-10 rounded-full" />
                     <div className="space-y-2">
@@ -103,11 +119,15 @@ export default function Transactions() {
                       <p className="font-mono text-sm">
                         {(tx.transactionId ?? tx.id)?.slice(0, 20)}…
                       </p>
-                      <p className="text-xs text-muted-foreground">{PROGRAM_ID}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {PROGRAM_ID}
+                      </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <Badge variant="outline" className="text-xs">Confirmed</Badge>
+                    <Badge variant="outline" className="text-xs">
+                      Confirmed
+                    </Badge>
                     <Button
                       variant="ghost"
                       size="icon"

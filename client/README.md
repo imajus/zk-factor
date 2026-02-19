@@ -56,6 +56,7 @@ Create a `.env` file in this directory:
 VITE_ALEO_NETWORK=testnet                          # testnet | mainnet | canary
 VITE_ALEO_PROGRAM_ID=zk_factor_11765.aleo          # on-chain program to interact with
 VITE_API_ENDPOINT=https://api.explorer.aleo.org/v1 # Aleo explorer REST base URL
+VITE_ALEO_EXPLORER=https://testnet.explorer.provable.com
 ```
 
 All three variables are read at startup from `src/lib/config.ts` and have the defaults shown above. `VITE_ALEO_NETWORK` controls the network passed to the wallet provider and the network segment in explorer API requests. `VITE_ALEO_PROGRAM_ID` is whitelisted alongside `credits.aleo` for record decryption so the wallet knows which program records to decrypt.

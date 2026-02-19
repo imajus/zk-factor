@@ -9,10 +9,12 @@ function resolveNetwork(value: string | undefined): Network {
 export const PROGRAM_ID: string =
   import.meta.env.VITE_ALEO_PROGRAM_ID ?? 'zk_factor_11765.aleo';
 
-export const NETWORK: Network = resolveNetwork(import.meta.env.VITE_ALEO_NETWORK);
+export const NETWORK: Network = resolveNetwork(import.meta.env.VITE_ALEO_NETWORK ?? 'testnet');
 
 export const API_ENDPOINT: string =
   import.meta.env.VITE_API_ENDPOINT ?? 'https://api.explorer.aleo.org/v1';
+
+export const ALEO_EXPLORER = import.meta.env.VITE_ALEO_EXPLORER ?? 'https://testnet.explorer.provable.com';
 
 /** Programs whitelisted for record decryption via the wallet adapter. */
 export const WHITELISTED_PROGRAMS: string[] = [PROGRAM_ID, 'credits.aleo'];

@@ -309,6 +309,7 @@ Create `.env` file in `client/` directory:
 VITE_ALEO_NETWORK=testnet          # or mainnet
 VITE_ALEO_PROGRAM_ID=zk_factor_11765.aleo
 VITE_API_ENDPOINT=https://api.explorer.aleo.org/v1
+VITE_ALEO_EXPLORER=https://testnet.explorer.provable.com
 ```
 
 Access in code:
