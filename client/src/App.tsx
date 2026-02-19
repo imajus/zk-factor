@@ -28,6 +28,7 @@ const App = () => (
         network={NETWORK}
         decryptPermission={DecryptPermission.AutoDecrypt}
         programs={WHITELISTED_PROGRAMS}
+        autoConnect
       >
         <WalletProvider>
           <Toaster />

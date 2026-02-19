@@ -31,7 +31,6 @@ import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useWallet } from '@/contexts/WalletContext';
-import { TransactionStatus } from '@provablehq/aleo-types';
 import { PROGRAM_ID } from '@/lib/config';
 const ALEO_FIELD_MODULUS = 8444461749428370424248824938781546531375899335154063827935233455917409239041n;
 
@@ -119,6 +118,8 @@ export default function CreateInvoice() {
           invoiceHash,
           metadata,
         ],
+        fee: 100_000,
+        privateFee: false,
       });
 
       if (!result) {
@@ -132,15 +133,15 @@ export default function CreateInvoice() {
       const poll = setInterval(async () => {
         try {
           const status = await transactionStatus(transactionId);
-          if (status.status === TransactionStatus.ACCEPTED) {
-            clearInterval(poll);
+          if (status.status.toLowerCase() === 'pending') return;
+          clearInterval(poll);
+          if (status.status.toLowerCase() === 'accepted') {
             toast.success('Invoice created successfully!', { id: 'create-invoice' });
-            setIsSubmitting(false);
             navigate('/invoices');
-          } else if (status.status === TransactionStatus.FAILED || status.status === TransactionStatus.REJECTED) {
-            clearInterval(poll);
-            throw new Error(status.error || 'Transaction failed');
+          } else {
+            toast.error(status.error || `Transaction ${status.status}`, { id: 'create-invoice' });
           }
+          setIsSubmitting(false);
         } catch (err) {
           clearInterval(poll);
           toast.error(err instanceof Error ? err.message : 'Transaction failed', { id: 'create-invoice' });
