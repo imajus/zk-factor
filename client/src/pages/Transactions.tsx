@@ -22,6 +22,7 @@ export default function Transactions() {
     queryFn: () => requestTransactionHistory(PROGRAM_ID),
     enabled: isConnected,
     staleTime: 60_000,
+    retry: false,
   });
 
   const transactions = data?.transactions ?? [];

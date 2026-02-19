@@ -26,7 +26,7 @@ const App = () => (
       <AleoWalletProvider
         wallets={wallets}
         network={NETWORK}
-        decryptPermission={DecryptPermission.AutoDecrypt}
+        decryptPermission={DecryptPermission.OnChainHistory}
         programs={WHITELISTED_PROGRAMS}
         autoConnect
       >

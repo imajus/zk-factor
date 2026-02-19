@@ -58,6 +58,7 @@ interface InvoiceRecord {
 async function fetchActiveFactors(): Promise<FactorInfo[]> {
   const url = `${API_ENDPOINT}/${NETWORK}/program/${PROGRAM_ID}/mapping/active_factors`;
   const res = await fetch(url);
+  if (res.status === 404) return [];
   if (!res.ok) {
     throw new Error(`Explorer API error: ${res.status}`);
   }
@@ -89,6 +90,7 @@ export default function Marketplace() {
     queryKey: ['active_factors'],
     queryFn: fetchActiveFactors,
     staleTime: 60_000,
+    retry: false,
   });
 
   const { data: records } = useQuery({
