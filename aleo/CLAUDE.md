@@ -83,6 +83,24 @@ Tests must validate:
 - Settlement consumes FactoredInvoice record
 - Serial number uniqueness enforcement
 
+## Testing Constraints
+
+**Always use `@test script`, never `@test transition`:**
+The `@admin` constructor blocks local ledger deployment, which `@test transition` requires. All tests must be `@test script`.
+
+**`fut.await()` required to test finalize logic:**
+Without it, `async function` bodies (e.g. the timestamp check in `finalize_mint_invoice`) are silently skipped.
+
+**`self.caller` in cross-program script tests = test program address, not user address:**
+- `Mapping::get(..., self.caller)` queries the wrong key; verify mapping state behaviorally instead
+- `assert(debtor != self.caller)` cannot be triggered via cross-program calls
+
+**Leo identifier limit:** 31 bytes — keep test function names short.
+
+**Placeholder transition required:** If all tests are `@test script`, add `transition noop() -> bool { return true; }` — Leo requires at least one transition per program.
+
+**End-to-end script:** `bash scripts/test_e2e.sh` (from `aleo/`). Set `SKIP_SETTLE=1` to stop after `factor_invoice`.
+
 ## Configuration
 
 **.env variables:**

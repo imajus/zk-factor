@@ -96,13 +96,13 @@
 
 - [x] 9.1 Configure .env file with testnet network and endpoint
 - [x] 9.2 Ensure PRIVATE_KEY is set for deployment account
-- [ ] 9.3 Run `leo deploy --network testnet` to deploy program
-- [ ] 9.4 Verify deployment transaction confirmed on testnet
+- [x] 9.3 Run `leo deploy --network testnet` to deploy program (deployed via Leo Playground due to leo CLI endpoint path-stripping bug)
+- [x] 9.4 Verify deployment transaction confirmed on testnet (at1ske79h4mmyjg963rc3gu3wkgft8h6zd80m7auk6d4zpr4gnrwuxq6y3sr9)
 - [ ] 9.5 Document deployed program ID and transaction hash
-- [ ] 9.6 Test invoice creation on testnet
-- [ ] 9.7 Test factor registration on testnet
-- [ ] 9.8 Test factoring transaction on testnet
-- [ ] 9.9 Test settlement on testnet
+- [x] 9.6 Test invoice creation on testnet (at18rllhldgfftyc0n7kr6ffafaxsjm4fcp3weksael97kpy0vj4uysn9fen3)
+- [x] 9.7 Test factor registration on testnet (at1xt40g2flcp6gguqa9m6hxfqx4y8we8yw6zlyzgvjspjmphz60u9ql75jan)
+- [x] 9.8 Test factoring transaction on testnet (at1j5fn4nhr50que77yva7e8ndaa74vnw6yc5y0g5e89ywquehnavqswx33fe)
+- [ ] 9.9 Test settlement on testnet (blocked: settle_invoice transactions dropped from mempool; local execution succeeds, proofs valid)
 - [ ] 9.10 Measure and document gas costs for each transition
 
 ## 10. Documentation and Cleanup
