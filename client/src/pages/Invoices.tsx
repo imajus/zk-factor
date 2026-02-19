@@ -39,36 +39,27 @@ import { toast } from 'sonner';
 import { TransactionStatus } from '@provablehq/aleo-types';
 import { PROGRAM_ID } from '@/lib/config';
 
-interface InvoiceRecord {
-  type: string;
+interface AleoRecord {
+  recordName: string;
   owner: string;
-  data: {
-    debtor: string;
-    amount: string;
-    due_date: string;
-    invoice_hash: string;
-    nonce: string;
-    metadata: string;
-  };
-  plaintext: string;
-  id?: string;
+  programName: string;
+  recordPlaintext: string;
+  spent: boolean;
+  sender?: string;
+  blockHeight?: number;
+  transactionId?: string;
+  commitment?: string;
+  tag?: string;
 }
 
-interface FactoredInvoiceRecord {
-  type: string;
-  owner: string;
-  data: {
-    original_creditor: string;
-    debtor: string;
-    amount: string;
-    advance_amount: string;
-    advance_rate: string;
-    due_date: string;
-    invoice_hash: string;
-    recourse: string;
-  };
-  plaintext: string;
-  id?: string;
+function getField(plaintext: string, field: string): string {
+  for (const line of plaintext.split('\n')) {
+    const trimmed = line.trimStart();
+    if (!trimmed.startsWith(`${field}:`)) continue;
+    const m = trimmed.match(/^[^:]+:\s*(.+?)\.(?:private|public)/);
+    if (m) return m[1].trim();
+  }
+  return '';
 }
 
 function microToAleo(microcredits: string): number {
@@ -95,12 +86,12 @@ export default function Invoices() {
     staleTime: 60_000,
   });
 
-  const invoiceRecords = (records as InvoiceRecord[] ?? []).filter(
-    (r) => r.type === 'Invoice'
+  const invoiceRecords = (records as AleoRecord[] ?? []).filter(
+    (r) => r.recordName === 'Invoice' && !r.spent
   );
 
-  const factoredRecords = (records as FactoredInvoiceRecord[] ?? []).filter(
-    (r) => r.type === 'FactoredInvoice'
+  const factoredRecords = (records as AleoRecord[] ?? []).filter(
+    (r) => r.recordName === 'FactoredInvoice' && !r.spent
   );
 
   const filteredInvoices = invoiceRecords
@@ -108,15 +99,15 @@ export default function Invoices() {
       if (!searchQuery) return true;
       const q = searchQuery.toLowerCase();
       return (
-        r.data?.debtor?.toLowerCase().includes(q) ||
-        r.data?.invoice_hash?.toLowerCase().includes(q)
+        getField(r.recordPlaintext, 'debtor').toLowerCase().includes(q) ||
+        getField(r.recordPlaintext, 'invoice_hash').toLowerCase().includes(q)
       );
     })
     .sort((a, b) => {
-      const dueDateA = unixToDate(a.data?.due_date ?? '0u64').getTime();
-      const dueDateB = unixToDate(b.data?.due_date ?? '0u64').getTime();
+      const dueDateA = unixToDate(getField(a.recordPlaintext, 'due_date') || '0u64').getTime();
+      const dueDateB = unixToDate(getField(b.recordPlaintext, 'due_date') || '0u64').getTime();
       const cmp = sortBy === 'amount'
-        ? microToAleo(a.data?.amount ?? '0u64') - microToAleo(b.data?.amount ?? '0u64')
+        ? microToAleo(getField(a.recordPlaintext, 'amount') || '0u64') - microToAleo(getField(b.recordPlaintext, 'amount') || '0u64')
         : dueDateA - dueDateB;
       return sortOrder === 'desc' ? -cmp : cmp;
     });
@@ -130,16 +121,17 @@ export default function Invoices() {
     }
   };
 
-  const handleSettle = async (record: FactoredInvoiceRecord) => {
-    const recordId = record.id ?? record.data.invoice_hash;
+  const handleSettle = async (record: AleoRecord) => {
+    const invoiceHash = getField(record.recordPlaintext, 'invoice_hash');
+    const recordId = record.commitment ?? invoiceHash;
     setSettlingId(recordId);
     toast.loading('Settling invoice…', { id: 'settle-invoice' });
 
     try {
-      const creditsRecords = await requestRecords('credits.aleo', true) as Array<{ data: { microcredits: string }; plaintext: string }>;
-      const requiredAmount = parseInt(record.data.amount.replace(/u64$/, ''), 10);
+      const creditsRecords = await requestRecords('credits.aleo', true) as AleoRecord[];
+      const requiredAmount = parseInt(getField(record.recordPlaintext, 'amount').replace(/u64$/, ''), 10);
       const creditsRecord = creditsRecords.find(
-        (r) => parseInt((r.data?.microcredits ?? '0u64').replace(/u64$/, ''), 10) >= requiredAmount
+        (r) => parseInt(getField(r.recordPlaintext, 'microcredits').replace(/u64$/, ''), 10) >= requiredAmount
       );
 
       if (!creditsRecord) {
@@ -149,7 +141,7 @@ export default function Invoices() {
       const result = await executeTransaction({
         program: PROGRAM_ID,
         function: 'settle_invoice',
-        inputs: [record.plaintext, creditsRecord.plaintext],
+        inputs: [record.recordPlaintext, creditsRecord.recordPlaintext],
       });
 
       if (!result) throw new Error('Transaction returned no result');
@@ -311,17 +303,19 @@ export default function Invoices() {
                   </TableRow>
                 ) : (
                   filteredInvoices.map((invoice, idx) => {
-                    const dueDate = unixToDate(invoice.data?.due_date ?? '0u64');
-                    const aleoAmount = microToAleo(invoice.data?.amount ?? '0u64');
+                    const invoiceHash = getField(invoice.recordPlaintext, 'invoice_hash');
+                    const dueDate = unixToDate(getField(invoice.recordPlaintext, 'due_date') || '0u64');
+                    const aleoAmount = microToAleo(getField(invoice.recordPlaintext, 'amount') || '0u64');
+                    const debtor = getField(invoice.recordPlaintext, 'debtor');
                     const daysUntil = getDaysUntilDue(dueDate);
-                    const shortHash = invoice.data?.invoice_hash?.slice(0, 12) + '…';
+                    const shortHash = invoiceHash.slice(0, 12) + '…';
                     return (
-                      <TableRow key={invoice.data?.invoice_hash ?? idx}>
+                      <TableRow key={invoiceHash || idx}>
                         <TableCell>
                           <span className="font-mono text-sm">{shortHash}</span>
                         </TableCell>
                         <TableCell className="hidden md:table-cell">
-                          <AddressDisplay address={invoice.data?.debtor ?? ''} chars={4} showExplorer />
+                          <AddressDisplay address={debtor} chars={4} showExplorer />
                         </TableCell>
                         <TableCell className="font-mono">
                           {aleoAmount.toLocaleString(undefined, { maximumFractionDigits: 6 })} ALEO
@@ -405,17 +399,19 @@ export default function Invoices() {
                   </TableRow>
                 ) : (
                   factoredRecords.map((record, idx) => {
-                    const aleoAmount = microToAleo(record.data?.amount ?? '0u64');
-                    const rate = parseInt((record.data?.advance_rate ?? '0u16').replace(/u16$/, ''), 10) / 100;
-                    const recordId = record.id ?? record.data.invoice_hash;
+                    const invoiceHash = getField(record.recordPlaintext, 'invoice_hash');
+                    const aleoAmount = microToAleo(getField(record.recordPlaintext, 'amount') || '0u64');
+                    const rate = parseInt((getField(record.recordPlaintext, 'advance_rate') || '0u16').replace(/u16$/, ''), 10) / 100;
+                    const originalCreditor = getField(record.recordPlaintext, 'original_creditor');
+                    const recordId = record.commitment ?? invoiceHash;
                     const isSettling = settlingId === recordId;
                     return (
-                      <TableRow key={record.data?.invoice_hash ?? idx}>
+                      <TableRow key={invoiceHash || idx}>
                         <TableCell>
-                          <span className="font-mono text-sm">{record.data?.invoice_hash?.slice(0, 12)}…</span>
+                          <span className="font-mono text-sm">{invoiceHash.slice(0, 12)}…</span>
                         </TableCell>
                         <TableCell className="hidden md:table-cell">
-                          <AddressDisplay address={record.data?.original_creditor ?? ''} chars={4} showExplorer />
+                          <AddressDisplay address={originalCreditor} chars={4} showExplorer />
                         </TableCell>
                         <TableCell className="font-mono">
                           {aleoAmount.toLocaleString(undefined, { maximumFractionDigits: 6 })} ALEO

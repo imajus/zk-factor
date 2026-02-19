@@ -45,7 +45,7 @@ export function FactorDashboard() {
     staleTime: 60_000,
   });
 
-  const factoredCount = (records as Array<{ type: string }> ?? []).filter((r) => r.type === 'FactoredInvoice').length;
+  const factoredCount = (records as Array<{ recordName: string; spent: boolean }> ?? []).filter((r) => r.recordName === 'FactoredInvoice' && !r.spent).length;
 
   const dynamicStats = [
     { ...statTemplates[0], value: isLoading ? '…' : String(factoredCount) },

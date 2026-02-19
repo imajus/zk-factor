@@ -49,8 +49,8 @@ export function BusinessDashboard() {
     staleTime: 60_000,
   });
 
-  const invoiceCount = (records as Array<{ type: string }> ?? []).filter((r) => r.type === 'Invoice').length;
-  const factoredCount = (records as Array<{ type: string }> ?? []).filter((r) => r.type === 'FactoredInvoice').length;
+  const invoiceCount = (records as Array<{ recordName: string; spent: boolean }> ?? []).filter((r) => r.recordName === 'Invoice' && !r.spent).length;
+  const factoredCount = (records as Array<{ recordName: string; spent: boolean }> ?? []).filter((r) => r.recordName === 'FactoredInvoice' && !r.spent).length;
 
   const dynamicStats = [
     { ...stats[0], value: isLoading ? '…' : String(invoiceCount) },
