@@ -1,5 +1,5 @@
 import credits.aleo;
-import zk_factor_11765.aleo;
+import zk_factor_9588.aleo;
 program test_zk_factor.aleo;
 
 function noop:
