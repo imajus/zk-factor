@@ -13,7 +13,7 @@ See @docs/PRD.md for complete product requirements and specifications.
 ## Repository Structure
 
 ```
-aleo/              Leo smart contract (program: zk_factor_11765.aleo)
+aleo/              Leo smart contract (program: zk_factor.aleo)
 └── CLAUDE.md      Aleo-specific development guide
 client/            React frontend with Vite + TypeScript + shadcn/ui
 └── CLAUDE.md      Frontend development guide
