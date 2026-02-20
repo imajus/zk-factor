@@ -12,7 +12,7 @@ export const PROGRAM_ID: string =
 export const NETWORK: Network = resolveNetwork(import.meta.env.VITE_ALEO_NETWORK ?? 'testnet');
 
 export const API_ENDPOINT: string =
-  import.meta.env.VITE_API_ENDPOINT ?? 'https://api.explorer.aleo.org/v1';
+  import.meta.env.VITE_API_ENDPOINT ?? 'https://api.explorer.provable.com/v1';
 
 export const ALEO_EXPLORER = import.meta.env.VITE_ALEO_EXPLORER ?? 'https://testnet.explorer.provable.com';
 

@@ -201,6 +201,16 @@ import { cn } from "@/lib/utils";
 - Use Tailwind breakpoints: `sm:`, `md:`, `lg:`, `xl:`, `2xl:`
 - `use-mobile` hook for JS-based mobile detection
 
+## Aleo Explorer API Gotchas
+
+**Mapping values are Leo plaintext strings, not JSON objects.** Raw-fetching a mapping endpoint and calling `res.json()` returns a string like `"{ is_active: true, min_advance_rate: 7000u16 }"` — field access on it is always `undefined`. Use `AleoNetworkClient.getProgramMappingValue` from `@provablehq/sdk` instead; it returns the plaintext string correctly.
+
+**`@provablehq/sdk` is separate from the wallet adaptor packages.** The wallet adaptor (`@provablehq/aleo-wallet-adaptor-*`) does not include `AleoNetworkClient`. Install `@provablehq/sdk` explicitly when you need network queries.
+
+**`@provablehq/sdk` requires `build.target: "esnext"` in Vite.** The SDK uses top-level await for WASM initialization; without it the build fails with "Top-level await is not available in the configured target environment".
+
+**`parseInt` handles Leo type suffixes naturally.** `parseInt("7000u16", 10)` → `7000`; no manual suffix stripping needed.
+
 ## Aleo Integration Points
 
 ### Wallet Connection
@@ -344,22 +354,8 @@ const network = import.meta.env.VITE_ALEO_NETWORK;
 - Handle async record availability gracefully
 - Provide transaction status updates
 
-## Next Steps
-
-**Phase 1 Integration**:
-1. Replace mock WalletContext with real Aleo wallet SDK
-2. Implement invoice record creation UI
-3. Add factoring transaction execution
-4. Build serial number verification UI
-5. Add settlement workflow
-
-**Phase 2 Features** (see @../docs/PRD.md):
-- Partial factoring UI
-- Recourse tracking
-- Multi-factor syndication
-- ZK credit scoring display
-
 ## Related Documentation
 
 - Root project overview: @CLAUDE.md
 - Product requirements: @../docs/PRD.md
+- **Context7** has Provable SDK docs indexed in Context7 at library ID `/provablehq/sdk`

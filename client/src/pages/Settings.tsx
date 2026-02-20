@@ -39,7 +39,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useWallet } from "@/contexts/WalletContext";
 import { useTransaction } from "@/hooks/use-transaction";
 import { toast } from "sonner";
-import { PROGRAM_ID, API_ENDPOINT, NETWORK } from "@/lib/config";
+import { PROGRAM_ID, API_ENDPOINT } from "@/lib/config";
+import { AleoNetworkClient } from "@provablehq/sdk";
 
 interface FactorStatus {
   is_active: boolean;
@@ -47,26 +48,30 @@ interface FactorStatus {
   max_advance_rate: number;
 }
 
+const networkClient = new AleoNetworkClient(API_ENDPOINT);
+
+function parseLeoField(plaintext: string, field: string): string {
+  const m = plaintext.match(new RegExp(`${field}:\\s*([^,}\\s]+)`));
+  return m ? m[1] : "";
+}
+
 async function fetchFactorStatus(
   address: string,
 ): Promise<FactorStatus | null> {
-  const url = `${API_ENDPOINT}/${NETWORK}/program/${PROGRAM_ID}/mapping/active_factors/${address}`;
-  const res = await fetch(url);
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`Explorer API error: ${res.status}`);
-  const data = await res.json();
-  if (!data) return null;
-  return {
-    is_active: Boolean(data.is_active),
-    min_advance_rate: parseInt(
-      String(data.min_advance_rate ?? "0").replace(/u16$/, ""),
-      10,
-    ),
-    max_advance_rate: parseInt(
-      String(data.max_advance_rate ?? "0").replace(/u16$/, ""),
-      10,
-    ),
-  };
+  try {
+    const value = await networkClient.getProgramMappingValue(
+      PROGRAM_ID,
+      "active_factors",
+      address,
+    );
+    return {
+      is_active: parseLeoField(value, "is_active") === "true",
+      min_advance_rate: parseInt(parseLeoField(value, "min_advance_rate"), 10),
+      max_advance_rate: parseInt(parseLeoField(value, "max_advance_rate"), 10),
+    };
+  } catch {
+    return null;
+  }
 }
 
 export default function Settings() {
