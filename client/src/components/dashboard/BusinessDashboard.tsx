@@ -13,8 +13,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { StatCard } from '@/components/ui/stat-card';
 import { useQuery } from '@tanstack/react-query';
 import { useWallet } from '@/contexts/WalletContext';
+import { PROGRAM_ID } from '@/lib/config';
 
-const PROGRAM_ID = 'zk_factor_11765.aleo';
 
 const stats = [
   {

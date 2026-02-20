@@ -29,11 +29,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { AleoNetworkClient } from '@provablehq/sdk';
 import { useWallet } from '@/contexts/WalletContext';
 import { useTransaction } from '@/hooks/use-transaction';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { PROGRAM_ID, API_ENDPOINT, NETWORK } from '@/lib/config';
+import { PROGRAM_ID, API_ENDPOINT } from '@/lib/config';
 
 interface FactorInfo {
   address: string;
@@ -66,24 +67,44 @@ function getField(plaintext: string, field: string): string {
   return '';
 }
 
+function parseFactorInfo(address: string, plaintext: string): FactorInfo {
+  const get = (field: string) => {
+    for (const line of plaintext.split('\n')) {
+      const t = line.trimStart();
+      if (!t.startsWith(`${field}:`)) continue;
+      // Record field format: "field: value.private" or "field: value.public"
+      const m = t.match(/^[^:]+:\s*(.+?)\.(?:private|public)/);
+      if (m) return m[1].trim();
+      // Mapping/struct format: "field: value," or "field: value"
+      const s = t.match(/^[^:]+:\s*(.+?)(?:,\s*)?$/);
+      if (s) return s[1].replace(/,$/, '').trim();
+    }
+    return '';
+  };
+  return {
+    address,
+    is_active: get('is_active') === 'true',
+    min_advance_rate: parseInt(get('min_advance_rate'), 10),
+    max_advance_rate: parseInt(get('max_advance_rate'), 10),
+    total_factored: parseInt(get('total_factored'), 10),
+    registration_date: parseInt(get('registration_date'), 10),
+  };
+}
+
 async function fetchActiveFactors(): Promise<FactorInfo[]> {
-  const url = `${API_ENDPOINT}/${NETWORK}/program/${PROGRAM_ID}/mapping/active_factors`;
-  const res = await fetch(url);
-  if (res.status === 404) return [];
-  if (!res.ok) {
-    throw new Error(`Explorer API error: ${res.status}`);
-  }
-  const data = await res.json();
-  if (!Array.isArray(data)) return [];
-  return data
-    .map((entry: { key: string; value: Record<string, unknown> }) => ({
-      address: entry.key,
-      is_active: Boolean(entry.value?.is_active),
-      min_advance_rate: parseInt(String(entry.value?.min_advance_rate ?? '0').replace(/u16$/, ''), 10),
-      max_advance_rate: parseInt(String(entry.value?.max_advance_rate ?? '0').replace(/u16$/, ''), 10),
-      total_factored: parseInt(String(entry.value?.total_factored ?? '0').replace(/u64$/, ''), 10),
-      registration_date: parseInt(String(entry.value?.registration_date ?? '0').replace(/u64$/, ''), 10),
-    }))
+  const client = new AleoNetworkClient(API_ENDPOINT);
+  const lenRaw = await client.getProgramMappingValue(PROGRAM_ID, 'factor_addresses__len__', 'false');
+  const len = parseInt(String(lenRaw), 10);
+  if (!len) return [];
+  const indices = Array.from({ length: len }, (_, i) => i);
+  const addresses = await Promise.all(
+    indices.map((i) => client.getProgramMappingValue(PROGRAM_ID, 'factor_addresses__', `${i}u32`)),
+  );
+  const infos = await Promise.all(
+    addresses.map((addr) => client.getProgramMappingValue(PROGRAM_ID, 'active_factors', String(addr))),
+  );
+  return infos
+    .map((raw, i) => parseFactorInfo(String(addresses[i]), String(raw)))
     .filter((f) => f.is_active);
 }
 

@@ -2,12 +2,9 @@ import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   Wallet,
-  Bell,
-  ChevronDown,
   ExternalLink,
   Copy,
   LogOut,
-  HelpCircle,
   Menu,
   X,
   Zap,
@@ -35,8 +32,6 @@ const navItems = [
   { label: 'Settings', href: '/settings' },
 ];
 
-const ROLES: Array<'business' | 'factor'> = ['business', 'factor'];
-
 export function Header() {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -44,7 +39,6 @@ export function Header() {
     isConnected,
     address,
     activeRole,
-    setActiveRole,
     connect,
     disconnect,
     formatAddress,
@@ -103,41 +97,12 @@ export function Header() {
                 {network === 'mainnet' ? 'Mainnet' : 'Testnet'}
               </Badge>
 
-              {/* Role Switcher */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="gap-1">
-                    {activeRole ? activeRole.charAt(0).toUpperCase() + activeRole.slice(1) : 'Select Role'}
-                    <ChevronDown className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuLabel>Switch Role</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  {ROLES.map((role) => (
-                    <DropdownMenuItem
-                      key={role}
-                      onClick={() => setActiveRole(role)}
-                      className={cn(activeRole === role && 'bg-primary/10')}
-                    >
-                      {role.charAt(0).toUpperCase() + role.slice(1)}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              {/* Notifications */}
-              <Button variant="ghost" size="icon" className="relative">
-                <Bell className="h-4 w-4" />
-              </Button>
-
               {/* Wallet Dropdown */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" className="gap-2">
                     <Wallet className="h-4 w-4" />
                     <span className="hidden sm:inline">{formatAddress(address || '')}</span>
-                    <ChevronDown className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-64">
@@ -174,11 +139,6 @@ export function Header() {
               Connect Wallet
             </Button>
           )}
-
-          {/* Help */}
-          <Button variant="ghost" size="icon" className="hidden sm:flex">
-            <HelpCircle className="h-4 w-4" />
-          </Button>
 
           {/* Mobile Menu Toggle */}
           <Button

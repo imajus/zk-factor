@@ -1,5 +1,5 @@
 import credits.aleo;
-program zk_factor_11765.aleo;
+program zk_factor_9588.aleo;
 
 record Invoice:
     owner as address.private;
@@ -46,6 +46,14 @@ mapping protocol_stats:
     key as u8.public;
     value as u64.public;
 
+mapping factor_addresses__:
+    key as u32.public;
+    value as address.public;
+
+mapping factor_addresses__len__:
+    key as boolean.public;
+    value as u32.public;
+
 function mint_invoice:
     input r0 as address.private;
     input r1 as u64.private;
@@ -60,7 +68,7 @@ function mint_invoice:
     cast self.caller r0 r1 r2 r3 r7 r4 into r8 as Invoice.record;
     async mint_invoice r2 into r9;
     output r8 as Invoice.record;
-    output r9 as zk_factor_11765.aleo/mint_invoice.future;
+    output r9 as zk_factor_9588.aleo/mint_invoice.future;
 
 finalize mint_invoice:
     input r0 as u64.public;
@@ -82,7 +90,7 @@ function register_factor:
     and r6 r7 into r8;
     assert.eq r8 true;
     async register_factor self.caller r0 r1 into r9;
-    output r9 as zk_factor_11765.aleo/register_factor.future;
+    output r9 as zk_factor_9588.aleo/register_factor.future;
 
 finalize register_factor:
     input r0 as address.public;
@@ -92,13 +100,17 @@ finalize register_factor:
     get.or_use active_factors[r0] r3 into r4;
     not r4.is_active into r5;
     assert.eq r5 true;
-    cast block.timestamp into r6 as u64;
-    cast true r1 r2 0u64 r6 into r7 as FactorInfo;
-    set r7 into active_factors[r0];
+    get.or_use factor_addresses__len__[false] 0u32 into r6;
+    add r6 1u32 into r7;
+    set r7 into factor_addresses__len__[false];
+    set r0 into factor_addresses__[r6];
+    cast block.timestamp into r8 as u64;
+    cast true r1 r2 0u64 r8 into r9 as FactorInfo;
+    set r9 into active_factors[r0];
 
 function deregister_factor:
     async deregister_factor self.caller into r0;
-    output r0 as zk_factor_11765.aleo/deregister_factor.future;
+    output r0 as zk_factor_9588.aleo/deregister_factor.future;
 
 finalize deregister_factor:
     input r0 as address.public;
@@ -128,7 +140,7 @@ function factor_invoice:
     output r12 as FactoredInvoice.record;
     output r13 as credits.aleo/credits.record;
     output r14 as credits.aleo/credits.record;
-    output r15 as zk_factor_11765.aleo/factor_invoice.future;
+    output r15 as zk_factor_9588.aleo/factor_invoice.future;
 
 finalize factor_invoice:
     input r0 as address.public;
@@ -153,7 +165,7 @@ function settle_invoice:
     async settle_invoice r0.invoice_hash self.caller into r6;
     output r4 as credits.aleo/credits.record;
     output r5 as credits.aleo/credits.record;
-    output r6 as zk_factor_11765.aleo/settle_invoice.future;
+    output r6 as zk_factor_9588.aleo/settle_invoice.future;
 
 finalize settle_invoice:
     input r0 as field.public;

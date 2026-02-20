@@ -2,7 +2,7 @@
 // Cryptographically prevents double-factoring fraud while maintaining complete privacy
 import credits.aleo;
 
-program zk_factor_11765.aleo {
+program zk_factor_9588.aleo {
     // Simple admin-controlled upgradable constructor for MVP
     // Can be upgraded to multi-sig governance later
     // IMPORTANT: Replace with actual admin address before deployment
@@ -14,6 +14,10 @@ program zk_factor_11765.aleo {
     mapping active_factors: address => FactorInfo;
     mapping settled_invoices: field => SettlementInfo;
     mapping protocol_stats: u8 => u64;
+
+    // Enumerable list of all registered factor addresses (includes deregistered)
+    // Compiles to: factor_addresses__ (u32 => address) and factor_addresses__len__ (bool => u32)
+    storage factor_addresses: [address];
 
     // Invoice record owned by business (consumed during factoring)
     record Invoice {
@@ -107,6 +111,7 @@ program zk_factor_11765.aleo {
             registration_date: 0u64,
         });
         assert(!existing_factor.is_active);
+        factor_addresses.push(factor);
         let new_factor: FactorInfo = FactorInfo {
             is_active: true,
             min_advance_rate: min_rate,

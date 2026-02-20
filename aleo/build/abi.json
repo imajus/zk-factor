@@ -1,5 +1,5 @@
 {
-  "program": "zk_factor_11765.aleo",
+  "program": "zk_factor_9588.aleo",
   "structs": [
     {
       "path": [
@@ -236,7 +236,7 @@
           "path": [
             "FactorInfo"
           ],
-          "program": "zk_factor_11765"
+          "program": "zk_factor_9588"
         }
       }
     },
@@ -250,7 +250,7 @@
           "path": [
             "SettlementInfo"
           ],
-          "program": "zk_factor_11765"
+          "program": "zk_factor_9588"
         }
       }
     },
@@ -333,7 +333,7 @@
               "path": [
                 "Invoice"
               ],
-              "program": "zk_factor_11765"
+              "program": "zk_factor_9588"
             }
           },
           "mode": "None"
@@ -400,7 +400,7 @@
               "path": [
                 "Invoice"
               ],
-              "program": "zk_factor_11765"
+              "program": "zk_factor_9588"
             }
           },
           "mode": "None"
@@ -445,7 +445,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_11765"
+              "program": "zk_factor_9588"
             }
           },
           "mode": "None"
@@ -489,7 +489,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_11765"
+              "program": "zk_factor_9588"
             }
           },
           "mode": "None"

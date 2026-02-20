@@ -4,7 +4,7 @@ This file provides guidance for working with the Leo smart contract in this dire
 
 ## Program Information
 
-**Program ID:** `zk_factor_11765.aleo`
+**Program ID:** `zk_factor.aleo`
 **Leo Version:** 3.4.0
 **Constructor:** Admin-controlled upgradable constructor (simple governance for MVP)
 
