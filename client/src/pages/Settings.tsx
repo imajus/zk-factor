@@ -1,10 +1,7 @@
 import { useState, useEffect } from "react";
 import {
   Wallet,
-  Bell,
-  Shield,
   Palette,
-  HelpCircle,
   ExternalLink,
   Download,
   Trash2,
@@ -23,7 +20,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { AddressDisplay } from "@/components/ui/address-display";
@@ -82,13 +78,6 @@ export default function Settings() {
   const isRegistering = activeOp === "register" && status !== "idle";
   const isDeregistering = activeOp === "deregister" && status !== "idle";
   const [theme, setTheme] = useState<"light" | "dark" | "system">("dark");
-  const [notifications, setNotifications] = useState({
-    invoiceCreated: true,
-    factoringRequest: true,
-    factoringComplete: true,
-    paymentReceived: true,
-    dueDateReminder: true,
-  });
   const [minRate, setMinRate] = useState("");
   const [maxRate, setMaxRate] = useState("");
 
@@ -191,7 +180,7 @@ export default function Settings() {
       </div>
 
       <Tabs defaultValue="wallet" className="space-y-6">
-        <TabsList className="grid grid-cols-3 lg:grid-cols-6 w-full">
+        <TabsList className="grid grid-cols-3 w-full">
           <TabsTrigger value="wallet" className="gap-2">
             <Wallet className="h-4 w-4" />
             <span className="hidden sm:inline">Wallet</span>
@@ -200,21 +189,9 @@ export default function Settings() {
             <Building2 className="h-4 w-4" />
             <span className="hidden sm:inline">Factor</span>
           </TabsTrigger>
-          <TabsTrigger value="notifications" className="gap-2">
-            <Bell className="h-4 w-4" />
-            <span className="hidden sm:inline">Notifications</span>
-          </TabsTrigger>
-          <TabsTrigger value="privacy" className="gap-2">
-            <Shield className="h-4 w-4" />
-            <span className="hidden sm:inline">Privacy</span>
-          </TabsTrigger>
           <TabsTrigger value="display" className="gap-2">
             <Palette className="h-4 w-4" />
             <span className="hidden sm:inline">Display</span>
-          </TabsTrigger>
-          <TabsTrigger value="help" className="gap-2">
-            <HelpCircle className="h-4 w-4" />
-            <span className="hidden sm:inline">Help</span>
           </TabsTrigger>
         </TabsList>
 
@@ -380,90 +357,6 @@ export default function Settings() {
           </Card>
         </TabsContent>
 
-        {/* Notifications */}
-        <TabsContent value="notifications" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Email Notifications</CardTitle>
-              <CardDescription>
-                Choose which notifications to receive
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email Address</Label>
-                <div className="flex gap-2">
-                  <Input id="email" placeholder="you@example.com" />
-                  <Button variant="outline">Verify</Button>
-                </div>
-              </div>
-              <Separator />
-              {Object.entries({
-                invoiceCreated: "Invoice created confirmations",
-                factoringRequest: "Factoring request received",
-                factoringComplete: "Factoring completed",
-                paymentReceived: "Payment received",
-                dueDateReminder: "Invoice due date reminders",
-              }).map(([key, label]) => (
-                <div key={key} className="flex items-center justify-between">
-                  <Label htmlFor={key} className="font-normal">
-                    {label}
-                  </Label>
-                  <Switch
-                    id={key}
-                    checked={notifications[key as keyof typeof notifications]}
-                    onCheckedChange={(checked) =>
-                      setNotifications((prev) => ({ ...prev, [key]: checked }))
-                    }
-                  />
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Privacy */}
-        <TabsContent value="privacy" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Privacy Settings</CardTitle>
-              <CardDescription>
-                Control your data and privacy preferences
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">Share Usage Analytics</p>
-                  <p className="text-sm text-muted-foreground">
-                    Help improve the platform
-                  </p>
-                </div>
-                <Switch />
-              </div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">Store Documents Locally</p>
-                  <p className="text-sm text-muted-foreground">
-                    Keep invoice documents on device
-                  </p>
-                </div>
-                <Switch defaultChecked />
-              </div>
-              <Separator />
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">Local Storage Used</p>
-                  <p className="text-sm text-muted-foreground">45 MB</p>
-                </div>
-                <Button variant="outline" size="sm">
-                  Clear
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
         {/* Display */}
         <TabsContent value="display" className="space-y-6">
           <Card>
@@ -544,57 +437,6 @@ export default function Settings() {
           </Card>
         </TabsContent>
 
-        {/* Help */}
-        <TabsContent value="help" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Resources</CardTitle>
-              <CardDescription>Get help and learn more</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <Button
-                variant="outline"
-                className="w-full justify-start"
-                asChild
-              >
-                <a href="#" target="_blank">
-                  <ExternalLink className="h-4 w-4 mr-2" />
-                  Getting Started Guide
-                </a>
-              </Button>
-              <Button
-                variant="outline"
-                className="w-full justify-start"
-                asChild
-              >
-                <a href="#" target="_blank">
-                  <ExternalLink className="h-4 w-4 mr-2" />
-                  Documentation
-                </a>
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Platform Info</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Version</span>
-                <span>1.0.0</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Network</span>
-                <span>Aleo Testnet</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Program ID</span>
-                <span className="font-mono">{PROGRAM_ID}</span>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
     </div>
   );
