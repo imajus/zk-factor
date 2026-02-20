@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -31,6 +31,7 @@ import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useWallet } from '@/contexts/WalletContext';
+import { useTransaction } from '@/hooks/use-transaction';
 import { PROGRAM_ID } from '@/lib/config';
 const ALEO_FIELD_MODULUS = 8444461749428370424248824938781546531375899335154063827935233455917409239041n;
 
@@ -62,8 +63,9 @@ interface InvoiceItem {
 
 export default function CreateInvoice() {
   const navigate = useNavigate();
-  const { isConnected, executeTransaction, transactionStatus } = useWallet();
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { isConnected } = useWallet();
+  const { execute, status, error: txError } = useTransaction();
+  const isSubmitting = status !== 'idle';
 
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [description, setDescription] = useState('');
@@ -94,21 +96,26 @@ export default function CreateInvoice() {
 
   const itemsTotal = items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
 
+  useEffect(() => {
+    if (status === 'submitting') toast.loading('Generating proof…', { id: 'create-invoice' });
+    else if (status === 'pending') toast.loading('Broadcasting…', { id: 'create-invoice' });
+    else if (status === 'accepted') {
+      toast.success('Invoice created successfully!', { id: 'create-invoice' });
+      navigate('/invoices');
+    } else if (status === 'failed') {
+      toast.error(txError || 'Failed to create invoice', { id: 'create-invoice' });
+    }
+  }, [status, txError, navigate]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isConnected || !dueDate) return;
-
-    setIsSubmitting(true);
-
     try {
       const amountMicrocredits = BigInt(Math.round(parseFloat(amount) * 1_000_000));
       const dueDateUnix = BigInt(Math.floor(dueDate.getTime() / 1000));
       const invoiceHash = computeInvoiceHash(invoiceNumber, debtorAddress, amountMicrocredits);
       const metadata = encodeMetadata(invoiceNumber);
-
-      toast.loading('Generating proof…', { id: 'create-invoice' });
-
-      const result = await executeTransaction({
+      await execute({
         program: PROGRAM_ID,
         function: 'mint_invoice',
         inputs: [
@@ -121,36 +128,8 @@ export default function CreateInvoice() {
         fee: 100_000,
         privateFee: false,
       });
-
-      if (!result) {
-        throw new Error('Transaction returned no result');
-      }
-
-      const { transactionId } = result;
-
-      toast.loading('Broadcasting…', { id: 'create-invoice' });
-
-      const poll = setInterval(async () => {
-        try {
-          const status = await transactionStatus(transactionId);
-          if (status.status.toLowerCase() === 'pending') return;
-          clearInterval(poll);
-          if (status.status.toLowerCase() === 'accepted') {
-            toast.success('Invoice created successfully!', { id: 'create-invoice' });
-            navigate('/invoices');
-          } else {
-            toast.error(status.error || `Transaction ${status.status}`, { id: 'create-invoice' });
-          }
-          setIsSubmitting(false);
-        } catch (err) {
-          clearInterval(poll);
-          toast.error(err instanceof Error ? err.message : 'Transaction failed', { id: 'create-invoice' });
-          setIsSubmitting(false);
-        }
-      }, 3000);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to create invoice', { id: 'create-invoice' });
-      setIsSubmitting(false);
     }
   };
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Search,
   Users,
@@ -30,9 +30,9 @@ import {
 } from '@/components/ui/select';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useWallet } from '@/contexts/WalletContext';
+import { useTransaction } from '@/hooks/use-transaction';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { TransactionStatus } from '@provablehq/aleo-types';
 import { PROGRAM_ID, API_ENDPOINT, NETWORK } from '@/lib/config';
 
 interface FactorInfo {
@@ -44,15 +44,26 @@ interface FactorInfo {
   registration_date: number;
 }
 
-interface InvoiceRecord {
-  type: string;
-  data: {
-    amount: string;
-    invoice_hash: string;
-    due_date: string;
-  };
-  plaintext: string;
-  id?: string;
+interface AleoRecord {
+  recordName: string;
+  recordPlaintext: string;
+  spent: boolean;
+  commitment: string;
+  owner: string;
+  sender: string;
+  programName: string;
+  blockHeight?: number;
+  transactionId?: string;
+}
+
+function getField(plaintext: string, field: string): string {
+  for (const line of plaintext.split('\n')) {
+    const trimmed = line.trimStart();
+    if (!trimmed.startsWith(`${field}:`)) continue;
+    const m = trimmed.match(/^[^:]+:\s*(.+?)\.(?:private|public)/);
+    if (m) return m[1].trim();
+  }
+  return '';
 }
 
 async function fetchActiveFactors(): Promise<FactorInfo[]> {
@@ -78,13 +89,14 @@ async function fetchActiveFactors(): Promise<FactorInfo[]> {
 
 export default function Marketplace() {
   const queryClient = useQueryClient();
-  const { isConnected, requestRecords, executeTransaction, transactionStatus } = useWallet();
+  const { isConnected, requestRecords } = useWallet();
+  const { execute, status, error: txError, reset } = useTransaction();
+  const isFactoring = status !== 'idle';
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFactor, setSelectedFactor] = useState<FactorInfo | null>(null);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string>('');
   const [advanceRateInput, setAdvanceRateInput] = useState<string>('');
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [isFactoring, setIsFactoring] = useState(false);
 
   const { data: factors, isLoading: factorsLoading, isError: factorsError, refetch: refetchFactors } = useQuery({
     queryKey: ['active_factors'],
@@ -100,7 +112,9 @@ export default function Marketplace() {
     staleTime: 60_000,
   });
 
-  const invoiceRecords = (records as InvoiceRecord[] ?? []).filter((r) => r.type === 'Invoice');
+  const invoiceRecords = (records as AleoRecord[] ?? []).filter(
+    (r) => r.recordName === 'Invoice' && !r.spent,
+  );
 
   const filteredFactors = (factors ?? []).filter((f) => {
     if (!searchQuery) return true;
@@ -110,66 +124,59 @@ export default function Marketplace() {
   const advanceRateBps = advanceRateInput ? parseInt(advanceRateInput, 10) : 0;
   const advanceRateValid = advanceRateBps >= 5000 && advanceRateBps <= 9900;
 
+  useEffect(() => {
+    if (status === 'pending') toast.loading('Broadcasting…', { id: 'factor-invoice' });
+    if (status === 'accepted') {
+      toast.success('Invoice factored successfully!', { id: 'factor-invoice' });
+      queryClient.invalidateQueries({ queryKey: ['records', PROGRAM_ID] });
+      setDialogOpen(false);
+      reset();
+    }
+    if (status === 'failed') {
+      toast.error(txError || 'Factoring failed', { id: 'factor-invoice' });
+      reset();
+    }
+  }, [status, txError, queryClient, reset]);
+
   const handleFactorInvoice = async () => {
     if (!selectedFactor || !selectedInvoiceId || !advanceRateValid) return;
 
-    const invoice = invoiceRecords.find((r) => (r.id ?? r.data.invoice_hash) === selectedInvoiceId);
+    const invoice = invoiceRecords.find((r) => r.commitment === selectedInvoiceId);
     if (!invoice) return;
 
-    setIsFactoring(true);
     toast.loading('Generating proof…', { id: 'factor-invoice' });
 
+    let creditsRecord: AleoRecord | undefined;
     try {
-      const creditsRecords = await requestRecords('credits.aleo', true) as Array<{ data: { microcredits: string }; plaintext: string }>;
-      const invoiceAmount = parseInt(invoice.data.amount.replace(/u64$/, ''), 10);
+      const creditsRecords = (await requestRecords('credits.aleo', true) as AleoRecord[])
+        .filter((r) => !r.spent);
+      const invoiceAmount = parseInt(getField(invoice.recordPlaintext, 'amount').replace(/u64$/, ''), 10);
       const advanceAmount = Math.floor((invoiceAmount * advanceRateBps) / 10000);
-      const creditsRecord = creditsRecords.find(
-        (r) => parseInt((r.data?.microcredits ?? '0u64').replace(/u64$/, ''), 10) >= advanceAmount
+      creditsRecord = creditsRecords.find(
+        (r) => parseInt(getField(r.recordPlaintext, 'microcredits').replace(/u64$/, ''), 10) >= advanceAmount,
       );
-
-      if (!creditsRecord) {
-        throw new Error('Insufficient credits balance to fund this factoring');
-      }
-
-      const result = await executeTransaction({
-        program: PROGRAM_ID,
-        function: 'factor_invoice',
-        inputs: [
-          invoice.plaintext,
-          selectedFactor.address,
-          `${advanceRateBps}u16`,
-          creditsRecord.plaintext,
-        ],
-      });
-
-      if (!result) throw new Error('Transaction returned no result');
-
-      const { transactionId } = result;
-      toast.loading('Broadcasting…', { id: 'factor-invoice' });
-
-      const poll = setInterval(async () => {
-        try {
-          const status = await transactionStatus(transactionId);
-          if (status.status === TransactionStatus.ACCEPTED) {
-            clearInterval(poll);
-            toast.success('Invoice factored successfully!', { id: 'factor-invoice' });
-            queryClient.invalidateQueries({ queryKey: ['records', PROGRAM_ID] });
-            setIsFactoring(false);
-            setDialogOpen(false);
-          } else if (status.status === TransactionStatus.FAILED || status.status === TransactionStatus.REJECTED) {
-            clearInterval(poll);
-            throw new Error(status.error || 'Transaction failed');
-          }
-        } catch (err) {
-          clearInterval(poll);
-          toast.error(err instanceof Error ? err.message : 'Factoring failed', { id: 'factor-invoice' });
-          setIsFactoring(false);
-        }
-      }, 3000);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Factoring failed', { id: 'factor-invoice' });
-      setIsFactoring(false);
+      toast.error(err instanceof Error ? err.message : 'Failed to fetch credits', { id: 'factor-invoice' });
+      return;
     }
+
+    if (!creditsRecord) {
+      toast.error('Insufficient credits balance to fund this factoring', { id: 'factor-invoice' });
+      return;
+    }
+
+    await execute({
+      program: PROGRAM_ID,
+      function: 'factor_invoice',
+      inputs: [
+        invoice.recordPlaintext,
+        selectedFactor.address,
+        `${advanceRateBps}u16`,
+        creditsRecord.recordPlaintext,
+      ],
+      fee: 100_000,
+      privateFee: false,
+    });
   };
 
   return (
@@ -315,11 +322,11 @@ export default function Marketplace() {
                                     <SelectItem value="_none" disabled>No invoices available</SelectItem>
                                   ) : (
                                     invoiceRecords.map((r) => {
-                                      const id = r.id ?? r.data.invoice_hash;
-                                      const amount = (parseInt(r.data.amount.replace(/u64$/, ''), 10) / 1_000_000).toFixed(6);
+                                      const hash = getField(r.recordPlaintext, 'invoice_hash');
+                                      const amount = (parseInt(getField(r.recordPlaintext, 'amount').replace(/u64$/, ''), 10) / 1_000_000).toFixed(6);
                                       return (
-                                        <SelectItem key={id} value={id}>
-                                          {r.data.invoice_hash?.slice(0, 12)}… — {amount} ALEO
+                                        <SelectItem key={r.commitment} value={r.commitment}>
+                                          {hash.slice(0, 12)}… — {amount} ALEO
                                         </SelectItem>
                                       );
                                     })

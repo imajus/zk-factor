@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Plus,
@@ -33,10 +33,10 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useWallet } from '@/contexts/WalletContext';
+import { useTransaction } from '@/hooks/use-transaction';
 import { formatDate, getDaysUntilDue } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { TransactionStatus } from '@provablehq/aleo-types';
 import { PROGRAM_ID } from '@/lib/config';
 
 interface AleoRecord {
@@ -72,7 +72,8 @@ function unixToDate(unixSeconds: string): Date {
 
 export default function Invoices() {
   const queryClient = useQueryClient();
-  const { isConnected, address, requestRecords, executeTransaction, transactionStatus } = useWallet();
+  const { isConnected, address, requestRecords } = useWallet();
+  const { execute, status, error: txError, reset } = useTransaction();
   const [searchQuery, setSearchQuery] = useState('');
   const [recordTypeFilter, setRecordTypeFilter] = useState<string>('invoice');
   const [sortBy, setSortBy] = useState<string>('due');
@@ -121,57 +122,52 @@ export default function Invoices() {
     }
   };
 
+  useEffect(() => {
+    if (status === 'pending') toast.loading('Broadcasting…', { id: 'settle-invoice' });
+    if (status === 'accepted') {
+      toast.success('Invoice settled successfully!', { id: 'settle-invoice' });
+      queryClient.invalidateQueries({ queryKey: ['records', PROGRAM_ID] });
+      setSettlingId(null);
+      reset();
+    }
+    if (status === 'failed') {
+      const msg = txError || 'Settlement failed';
+      toast.error(msg.includes('already settled') ? 'Invoice already settled' : msg, { id: 'settle-invoice' });
+      setSettlingId(null);
+      reset();
+    }
+  }, [status, txError, queryClient, reset]);
+
   const handleSettle = async (record: AleoRecord) => {
     const invoiceHash = getField(record.recordPlaintext, 'invoice_hash');
     const recordId = record.commitment ?? invoiceHash;
     setSettlingId(recordId);
     toast.loading('Settling invoice…', { id: 'settle-invoice' });
 
+    let creditsRecord: AleoRecord | undefined;
     try {
       const creditsRecords = await requestRecords('credits.aleo', true) as AleoRecord[];
       const requiredAmount = parseInt(getField(record.recordPlaintext, 'amount').replace(/u64$/, ''), 10);
-      const creditsRecord = creditsRecords.find(
+      creditsRecord = creditsRecords.find(
         (r) => parseInt(getField(r.recordPlaintext, 'microcredits').replace(/u64$/, ''), 10) >= requiredAmount
       );
-
-      if (!creditsRecord) {
-        throw new Error('Insufficient balance for settlement');
-      }
-
-      const result = await executeTransaction({
-        program: PROGRAM_ID,
-        function: 'settle_invoice',
-        inputs: [record.recordPlaintext, creditsRecord.recordPlaintext],
-      });
-
-      if (!result) throw new Error('Transaction returned no result');
-
-      const { transactionId } = result;
-      toast.loading('Broadcasting…', { id: 'settle-invoice' });
-
-      const poll = setInterval(async () => {
-        try {
-          const status = await transactionStatus(transactionId);
-          if (status.status === TransactionStatus.ACCEPTED) {
-            clearInterval(poll);
-            toast.success('Invoice settled successfully!', { id: 'settle-invoice' });
-            queryClient.invalidateQueries({ queryKey: ['records', PROGRAM_ID] });
-            setSettlingId(null);
-          } else if (status.status === TransactionStatus.FAILED || status.status === TransactionStatus.REJECTED) {
-            clearInterval(poll);
-            throw new Error(status.error || 'Transaction failed');
-          }
-        } catch (err) {
-          clearInterval(poll);
-          const msg = err instanceof Error ? err.message : 'Settlement failed';
-          toast.error(msg.includes('already settled') ? 'Invoice already settled' : msg, { id: 'settle-invoice' });
-          setSettlingId(null);
-        }
-      }, 3000);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Settlement failed', { id: 'settle-invoice' });
+      toast.error(err instanceof Error ? err.message : 'Failed to fetch credits', { id: 'settle-invoice' });
       setSettlingId(null);
+      return;
     }
+
+    if (!creditsRecord) {
+      toast.error('Insufficient balance for settlement', { id: 'settle-invoice' });
+      setSettlingId(null);
+      return;
+    }
+
+    await execute({
+      program: PROGRAM_ID,
+      function: 'settle_invoice',
+      inputs: [record.recordPlaintext, creditsRecord.recordPlaintext],
+    });
   };
 
   if (!isConnected) {

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from "react";
 import {
   Wallet,
   Bell,
@@ -12,33 +12,34 @@ import {
   Sun,
   Monitor,
   Building2,
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Switch } from '@/components/ui/switch';
-import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
-import { AddressDisplay } from '@/components/ui/address-display';
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from '@/components/ui/tabs';
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { AddressDisplay } from "@/components/ui/address-display";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useWallet } from '@/contexts/WalletContext';
-import { toast } from 'sonner';
-import { TransactionStatus } from '@provablehq/aleo-types';
-import { PROGRAM_ID, API_ENDPOINT, NETWORK } from '@/lib/config';
+} from "@/components/ui/select";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useWallet } from "@/contexts/WalletContext";
+import { useTransaction } from "@/hooks/use-transaction";
+import { toast } from "sonner";
+import { PROGRAM_ID, API_ENDPOINT, NETWORK } from "@/lib/config";
 
 interface FactorStatus {
   is_active: boolean;
@@ -46,7 +47,9 @@ interface FactorStatus {
   max_advance_rate: number;
 }
 
-async function fetchFactorStatus(address: string): Promise<FactorStatus | null> {
+async function fetchFactorStatus(
+  address: string,
+): Promise<FactorStatus | null> {
   const url = `${API_ENDPOINT}/${NETWORK}/program/${PROGRAM_ID}/mapping/active_factors/${address}`;
   const res = await fetch(url);
   if (res.status === 404) return null;
@@ -55,15 +58,25 @@ async function fetchFactorStatus(address: string): Promise<FactorStatus | null> 
   if (!data) return null;
   return {
     is_active: Boolean(data.is_active),
-    min_advance_rate: parseInt(String(data.min_advance_rate ?? '0').replace(/u16$/, ''), 10),
-    max_advance_rate: parseInt(String(data.max_advance_rate ?? '0').replace(/u16$/, ''), 10),
+    min_advance_rate: parseInt(
+      String(data.min_advance_rate ?? "0").replace(/u16$/, ""),
+      10,
+    ),
+    max_advance_rate: parseInt(
+      String(data.max_advance_rate ?? "0").replace(/u16$/, ""),
+      10,
+    ),
   };
 }
 
 export default function Settings() {
   const queryClient = useQueryClient();
-  const { address, network, disconnect, executeTransaction, transactionStatus, isConnected } = useWallet();
-  const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('dark');
+  const { address, network, disconnect, isConnected } = useWallet();
+  const { execute, status, error: txError, reset } = useTransaction();
+  const [activeOp, setActiveOp] = useState<"register" | "deregister" | null>(null);
+  const isRegistering = activeOp === "register" && status !== "idle";
+  const isDeregistering = activeOp === "deregister" && status !== "idle";
+  const [theme, setTheme] = useState<"light" | "dark" | "system">("dark");
   const [notifications, setNotifications] = useState({
     invoiceCreated: true,
     factoringRequest: true,
@@ -71,13 +84,11 @@ export default function Settings() {
     paymentReceived: true,
     dueDateReminder: true,
   });
-  const [minRate, setMinRate] = useState('');
-  const [maxRate, setMaxRate] = useState('');
-  const [isRegistering, setIsRegistering] = useState(false);
-  const [isDeregistering, setIsDeregistering] = useState(false);
+  const [minRate, setMinRate] = useState("");
+  const [maxRate, setMaxRate] = useState("");
 
   const { data: factorStatus, isLoading: statusLoading } = useQuery({
-    queryKey: ['factor_status', address],
+    queryKey: ["factor_status", address],
     queryFn: () => fetchFactorStatus(address!),
     enabled: isConnected && !!address,
     staleTime: 60_000,
@@ -85,90 +96,83 @@ export default function Settings() {
 
   const minRateBps = minRate ? parseInt(minRate, 10) : 0;
   const maxRateBps = maxRate ? parseInt(maxRate, 10) : 0;
-  const registrationValid = minRateBps >= 5000 && minRateBps <= 9900
-    && maxRateBps >= 5000 && maxRateBps <= 9900
-    && minRateBps <= maxRateBps;
+  const registrationValid =
+    minRateBps >= 5000 &&
+    minRateBps <= 9900 &&
+    maxRateBps >= 5000 &&
+    maxRateBps <= 9900 &&
+    minRateBps <= maxRateBps;
 
-  const handleThemeChange = (value: 'light' | 'dark' | 'system') => {
+  const handleThemeChange = (value: "light" | "dark" | "system") => {
     setTheme(value);
-    if (value === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else if (value === 'light') {
-      document.documentElement.classList.remove('dark');
+    if (value === "dark") {
+      document.documentElement.classList.add("dark");
+    } else if (value === "light") {
+      document.documentElement.classList.remove("dark");
     } else {
-      if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-        document.documentElement.classList.add('dark');
+      if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
+        document.documentElement.classList.add("dark");
       } else {
-        document.documentElement.classList.remove('dark');
+        document.documentElement.classList.remove("dark");
       }
     }
     toast.success(`Theme changed to ${value}`);
   };
 
-  const pollStatus = async (transactionId: string, successMsg: string, id: string) => {
-    return new Promise<void>((resolve, reject) => {
-      const poll = setInterval(async () => {
-        try {
-          const status = await transactionStatus(transactionId);
-          if (status.status === TransactionStatus.ACCEPTED) {
-            clearInterval(poll);
-            toast.success(successMsg, { id });
-            queryClient.invalidateQueries({ queryKey: ['factor_status', address] });
-            resolve();
-          } else if (status.status === TransactionStatus.FAILED || status.status === TransactionStatus.REJECTED) {
-            clearInterval(poll);
-            reject(new Error(status.error || 'Transaction failed'));
-          }
-        } catch (err) {
-          clearInterval(poll);
-          reject(err);
-        }
-      }, 3000);
-    });
-  };
+  useEffect(() => {
+    if (status === "pending") {
+      const id = activeOp === "register" ? "register-factor" : "deregister-factor";
+      toast.loading("Broadcasting…", { id });
+    }
+    if (status === "accepted") {
+      if (activeOp === "register") {
+        toast.success("Registered as factor!", { id: "register-factor" });
+      } else if (activeOp === "deregister") {
+        toast.success("Deregistered from factor network!", { id: "deregister-factor" });
+      }
+      queryClient.invalidateQueries({ queryKey: ["factor_status", address] });
+      setActiveOp(null);
+      reset();
+    }
+    if (status === "failed") {
+      const id = activeOp === "register" ? "register-factor" : "deregister-factor";
+      if (activeOp === "register") {
+        const msg = txError || "Registration failed";
+        toast.error(
+          msg.includes("already") || msg.includes("active") ? "Already registered as factor" : msg,
+          { id },
+        );
+      } else {
+        toast.error(txError || "Deregistration failed", { id });
+      }
+      setActiveOp(null);
+      reset();
+    }
+  }, [status, txError, activeOp, queryClient, address, reset]);
 
   const handleRegister = async () => {
     if (!registrationValid) return;
-    setIsRegistering(true);
-    toast.loading('Generating proof…', { id: 'register-factor' });
-
-    try {
-      const result = await executeTransaction({
-        program: PROGRAM_ID,
-        function: 'register_factor',
-        inputs: [`${minRateBps}u16`, `${maxRateBps}u16`],
-      });
-
-      if (!result) throw new Error('Transaction returned no result');
-      toast.loading('Broadcasting…', { id: 'register-factor' });
-      await pollStatus(result.transactionId, 'Registered as factor!', 'register-factor');
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Registration failed';
-      toast.error(msg.includes('already') || msg.includes('active') ? 'Already registered as factor' : msg, { id: 'register-factor' });
-    } finally {
-      setIsRegistering(false);
-    }
+    setActiveOp("register");
+    toast.loading("Generating proof…", { id: "register-factor" });
+    await execute({
+      program: PROGRAM_ID,
+      function: "register_factor",
+      inputs: [`${minRateBps}u16`, `${maxRateBps}u16`],
+      fee: 100_000,
+      privateFee: false,
+    });
   };
 
   const handleDeregister = async () => {
-    setIsDeregistering(true);
-    toast.loading('Generating proof…', { id: 'deregister-factor' });
-
-    try {
-      const result = await executeTransaction({
-        program: PROGRAM_ID,
-        function: 'deregister_factor',
-        inputs: [],
-      });
-
-      if (!result) throw new Error('Transaction returned no result');
-      toast.loading('Broadcasting…', { id: 'deregister-factor' });
-      await pollStatus(result.transactionId, 'Deregistered from factor network!', 'deregister-factor');
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Deregistration failed', { id: 'deregister-factor' });
-    } finally {
-      setIsDeregistering(false);
-    }
+    setActiveOp("deregister");
+    toast.loading("Generating proof…", { id: "deregister-factor" });
+    await execute({
+      program: PROGRAM_ID,
+      function: "deregister_factor",
+      inputs: [],
+      fee: 100_000,
+      privateFee: false,
+    });
   };
 
   return (
@@ -176,7 +180,9 @@ export default function Settings() {
       {/* Page Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold">Settings</h1>
-        <p className="text-muted-foreground">Manage your account and preferences</p>
+        <p className="text-muted-foreground">
+          Manage your account and preferences
+        </p>
       </div>
 
       <Tabs defaultValue="wallet" className="space-y-6">
@@ -212,17 +218,25 @@ export default function Settings() {
           <Card>
             <CardHeader>
               <CardTitle>Connected Wallet</CardTitle>
-              <CardDescription>Your wallet connection information</CardDescription>
+              <CardDescription>
+                Your wallet connection information
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Address</p>
-                  {address && <AddressDisplay address={address} truncate={false} showExplorer />}
+                  {address && (
+                    <AddressDisplay
+                      address={address}
+                      truncate={false}
+                      showExplorer
+                    />
+                  )}
                 </div>
                 <Badge variant="outline" className="gap-1">
                   <span className="h-2 w-2 rounded-full bg-primary animate-pulse" />
-                  {network === 'mainnet' ? 'Mainnet' : 'Testnet'}
+                  {network === "mainnet" ? "Mainnet" : "Testnet"}
                 </Badge>
               </div>
               <Separator />
@@ -244,7 +258,9 @@ export default function Settings() {
           <Card>
             <CardHeader>
               <CardTitle>Factor Registration</CardTitle>
-              <CardDescription>Register your address as a factoring company on the network</CardDescription>
+              <CardDescription>
+                Register your address as a factoring company on the network
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               {/* Current status */}
@@ -252,11 +268,17 @@ export default function Settings() {
                 <div>
                   <p className="font-medium text-sm">Registration Status</p>
                   <p className="text-xs text-muted-foreground">
-                    {statusLoading ? 'Checking…' : factorStatus?.is_active ? 'Registered and active' : 'Not registered'}
+                    {statusLoading
+                      ? "Checking…"
+                      : factorStatus?.is_active
+                        ? "Registered and active"
+                        : "Not registered"}
                   </p>
                 </div>
-                <Badge variant={factorStatus?.is_active ? 'default' : 'outline'}>
-                  {factorStatus?.is_active ? 'Active' : 'Inactive'}
+                <Badge
+                  variant={factorStatus?.is_active ? "default" : "outline"}
+                >
+                  {factorStatus?.is_active ? "Active" : "Inactive"}
                 </Badge>
               </div>
 
@@ -264,11 +286,15 @@ export default function Settings() {
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <p className="text-muted-foreground">Min Advance Rate</p>
-                    <p className="font-semibold">{(factorStatus.min_advance_rate / 100).toFixed(2)}%</p>
+                    <p className="font-semibold">
+                      {(factorStatus.min_advance_rate / 100).toFixed(2)}%
+                    </p>
                   </div>
                   <div>
                     <p className="text-muted-foreground">Max Advance Rate</p>
-                    <p className="font-semibold">{(factorStatus.max_advance_rate / 100).toFixed(2)}%</p>
+                    <p className="font-semibold">
+                      {(factorStatus.max_advance_rate / 100).toFixed(2)}%
+                    </p>
                   </div>
                 </div>
               )}
@@ -281,7 +307,9 @@ export default function Settings() {
                   <h3 className="font-medium text-sm">Register as Factor</h3>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="min-rate">Min Advance Rate (basis points)</Label>
+                      <Label htmlFor="min-rate">
+                        Min Advance Rate (basis points)
+                      </Label>
                       <Input
                         id="min-rate"
                         type="number"
@@ -293,7 +321,9 @@ export default function Settings() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="max-rate">Max Advance Rate (basis points)</Label>
+                      <Label htmlFor="max-rate">
+                        Max Advance Rate (basis points)
+                      </Label>
                       <Input
                         id="max-rate"
                         type="number"
@@ -307,15 +337,18 @@ export default function Settings() {
                   </div>
                   {(minRate || maxRate) && !registrationValid && (
                     <p className="text-xs text-destructive">
-                      Rates must be between 5000–9900 basis points, and min ≤ max
+                      Rates must be between 5000–9900 basis points, and min ≤
+                      max
                     </p>
                   )}
                   <Button
                     onClick={handleRegister}
-                    disabled={!registrationValid || isRegistering || !isConnected}
+                    disabled={
+                      !registrationValid || isRegistering || !isConnected
+                    }
                     className="w-full"
                   >
-                    {isRegistering ? 'Registering…' : 'Register as Factor'}
+                    {isRegistering ? "Registering…" : "Register as Factor"}
                   </Button>
                 </div>
               )}
@@ -325,7 +358,8 @@ export default function Settings() {
                 <div className="space-y-2">
                   <h3 className="font-medium text-sm">Deregister</h3>
                   <p className="text-xs text-muted-foreground">
-                    Remove yourself from the active factors registry. Existing factored invoices are unaffected.
+                    Remove yourself from the active factors registry. Existing
+                    factored invoices are unaffected.
                   </p>
                   <Button
                     variant="destructive"
@@ -333,7 +367,7 @@ export default function Settings() {
                     disabled={isDeregistering || !isConnected}
                     className="w-full"
                   >
-                    {isDeregistering ? 'Deregistering…' : 'Deregister'}
+                    {isDeregistering ? "Deregistering…" : "Deregister"}
                   </Button>
                 </div>
               )}
@@ -346,7 +380,9 @@ export default function Settings() {
           <Card>
             <CardHeader>
               <CardTitle>Email Notifications</CardTitle>
-              <CardDescription>Choose which notifications to receive</CardDescription>
+              <CardDescription>
+                Choose which notifications to receive
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
@@ -358,19 +394,21 @@ export default function Settings() {
               </div>
               <Separator />
               {Object.entries({
-                invoiceCreated: 'Invoice created confirmations',
-                factoringRequest: 'Factoring request received',
-                factoringComplete: 'Factoring completed',
-                paymentReceived: 'Payment received',
-                dueDateReminder: 'Invoice due date reminders',
+                invoiceCreated: "Invoice created confirmations",
+                factoringRequest: "Factoring request received",
+                factoringComplete: "Factoring completed",
+                paymentReceived: "Payment received",
+                dueDateReminder: "Invoice due date reminders",
               }).map(([key, label]) => (
                 <div key={key} className="flex items-center justify-between">
-                  <Label htmlFor={key} className="font-normal">{label}</Label>
+                  <Label htmlFor={key} className="font-normal">
+                    {label}
+                  </Label>
                   <Switch
                     id={key}
                     checked={notifications[key as keyof typeof notifications]}
                     onCheckedChange={(checked) =>
-                      setNotifications(prev => ({ ...prev, [key]: checked }))
+                      setNotifications((prev) => ({ ...prev, [key]: checked }))
                     }
                   />
                 </div>
@@ -384,20 +422,26 @@ export default function Settings() {
           <Card>
             <CardHeader>
               <CardTitle>Privacy Settings</CardTitle>
-              <CardDescription>Control your data and privacy preferences</CardDescription>
+              <CardDescription>
+                Control your data and privacy preferences
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-medium">Share Usage Analytics</p>
-                  <p className="text-sm text-muted-foreground">Help improve the platform</p>
+                  <p className="text-sm text-muted-foreground">
+                    Help improve the platform
+                  </p>
                 </div>
                 <Switch />
               </div>
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-medium">Store Documents Locally</p>
-                  <p className="text-sm text-muted-foreground">Keep invoice documents on device</p>
+                  <p className="text-sm text-muted-foreground">
+                    Keep invoice documents on device
+                  </p>
                 </div>
                 <Switch defaultChecked />
               </div>
@@ -407,7 +451,9 @@ export default function Settings() {
                   <p className="font-medium">Local Storage Used</p>
                   <p className="text-sm text-muted-foreground">45 MB</p>
                 </div>
-                <Button variant="outline" size="sm">Clear</Button>
+                <Button variant="outline" size="sm">
+                  Clear
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -425,15 +471,17 @@ export default function Settings() {
                 <Label>Theme</Label>
                 <div className="grid grid-cols-3 gap-2">
                   {[
-                    { value: 'light', label: 'Light', icon: Sun },
-                    { value: 'dark', label: 'Dark', icon: Moon },
-                    { value: 'system', label: 'System', icon: Monitor },
+                    { value: "light", label: "Light", icon: Sun },
+                    { value: "dark", label: "Dark", icon: Moon },
+                    { value: "system", label: "System", icon: Monitor },
                   ].map(({ value, label, icon: Icon }) => (
                     <Button
                       key={value}
-                      variant={theme === value ? 'default' : 'outline'}
+                      variant={theme === value ? "default" : "outline"}
                       className="justify-start"
-                      onClick={() => handleThemeChange(value as 'light' | 'dark' | 'system')}
+                      onClick={() =>
+                        handleThemeChange(value as "light" | "dark" | "system")
+                      }
                     >
                       <Icon className="h-4 w-4 mr-2" />
                       {label}
@@ -480,7 +528,10 @@ export default function Settings() {
               <CardDescription>Irreversible actions</CardDescription>
             </CardHeader>
             <CardContent>
-              <Button variant="outline" className="w-full justify-start text-destructive hover:text-destructive">
+              <Button
+                variant="outline"
+                className="w-full justify-start text-destructive hover:text-destructive"
+              >
                 <Trash2 className="h-4 w-4 mr-2" />
                 Delete Local Data
               </Button>
@@ -496,13 +547,21 @@ export default function Settings() {
               <CardDescription>Get help and learn more</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
-              <Button variant="outline" className="w-full justify-start" asChild>
+              <Button
+                variant="outline"
+                className="w-full justify-start"
+                asChild
+              >
                 <a href="#" target="_blank">
                   <ExternalLink className="h-4 w-4 mr-2" />
                   Getting Started Guide
                 </a>
               </Button>
-              <Button variant="outline" className="w-full justify-start" asChild>
+              <Button
+                variant="outline"
+                className="w-full justify-start"
+                asChild
+              >
                 <a href="#" target="_blank">
                   <ExternalLink className="h-4 w-4 mr-2" />
                   Documentation
