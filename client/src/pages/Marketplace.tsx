@@ -1,17 +1,12 @@
-import { useState, useEffect } from 'react';
-import {
-  Search,
-  Users,
-  AlertCircle,
-  RefreshCw,
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
-import { AddressDisplay } from '@/components/ui/address-display';
+import { useState, useEffect } from "react";
+import { Search, Users, AlertCircle, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { AddressDisplay } from "@/components/ui/address-display";
 import {
   Dialog,
   DialogContent,
@@ -20,21 +15,21 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from '@/components/ui/dialog';
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AleoNetworkClient } from '@provablehq/sdk';
-import { useWallet } from '@/contexts/WalletContext';
-import { useTransaction } from '@/hooks/use-transaction';
-import { cn } from '@/lib/utils';
-import { toast } from 'sonner';
-import { PROGRAM_ID, API_ENDPOINT } from '@/lib/config';
+} from "@/components/ui/select";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { AleoNetworkClient } from "@provablehq/sdk";
+import { useWallet } from "@/contexts/WalletContext";
+import { useTransaction } from "@/hooks/use-transaction";
+import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import { PROGRAM_ID, API_ENDPOINT } from "@/lib/config";
 
 interface FactorInfo {
   address: string;
@@ -58,18 +53,18 @@ interface AleoRecord {
 }
 
 function getField(plaintext: string, field: string): string {
-  for (const line of plaintext.split('\n')) {
+  for (const line of plaintext.split("\n")) {
     const trimmed = line.trimStart();
     if (!trimmed.startsWith(`${field}:`)) continue;
     const m = trimmed.match(/^[^:]+:\s*(.+?)\.(?:private|public)/);
     if (m) return m[1].trim();
   }
-  return '';
+  return "";
 }
 
 function parseFactorInfo(address: string, plaintext: string): FactorInfo {
   const get = (field: string) => {
-    for (const line of plaintext.split('\n')) {
+    for (const line of plaintext.split("\n")) {
       const t = line.trimStart();
       if (!t.startsWith(`${field}:`)) continue;
       // Record field format: "field: value.private" or "field: value.public"
@@ -77,31 +72,43 @@ function parseFactorInfo(address: string, plaintext: string): FactorInfo {
       if (m) return m[1].trim();
       // Mapping/struct format: "field: value," or "field: value"
       const s = t.match(/^[^:]+:\s*(.+?)(?:,\s*)?$/);
-      if (s) return s[1].replace(/,$/, '').trim();
+      if (s) return s[1].replace(/,$/, "").trim();
     }
-    return '';
+    return "";
   };
   return {
     address,
-    is_active: get('is_active') === 'true',
-    min_advance_rate: parseInt(get('min_advance_rate'), 10),
-    max_advance_rate: parseInt(get('max_advance_rate'), 10),
-    total_factored: parseInt(get('total_factored'), 10),
-    registration_date: parseInt(get('registration_date'), 10),
+    is_active: get("is_active") === "true",
+    min_advance_rate: parseInt(get("min_advance_rate"), 10),
+    max_advance_rate: parseInt(get("max_advance_rate"), 10),
+    total_factored: parseInt(get("total_factored"), 10),
+    registration_date: parseInt(get("registration_date"), 10),
   };
 }
 
 async function fetchActiveFactors(): Promise<FactorInfo[]> {
   const client = new AleoNetworkClient(API_ENDPOINT);
-  const lenRaw = await client.getProgramMappingValue(PROGRAM_ID, 'factor_addresses__len__', 'false');
+  const lenRaw = await client.getProgramMappingValue(
+    PROGRAM_ID,
+    "factor_addresses__len__",
+    "false",
+  );
   const len = parseInt(String(lenRaw), 10);
   if (!len) return [];
   const indices = Array.from({ length: len }, (_, i) => i);
   const addresses = await Promise.all(
-    indices.map((i) => client.getProgramMappingValue(PROGRAM_ID, 'factor_addresses__', `${i}u32`)),
+    indices.map((i) =>
+      client.getProgramMappingValue(
+        PROGRAM_ID,
+        "factor_addresses__",
+        `${i}u32`,
+      ),
+    ),
   );
   const infos = await Promise.all(
-    addresses.map((addr) => client.getProgramMappingValue(PROGRAM_ID, 'active_factors', String(addr))),
+    addresses.map((addr) =>
+      client.getProgramMappingValue(PROGRAM_ID, "active_factors", String(addr)),
+    ),
   );
   return infos
     .map((raw, i) => parseFactorInfo(String(addresses[i]), String(raw)))
@@ -112,29 +119,34 @@ export default function Marketplace() {
   const queryClient = useQueryClient();
   const { isConnected, requestRecords } = useWallet();
   const { execute, status, error: txError, reset } = useTransaction();
-  const isFactoring = status !== 'idle';
-  const [searchQuery, setSearchQuery] = useState('');
+  const isFactoring = status !== "idle";
+  const [searchQuery, setSearchQuery] = useState("");
   const [selectedFactor, setSelectedFactor] = useState<FactorInfo | null>(null);
-  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string>('');
-  const [advanceRateInput, setAdvanceRateInput] = useState<string>('');
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string>("");
+  const [advanceRateInput, setAdvanceRateInput] = useState<string>("");
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  const { data: factors, isLoading: factorsLoading, isError: factorsError, refetch: refetchFactors } = useQuery({
-    queryKey: ['active_factors'],
+  const {
+    data: factors,
+    isLoading: factorsLoading,
+    isError: factorsError,
+    refetch: refetchFactors,
+  } = useQuery({
+    queryKey: ["active_factors"],
     queryFn: fetchActiveFactors,
     staleTime: 60_000,
     retry: false,
   });
 
   const { data: records } = useQuery({
-    queryKey: ['records', PROGRAM_ID, 'invoices'],
+    queryKey: ["records", PROGRAM_ID, "invoices"],
     queryFn: () => requestRecords(PROGRAM_ID, true),
     enabled: isConnected,
     staleTime: 60_000,
   });
 
-  const invoiceRecords = (records as AleoRecord[] ?? []).filter(
-    (r) => r.recordName === 'Invoice' && !r.spent,
+  const invoiceRecords = ((records as AleoRecord[]) ?? []).filter(
+    (r) => r.recordName === "Invoice" && !r.spent,
   );
 
   const filteredFactors = (factors ?? []).filter((f) => {
@@ -146,15 +158,17 @@ export default function Marketplace() {
   const advanceRateValid = advanceRateBps >= 5000 && advanceRateBps <= 9900;
 
   useEffect(() => {
-    if (status === 'pending') toast.loading('Broadcasting…', { id: 'factor-invoice' });
-    if (status === 'accepted') {
-      toast.success('Invoice factored successfully!', { id: 'factor-invoice' });
-      queryClient.invalidateQueries({ queryKey: ['records', PROGRAM_ID] });
+    if (status === "submitting")
+      toast.loading("Generating proof…", { id: "factor-invoice" });
+    else if (status === "pending")
+      toast.loading("Broadcasting…", { id: "factor-invoice" });
+    else if (status === "accepted") {
+      toast.success("Invoice factored successfully!", { id: "factor-invoice" });
+      queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
       setDialogOpen(false);
       reset();
-    }
-    if (status === 'failed') {
-      toast.error(txError || 'Factoring failed', { id: 'factor-invoice' });
+    } else if (status === "failed") {
+      toast.error(txError || "Factoring failed", { id: "factor-invoice" });
       reset();
     }
   }, [status, txError, queryClient, reset]);
@@ -162,33 +176,45 @@ export default function Marketplace() {
   const handleFactorInvoice = async () => {
     if (!selectedFactor || !selectedInvoiceId || !advanceRateValid) return;
 
-    const invoice = invoiceRecords.find((r) => r.commitment === selectedInvoiceId);
+    const invoice = invoiceRecords.find(
+      (r) => r.commitment === selectedInvoiceId,
+    );
     if (!invoice) return;
-
-    toast.loading('Generating proof…', { id: 'factor-invoice' });
 
     let creditsRecord: AleoRecord | undefined;
     try {
-      const creditsRecords = (await requestRecords('credits.aleo', true) as AleoRecord[])
-        .filter((r) => !r.spent);
-      const invoiceAmount = parseInt(getField(invoice.recordPlaintext, 'amount').replace(/u64$/, ''), 10);
-      const advanceAmount = Math.floor((invoiceAmount * advanceRateBps) / 10000);
+      const creditsRecords = (
+        (await requestRecords("credits.aleo", true)) as AleoRecord[]
+      ).filter((r) => !r.spent);
+      const invoiceAmount = parseInt(
+        getField(invoice.recordPlaintext, "amount").replace(/u64$/, ""),
+        10,
+      );
+      const advanceAmount = Math.floor(
+        (invoiceAmount * advanceRateBps) / 10000,
+      );
       creditsRecord = creditsRecords.find(
-        (r) => parseInt(getField(r.recordPlaintext, 'microcredits').replace(/u64$/, ''), 10) >= advanceAmount,
+        (r) =>
+          parseInt(
+            getField(r.recordPlaintext, "microcredits").replace(/u64$/, ""),
+            10,
+          ) >= advanceAmount,
       );
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to fetch credits', { id: 'factor-invoice' });
+      toast.error(
+        err instanceof Error ? err.message : "Failed to fetch credits",
+      );
       return;
     }
 
     if (!creditsRecord) {
-      toast.error('Insufficient credits balance to fund this factoring', { id: 'factor-invoice' });
+      toast.error("Insufficient credits balance to fund this factoring");
       return;
     }
 
     await execute({
       program: PROGRAM_ID,
-      function: 'factor_invoice',
+      function: "factor_invoice",
       inputs: [
         invoice.recordPlaintext,
         selectedFactor.address,
@@ -205,14 +231,18 @@ export default function Marketplace() {
       {/* Page Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold">Browse Factors</h1>
-        <p className="text-muted-foreground">Find the best factoring terms for your invoices</p>
+        <p className="text-muted-foreground">
+          Find the best factoring terms for your invoices
+        </p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-4">
         {/* Filters Sidebar */}
         <Card className="lg:col-span-1 h-fit sticky top-20">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">Filters</CardTitle>
+            <CardTitle className="flex items-center gap-2 text-base">
+              Filters
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
@@ -228,7 +258,11 @@ export default function Marketplace() {
                 />
               </div>
             </div>
-            <Button variant="outline" className="w-full" onClick={() => refetchFactors()}>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => refetchFactors()}
+            >
               <RefreshCw className="h-4 w-4 mr-2" />
               Refresh
             </Button>
@@ -242,15 +276,25 @@ export default function Marketplace() {
             <Card className="border-destructive/50">
               <CardContent className="pt-6 flex items-center gap-4">
                 <AlertCircle className="h-5 w-5 text-destructive shrink-0" />
-                <p className="text-sm text-destructive">Failed to load factors from chain.</p>
-                <Button variant="outline" size="sm" onClick={() => refetchFactors()}>Retry</Button>
+                <p className="text-sm text-destructive">
+                  Failed to load factors from chain.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => refetchFactors()}
+                >
+                  Retry
+                </Button>
               </CardContent>
             </Card>
           )}
 
           {/* Results Count */}
           <p className="text-sm text-muted-foreground">
-            {factorsLoading ? 'Loading factors…' : `${filteredFactors.length} active factor${filteredFactors.length !== 1 ? 's' : ''}`}
+            {factorsLoading
+              ? "Loading factors…"
+              : `${filteredFactors.length} active factor${filteredFactors.length !== 1 ? "s" : ""}`}
           </p>
 
           {/* Factor Grid */}
@@ -273,7 +317,9 @@ export default function Marketplace() {
               <div className="col-span-2">
                 <Card className="p-12 text-center">
                   <Users className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                  <h3 className="text-lg font-medium mb-2">No active factors registered</h3>
+                  <h3 className="text-lg font-medium mb-2">
+                    No active factors registered
+                  </h3>
                   <p className="text-muted-foreground">
                     No factors are currently registered on the network
                   </p>
@@ -281,42 +327,70 @@ export default function Marketplace() {
               </div>
             ) : (
               filteredFactors.map((factor) => (
-                <Card key={factor.address} className="hover:border-primary/50 transition-colors">
+                <Card
+                  key={factor.address}
+                  className="hover:border-primary/50 transition-colors"
+                >
                   <CardHeader className="pb-3">
                     <div className="space-y-1">
-                      <CardTitle className="text-base">Anonymous Factor</CardTitle>
+                      <CardTitle className="text-base">
+                        Anonymous Factor
+                      </CardTitle>
                       <AddressDisplay address={factor.address} chars={4} />
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1">
-                        <p className="text-xs text-muted-foreground">Min Rate</p>
-                        <p className="font-semibold text-primary">{(factor.min_advance_rate / 100).toFixed(2)}%</p>
+                        <p className="text-xs text-muted-foreground">
+                          Min Rate
+                        </p>
+                        <p className="font-semibold text-primary">
+                          {(factor.min_advance_rate / 100).toFixed(2)}%
+                        </p>
                       </div>
                       <div className="space-y-1">
-                        <p className="text-xs text-muted-foreground">Max Rate</p>
-                        <p className="font-semibold text-primary">{(factor.max_advance_rate / 100).toFixed(2)}%</p>
+                        <p className="text-xs text-muted-foreground">
+                          Max Rate
+                        </p>
+                        <p className="font-semibold text-primary">
+                          {(factor.max_advance_rate / 100).toFixed(2)}%
+                        </p>
                       </div>
                       <div className="space-y-1">
-                        <p className="text-xs text-muted-foreground">Invoices Factored</p>
-                        <p className="font-semibold">{factor.total_factored.toLocaleString()}</p>
+                        <p className="text-xs text-muted-foreground">
+                          Invoices Factored
+                        </p>
+                        <p className="font-semibold">
+                          {factor.total_factored.toLocaleString()}
+                        </p>
                       </div>
                       <div className="space-y-1">
                         <p className="text-xs text-muted-foreground">Status</p>
-                        <Badge variant="outline" className="text-xs text-primary border-primary/30">Active</Badge>
+                        <Badge
+                          variant="outline"
+                          className="text-xs text-primary border-primary/30"
+                        >
+                          Active
+                        </Badge>
                       </div>
                     </div>
 
                     {isConnected && (
-                      <Dialog open={dialogOpen && selectedFactor?.address === factor.address} onOpenChange={(open) => {
-                        setDialogOpen(open);
-                        if (open) {
-                          setSelectedFactor(factor);
-                          setSelectedInvoiceId('');
-                          setAdvanceRateInput('');
+                      <Dialog
+                        open={
+                          dialogOpen &&
+                          selectedFactor?.address === factor.address
                         }
-                      }}>
+                        onOpenChange={(open) => {
+                          setDialogOpen(open);
+                          if (open) {
+                            setSelectedFactor(factor);
+                            setSelectedInvoiceId("");
+                            setAdvanceRateInput("");
+                          }
+                        }}
+                      >
                         <DialogTrigger asChild>
                           <Button className="w-full">Factor Invoice</Button>
                         </DialogTrigger>
@@ -324,29 +398,54 @@ export default function Marketplace() {
                           <DialogHeader>
                             <DialogTitle>Factor Invoice</DialogTitle>
                             <DialogDescription>
-                              Sell your invoice to this factor at an agreed advance rate.
+                              Sell your invoice to this factor at an agreed
+                              advance rate.
                             </DialogDescription>
                           </DialogHeader>
                           <div className="space-y-4 py-2">
                             <div className="space-y-2">
                               <Label>Factor</Label>
-                              <AddressDisplay address={factor.address} showExplorer />
+                              <AddressDisplay
+                                address={factor.address}
+                                showExplorer
+                              />
                             </div>
                             <div className="space-y-2">
-                              <Label htmlFor="invoice-select">Select Invoice</Label>
-                              <Select value={selectedInvoiceId} onValueChange={setSelectedInvoiceId}>
+                              <Label htmlFor="invoice-select">
+                                Select Invoice
+                              </Label>
+                              <Select
+                                value={selectedInvoiceId}
+                                onValueChange={setSelectedInvoiceId}
+                              >
                                 <SelectTrigger>
                                   <SelectValue placeholder="Choose an invoice…" />
                                 </SelectTrigger>
                                 <SelectContent>
                                   {invoiceRecords.length === 0 ? (
-                                    <SelectItem value="_none" disabled>No invoices available</SelectItem>
+                                    <SelectItem value="_none" disabled>
+                                      No invoices available
+                                    </SelectItem>
                                   ) : (
                                     invoiceRecords.map((r) => {
-                                      const hash = getField(r.recordPlaintext, 'invoice_hash');
-                                      const amount = (parseInt(getField(r.recordPlaintext, 'amount').replace(/u64$/, ''), 10) / 1_000_000).toFixed(6);
+                                      const hash = getField(
+                                        r.recordPlaintext,
+                                        "invoice_hash",
+                                      );
+                                      const amount = (
+                                        parseInt(
+                                          getField(
+                                            r.recordPlaintext,
+                                            "amount",
+                                          ).replace(/u64$/, ""),
+                                          10,
+                                        ) / 1_000_000
+                                      ).toFixed(6);
                                       return (
-                                        <SelectItem key={r.commitment} value={r.commitment}>
+                                        <SelectItem
+                                          key={r.commitment}
+                                          value={r.commitment}
+                                        >
                                           {hash.slice(0, 12)}… — {amount} ALEO
                                         </SelectItem>
                                       );
@@ -364,26 +463,45 @@ export default function Marketplace() {
                                 type="number"
                                 placeholder="e.g. 9000 for 90%"
                                 value={advanceRateInput}
-                                onChange={(e) => setAdvanceRateInput(e.target.value)}
+                                onChange={(e) =>
+                                  setAdvanceRateInput(e.target.value)
+                                }
                                 min="5000"
                                 max="9900"
                               />
                               {advanceRateInput && (
-                                <p className={cn('text-xs', advanceRateValid ? 'text-muted-foreground' : 'text-destructive')}>
+                                <p
+                                  className={cn(
+                                    "text-xs",
+                                    advanceRateValid
+                                      ? "text-muted-foreground"
+                                      : "text-destructive",
+                                  )}
+                                >
                                   {advanceRateValid
                                     ? `${(advanceRateBps / 100).toFixed(2)}% advance rate`
-                                    : 'Rate must be between 5000 and 9900 basis points'}
+                                    : "Rate must be between 5000 and 9900 basis points"}
                                 </p>
                               )}
                             </div>
                           </div>
                           <DialogFooter>
-                            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+                            <Button
+                              variant="outline"
+                              onClick={() => setDialogOpen(false)}
+                            >
+                              Cancel
+                            </Button>
                             <Button
                               onClick={handleFactorInvoice}
-                              disabled={!selectedInvoiceId || !advanceRateValid || isFactoring || selectedInvoiceId === '_none'}
+                              disabled={
+                                !selectedInvoiceId ||
+                                !advanceRateValid ||
+                                isFactoring ||
+                                selectedInvoiceId === "_none"
+                              }
                             >
-                              {isFactoring ? 'Processing…' : 'Confirm'}
+                              {isFactoring ? "Processing…" : "Confirm"}
                             </Button>
                           </DialogFooter>
                         </DialogContent>
