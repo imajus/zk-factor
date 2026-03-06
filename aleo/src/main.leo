@@ -2,7 +2,7 @@
 // Cryptographically prevents double-factoring fraud while maintaining complete privacy
 import credits.aleo;
 
-program zk_factor_9591.aleo {
+program zk_factor_9592.aleo {
     // Simple admin-controlled upgradable constructor for MVP
     // Can be upgraded to multi-sig governance later
     // IMPORTANT: Replace with actual admin address before deployment
@@ -319,12 +319,9 @@ program zk_factor_9591.aleo {
     // Settle a factored invoice
     async transition settle_invoice(
         factored: FactoredInvoice,
-        payment: credits.aleo/credits
-    ) -> (credits.aleo/credits, credits.aleo/credits, Future) {
+    ) -> Future {
         assert(factored.owner == self.caller);
-        assert(payment.microcredits >= factored.amount);
-        let (factor_payment, change): (credits.aleo/credits, credits.aleo/credits) = credits.aleo/transfer_private(payment, self.caller, factored.amount);
-        return (factor_payment, change, finalize_settle_invoice(factored.invoice_hash, self.caller));
+        return finalize_settle_invoice(factored.invoice_hash, self.caller);
     }
 
     async function finalize_settle_invoice(invoice_hash: field, factor: address) {
@@ -339,7 +336,6 @@ program zk_factor_9591.aleo {
         let total_settled: u64 = Mapping::get_or_use(protocol_stats, 2u8, 0u64);
         Mapping::set(protocol_stats, 2u8, total_settled + 1u64);
     }
-
 
     // Uses credits.aleo: NO direct transfer here, but sets up the
     // on-chain data that routes the credits.aleo payment in pay_invoice

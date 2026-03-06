@@ -104,25 +104,50 @@ export default function Pay() {
     setLookupError(null);
     setPaymentRequest(null);
 
+    let raw: unknown;
     try {
       const client = new AleoNetworkClient(API_ENDPOINT);
       const hash = value.endsWith("field") ? value : `${value}field`;
-      const raw = await client.getProgramMappingValue(
+      raw = await client.getProgramMappingValue(
         PROGRAM_ID,
         "payment_requests",
         hash,
       );
+
       const parsed = parsePaymentRequest(String(raw));
-      if (!parsed) throw new Error("Could not parse payment request");
+      if (!parsed || parsed.amount === 0n) {
+        setLookupError(
+          "Payment not ready yet. The factor hasn't requested payment for this invoice. " +
+            "Contact the business or factor and ask them to publish the payment request first.",
+        );
+        return;
+      }
       setPaymentRequest(parsed);
     } catch (err) {
-      setLookupError(
-        "Invoice not found. Make sure the hash is correct and the factor has requested payment.",
-      );
-    } finally {
-      setIsLooking(false);
+      // Check what kind of failure this is
+      const msg = err instanceof Error ? err.message : String(err);
+
+      if (
+        msg.includes("key not found") ||
+        msg.includes("null") ||
+        msg.includes("undefined")
+      ) {
+        // Mapping key doesn't exist at all — invoice hash unknown to contract
+        setLookupError(
+          "Invoice not found. Double-check the hash is correct and belongs to this network.",
+        );
+      } else if (msg.includes("not_found") || !raw) {
+        // Key exists but payment request not published yet
+        setLookupError(
+          "Payment not ready yet. The factor hasn't requested payment for this invoice. " +
+            "Contact the business or factor and ask them to publish the payment request first.",
+        );
+      } else {
+        setLookupError("Something went wrong. Try again or contact support.");
+      }
     }
   };
+
   const handlePay = async () => {
     if (!paymentRequest) return;
 

@@ -49,6 +49,14 @@ import { formatDate, getDaysUntilDue } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { PROGRAM_ID, API_ENDPOINT } from "@/lib/config";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+} from "@/components/ui/dialog";
+import { DialogTitle } from "@radix-ui/react-dialog";
 
 interface AleoRecord {
   recordName: string;
@@ -91,6 +99,8 @@ export default function Invoices() {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [settlingId, setSettlingId] = useState<string | null>(null);
   const [settledHashes, setSettledHashes] = useState<Set<string>>(new Set());
+  const [privacyWarningRecord, setPrivacyWarningRecord] =
+    useState<AleoRecord | null>(null);
 
   const {
     data: records,
@@ -196,59 +206,22 @@ export default function Invoices() {
     const recordId = record.commitment ?? invoiceHash;
     setSettlingId(recordId);
 
-    // Check if already settled by debtor
     try {
-      const client = new AleoNetworkClient(API_ENDPOINT);
-      const settled = await client.getProgramMappingValue(
-        PROGRAM_ID,
-        "settled_invoices",
-        invoiceHash,
-      );
-      if (settled) {
-        toast.success("Invoice already settled by debtor — no action needed.");
-        setSettlingId(null);
-        return;
-      }
-    } catch {
-      // not settled, continue
-    }
+      toast.loading("Settling invoice…", { id: "settle-invoice" });
 
-    let creditsRecord: AleoRecord | undefined;
-    try {
-      const creditsRecords = (await requestRecords(
-        "credits.aleo",
-        true,
-      )) as AleoRecord[];
-      const requiredAmount = parseInt(
-        getField(record.recordPlaintext, "amount").replace(/u64$/, ""),
-        10,
-      );
-      creditsRecord = creditsRecords.find(
-        (r) =>
-          parseInt(
-            getField(r.recordPlaintext, "microcredits").replace(/u64$/, ""),
-            10,
-          ) >= requiredAmount,
-      );
+      await execute({
+        program: PROGRAM_ID,
+        function: "settle_invoice",
+        inputs: [record.recordPlaintext], // no payment record needed
+        fee: 100_000,
+        privateFee: false,
+      });
     } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Failed to fetch credits",
-      );
+      toast.error(err instanceof Error ? err.message : "Settlement failed", {
+        id: "settle-invoice",
+      });
       setSettlingId(null);
-      return;
     }
-
-    if (!creditsRecord) {
-      toast.error("Insufficient balance for settlement");
-      setSettlingId(null);
-      return;
-    }
-
-    await execute({
-      program: PROGRAM_ID,
-      function: "settle_invoice",
-      inputs: [record.recordPlaintext, creditsRecord.recordPlaintext],
-    });
   };
 
   const handleRequestPayment = async (record: AleoRecord) => {
@@ -263,11 +236,9 @@ export default function Invoices() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes("already exists in the ledger")) {
-        toast.error(
-          "Payment request already published — share the payment link with your debtor.",
-        );
+        toast.error("Already published — copy the link and send it to your debtor.");
       } else {
-        toast.error("Failed to create payment request.");
+        toast.error("Could not publish payment request. Try again.");
       }
     }
   };
@@ -325,10 +296,7 @@ export default function Invoices() {
     await execute({
       program: PROGRAM_ID,
       function: "execute_factoring",
-      inputs: [
-        record.recordPlaintext,
-        creditsRecord.recordPlaintext,
-      ],
+      inputs: [record.recordPlaintext, creditsRecord.recordPlaintext],
       fee: 100_000,
       privateFee: false,
     });
@@ -734,8 +702,7 @@ export default function Invoices() {
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem
-                                onClick={() => handleRequestPayment(record)}
-                                disabled={isSettled}
+                                onClick={() => setPrivacyWarningRecord(record)}
                               >
                                 <Receipt className="h-4 w-4 mr-2" />
                                 Request Payment from Debtor
@@ -777,6 +744,64 @@ export default function Invoices() {
           </CardContent>
         </Card>
       )}
+
+      <Dialog
+        open={!!privacyWarningRecord}
+        onOpenChange={(open) => {
+          if (!open) setPrivacyWarningRecord(null);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-destructive" />
+              Privacy Warning
+            </DialogTitle>
+            <DialogDescription asChild>
+              <div className="space-y-3 pt-2 text-left">
+                <div>
+                  Requesting payment will <strong>permanently publish</strong>{" "}
+                  the following information on the public Aleo blockchain:
+                </div>
+                <ul className="list-disc pl-5 space-y-1 text-sm">
+                  <li>Invoice amount</li>
+                  <li>Debtor's wallet address</li>
+                  <li>Your (factor) wallet address</li>
+                  <li>Invoice due date</li>
+                </ul>
+                <div className="text-sm">
+                  This data will be visible to <strong>anyone, forever</strong>{" "}
+                  - including anyone who queries the chain in the future. It
+                  cannot be deleted or hidden after publishing.
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  Only proceed if you're ready to collect payment from the
+                  debtor.
+                </div>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setPrivacyWarningRecord(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (privacyWarningRecord) {
+                  handleRequestPayment(privacyWarningRecord);
+                  setPrivacyWarningRecord(null);
+                }
+              }}
+            >
+              Publish & Request Payment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {recordTypeFilter === "offers" && (
         <Card>

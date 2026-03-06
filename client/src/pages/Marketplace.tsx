@@ -424,18 +424,20 @@ export default function Marketplace() {
                             </div>
                             <div className="space-y-2">
                               <Label htmlFor="advance-rate">
-                                Advance Rate (basis points, 5000–9900)
+                                Advance Rate (basis points,{" "}
+                                {selectedFactor?.min_advance_rate || 5000}–
+                                {selectedFactor?.max_advance_rate || 9900})
                               </Label>
                               <Input
                                 id="advance-rate"
                                 type="number"
-                                placeholder="e.g. 9000 for 90%"
+                                placeholder={`e.g. ${selectedFactor?.max_advance_rate || 9000} for ${(selectedFactor?.max_advance_rate || 9000) / 100}%`}
+                                min={selectedFactor?.min_advance_rate || 5000}
+                                max={selectedFactor?.max_advance_rate || 9900}
                                 value={advanceRateInput}
                                 onChange={(e) =>
                                   setAdvanceRateInput(e.target.value)
                                 }
-                                min="5000"
-                                max="9900"
                               />
                               {advanceRateInput && (
                                 <p
