@@ -1,12 +1,17 @@
-export function formatAleo(amount: number): string {
-  return amount.toLocaleString(undefined, { maximumFractionDigits: 2 }) + ' ALEO';
+export function formatAleo(microcredits: bigint): string {
+  const whole = microcredits / 1_000_000n;
+  const frac = (microcredits % 1_000_000n)
+    .toString()
+    .padStart(6, "0")
+    .replace(/0+$/, "");
+  return frac ? `${whole}.${frac} ALEO` : `${whole} ALEO`;
 }
 
 export function formatDate(date: Date): string {
-  return date.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
+  return date.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
   });
 }
 
@@ -20,7 +25,7 @@ export function formatRelativeTime(date: Date): string {
   if (days > 0) return `${days}d ago`;
   if (hours > 0) return `${hours}h ago`;
   if (minutes > 0) return `${minutes}m ago`;
-  return 'Just now';
+  return "Just now";
 }
 
 export function getDaysUntilDue(date: Date): number {

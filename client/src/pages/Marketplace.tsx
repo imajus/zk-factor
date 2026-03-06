@@ -181,37 +181,6 @@ export default function Marketplace() {
     );
     if (!invoice) return;
 
-    let creditsRecord: AleoRecord | undefined;
-    try {
-      const creditsRecords = (
-        (await requestRecords("credits.aleo", true)) as AleoRecord[]
-      ).filter((r) => !r.spent);
-      const invoiceAmount = parseInt(
-        getField(invoice.recordPlaintext, "amount").replace(/u64$/, ""),
-        10,
-      );
-      const advanceAmount = Math.floor(
-        (invoiceAmount * advanceRateBps) / 10000,
-      );
-      creditsRecord = creditsRecords.find(
-        (r) =>
-          parseInt(
-            getField(r.recordPlaintext, "microcredits").replace(/u64$/, ""),
-            10,
-          ) >= advanceAmount,
-      );
-    } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Failed to fetch credits",
-      );
-      return;
-    }
-
-    if (!creditsRecord) {
-      toast.error("Insufficient credits balance to fund this factoring");
-      return;
-    }
-
     await execute({
       program: PROGRAM_ID,
       function: "authorize_factoring",

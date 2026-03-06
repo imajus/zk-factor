@@ -1,5 +1,5 @@
 import credits.aleo;
-program zk_factor_9589.aleo;
+program zk_factor_9591.aleo;
 
 record Invoice:
     owner as address.private;
@@ -45,6 +45,12 @@ struct SettlementInfo:
     settlement_date as u64;
     factor as address;
 
+struct PaymentRequest:
+    factor as address;
+    amount as u64;
+    due_date as u64;
+    debtor as address;
+
 mapping active_factors:
     key as address.public;
     value as FactorInfo.public;
@@ -56,6 +62,10 @@ mapping settled_invoices:
 mapping protocol_stats:
     key as u8.public;
     value as u64.public;
+
+mapping payment_requests:
+    key as field.public;
+    value as PaymentRequest.public;
 
 mapping factor_addresses__:
     key as u32.public;
@@ -79,7 +89,7 @@ function mint_invoice:
     cast self.caller r0 r1 r2 r3 r7 r4 into r8 as Invoice.record;
     async mint_invoice r2 into r9;
     output r8 as Invoice.record;
-    output r9 as zk_factor_9589.aleo/mint_invoice.future;
+    output r9 as zk_factor_9591.aleo/mint_invoice.future;
 
 finalize mint_invoice:
     input r0 as u64.public;
@@ -101,7 +111,7 @@ function register_factor:
     and r6 r7 into r8;
     assert.eq r8 true;
     async register_factor self.caller r0 r1 into r9;
-    output r9 as zk_factor_9589.aleo/register_factor.future;
+    output r9 as zk_factor_9591.aleo/register_factor.future;
 
 finalize register_factor:
     input r0 as address.public;
@@ -121,7 +131,7 @@ finalize register_factor:
 
 function deregister_factor:
     async deregister_factor self.caller into r0;
-    output r0 as zk_factor_9589.aleo/deregister_factor.future;
+    output r0 as zk_factor_9591.aleo/deregister_factor.future;
 
 finalize deregister_factor:
     input r0 as address.public;
@@ -142,7 +152,7 @@ function authorize_factoring:
     cast r1 self.caller r0.debtor r0.amount r0.due_date r2 r0.invoice_hash r0.nonce r0.metadata into r7 as FactoringOffer.record;
     async authorize_factoring r1 r0.invoice_hash into r8;
     output r7 as FactoringOffer.record;
-    output r8 as zk_factor_9589.aleo/authorize_factoring.future;
+    output r8 as zk_factor_9591.aleo/authorize_factoring.future;
 
 finalize authorize_factoring:
     input r0 as address.public;
@@ -168,7 +178,7 @@ function execute_factoring:
     output r9 as FactoredInvoice.record;
     output r10 as credits.aleo/credits.record;
     output r11 as credits.aleo/credits.record;
-    output r12 as zk_factor_9589.aleo/execute_factoring.future;
+    output r12 as zk_factor_9591.aleo/execute_factoring.future;
 
 finalize execute_factoring:
     input r0 as address.public;
@@ -193,7 +203,7 @@ function settle_invoice:
     async settle_invoice r0.invoice_hash self.caller into r6;
     output r4 as credits.aleo/credits.record;
     output r5 as credits.aleo/credits.record;
-    output r6 as zk_factor_9589.aleo/settle_invoice.future;
+    output r6 as zk_factor_9591.aleo/settle_invoice.future;
 
 finalize settle_invoice:
     input r0 as field.public;
@@ -207,6 +217,59 @@ finalize settle_invoice:
     get.or_use protocol_stats[2u8] 0u64 into r6;
     add r6 1u64 into r7;
     set r7 into protocol_stats[2u8];
+
+function create_payment_request:
+    input r0 as FactoredInvoice.record;
+    is.eq r0.owner self.caller into r1;
+    assert.eq r1 true;
+    cast r0.owner r0.original_creditor r0.debtor r0.amount r0.advance_amount r0.due_date r0.factoring_date r0.advance_rate r0.invoice_hash r0.recourse into r2 as FactoredInvoice.record;
+    async create_payment_request self.caller r0.invoice_hash r0.amount r0.due_date r0.debtor into r3;
+    output r2 as FactoredInvoice.record;
+    output r3 as zk_factor_9591.aleo/create_payment_request.future;
+
+finalize create_payment_request:
+    input r0 as address.public;
+    input r1 as field.public;
+    input r2 as u64.public;
+    input r3 as u64.public;
+    input r4 as address.public;
+    contains settled_invoices[r1] into r5;
+    not r5 into r6;
+    assert.eq r6 true;
+    contains payment_requests[r1] into r7;
+    not r7 into r8;
+    assert.eq r8 true;
+    cast r0 r2 r3 r4 into r9 as PaymentRequest;
+    set r9 into payment_requests[r1];
+
+function pay_invoice:
+    input r0 as field.private;
+    input r1 as u64.private;
+    input r2 as address.private;
+    async pay_invoice r0 self.caller r1 r2 into r3;
+    output r3 as zk_factor_9591.aleo/pay_invoice.future;
+
+finalize pay_invoice:
+    input r0 as field.public;
+    input r1 as address.public;
+    input r2 as u64.public;
+    input r3 as address.public;
+    get payment_requests[r0] into r4;
+    is.eq r1 r4.debtor into r5;
+    assert.eq r5 true;
+    gte r2 r4.amount into r6;
+    assert.eq r6 true;
+    is.eq r3 r4.factor into r7;
+    assert.eq r7 true;
+    contains settled_invoices[r0] into r8;
+    not r8 into r9;
+    assert.eq r9 true;
+    cast block.timestamp into r10 as u64;
+    cast true r10 r4.factor into r11 as SettlementInfo;
+    set r11 into settled_invoices[r0];
+    get.or_use protocol_stats[2u8] 0u64 into r12;
+    add r12 1u64 into r13;
+    set r13 into protocol_stats[2u8];
 
 constructor:
     assert.eq program_owner aleo19rn544c49da9z2vz52q5f7lm7nsjhp890ahmre6cz94qawdscgps6kq3cu;

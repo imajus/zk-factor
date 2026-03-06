@@ -2,7 +2,7 @@
 // Cryptographically prevents double-factoring fraud while maintaining complete privacy
 import credits.aleo;
 
-program zk_factor_9589.aleo {
+program zk_factor_9591.aleo {
     // Simple admin-controlled upgradable constructor for MVP
     // Can be upgraded to multi-sig governance later
     // IMPORTANT: Replace with actual admin address before deployment
@@ -14,6 +14,7 @@ program zk_factor_9589.aleo {
     mapping active_factors: address => FactorInfo;
     mapping settled_invoices: field => SettlementInfo;
     mapping protocol_stats: u8 => u64;
+    mapping payment_requests: field => PaymentRequest; // For USDC payment
 
     // Enumerable list of all registered factor addresses (includes deregistered)
     // Compiles to: factor_addresses__ (u32 => address) and factor_addresses__len__ (bool => u32)
@@ -71,6 +72,13 @@ program zk_factor_9589.aleo {
         is_settled: bool,
         settlement_date: u64,
         factor: address,
+    }
+
+    struct PaymentRequest {
+        factor: address,
+        amount: u64,
+        due_date: u64,
+        debtor: address,
     }
 
     // Create an invoice record with validation
@@ -331,4 +339,102 @@ program zk_factor_9589.aleo {
         let total_settled: u64 = Mapping::get_or_use(protocol_stats, 2u8, 0u64);
         Mapping::set(protocol_stats, 2u8, total_settled + 1u64);
     }
+
+
+    // Uses credits.aleo: NO direct transfer here, but sets up the
+    // on-chain data that routes the credits.aleo payment in pay_invoice
+    async transition create_payment_request(
+        factored: FactoredInvoice,
+    ) -> (FactoredInvoice, Future) {
+
+        // Only the factor who owns this record can publish a payment request
+        assert(factored.owner == self.caller);
+
+        // Return the record unchanged — we only need to READ it to
+        // publish the public payment request. Record is NOT consumed here,
+        // factor keeps it and uses it later for settle_invoice.
+        let same: FactoredInvoice = FactoredInvoice {
+            owner: factored.owner,
+            original_creditor: factored.original_creditor,
+            debtor: factored.debtor,
+            amount: factored.amount,
+            advance_amount: factored.advance_amount,
+            due_date: factored.due_date,
+            factoring_date: factored.factoring_date,
+            advance_rate: factored.advance_rate,
+            invoice_hash: factored.invoice_hash,
+            recourse: factored.recourse,
+        };
+
+        return (same, finalize_create_payment_request(
+            self.caller,
+            factored.invoice_hash,
+            factored.amount,
+            factored.due_date,
+            factored.debtor,
+        ));
+    }
+
+    async function finalize_create_payment_request(
+        factor: address,
+        invoice_hash: field,
+        amount: u64,
+        due_date: u64,
+        debtor: address,
+    ) {
+        // Cannot create a payment request for an already-settled invoice
+        let is_settled: bool = Mapping::contains(settled_invoices, invoice_hash);
+        assert(!is_settled);
+
+        // Cannot overwrite an existing payment request
+        let already_requested: bool = Mapping::contains(payment_requests, invoice_hash);
+        assert(!already_requested);
+
+        // Publish payment details publicly
+        let request: PaymentRequest = PaymentRequest {
+            factor: factor,
+            amount: amount,
+            due_date: due_date,
+            debtor: debtor,
+        };
+        Mapping::set(payment_requests, invoice_hash, request);
+    }
+
+    // WHY transfer_public not transfer_private:
+    //   In Aleo, transition inputs must be owned by self.caller.
+    //   The factor's address is only known at FINALIZE time (from mapping).
+    //   transfer_public works at the mapping level so we can pay a
+    //   dynamic address - exactly what we need here.
+    async transition pay_invoice(
+        invoice_hash: field,
+        amount: u64,
+        factor: address,
+    ) -> Future {
+        return finalize_pay_invoice(invoice_hash, self.caller, amount, factor);
+    }
+
+    async function finalize_pay_invoice(
+        invoice_hash: field,
+        debtor: address,
+        amount: u64,
+        factor: address,
+    ) {
+        let request: PaymentRequest = Mapping::get(payment_requests, invoice_hash);
+        assert(debtor == request.debtor);
+        assert(amount >= request.amount);
+        assert(factor == request.factor);
+
+        let is_settled: bool = Mapping::contains(settled_invoices, invoice_hash);
+        assert(!is_settled);
+
+        let settlement: SettlementInfo = SettlementInfo {
+            is_settled: true,
+            settlement_date: (block.timestamp as u64),
+            factor: request.factor,
+        };
+        Mapping::set(settled_invoices, invoice_hash, settlement);
+
+        let total_settled: u64 = Mapping::get_or_use(protocol_stats, 2u8, 0u64);
+        Mapping::set(protocol_stats, 2u8, total_settled + 1u64);
+    }   
 }

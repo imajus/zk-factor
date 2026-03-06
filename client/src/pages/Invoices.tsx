@@ -7,8 +7,12 @@ import {
   MoreHorizontal,
   ExternalLink,
   ArrowUpDown,
+  FileCheck,
   RefreshCw,
   AlertCircle,
+  Copy,
+  Receipt,
+  CheckCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -207,6 +211,34 @@ export default function Invoices() {
     });
   };
 
+  const handleRequestPayment = async (record: AleoRecord) => {
+    try {
+      await execute({
+        program: PROGRAM_ID,
+        function: "create_payment_request",
+        inputs: [record.recordPlaintext],
+        fee: 50_000,
+        privateFee: false,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("already exists in the ledger")) {
+        toast.error(
+          "Payment request already published — share the payment link with your debtor.",
+        );
+      } else {
+        toast.error("Failed to create payment request.");
+      }
+    }
+  };
+
+  const handleCopyPayLink = (record: AleoRecord) => {
+    const hash = getField(record.recordPlaintext, "invoice_hash");
+    const url = `${window.location.origin}/pay?hash=${hash}`;
+    navigator.clipboard.writeText(url);
+    toast.success("Payment link copied — send this to your debtor");
+  };
+
   const handleAcceptOffer = async (record: AleoRecord) => {
     const recordId =
       record.commitment ?? getField(record.recordPlaintext, "invoice_hash");
@@ -344,7 +376,7 @@ export default function Invoices() {
       </Card>
 
       {/* Error state */}
-      {isError && (
+      {isError && !records && (
         <Card className="border-destructive/50">
           <CardContent className="pt-6 flex items-center gap-4">
             <AlertCircle className="h-5 w-5 text-destructive shrink-0" />
@@ -493,6 +525,22 @@ export default function Invoices() {
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem
+                                onClick={() => {
+                                  const hash = getField(
+                                    invoice.recordPlaintext,
+                                    "invoice_hash",
+                                  );
+                                  const url = `${window.location.origin}/pay?hash=${hash}`;
+                                  navigator.clipboard.writeText(url);
+                                  toast.success(
+                                    "Payment link copied — send this to your debtor",
+                                  );
+                                }}
+                              >
+                                <Copy className="h-4 w-4 mr-2" />
+                                Copy Debtor Payment Link
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
                                 onClick={() =>
                                   window.open(
                                     `${import.meta.env.VITE_ALEO_EXPLORER}/transaction/${invoice.transactionId}`,
@@ -638,9 +686,22 @@ export default function Invoices() {
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem
+                                onClick={() => handleRequestPayment(record)}
+                              >
+                                <Receipt className="h-4 w-4 mr-2" />
+                                Request Payment from Debtor
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => handleCopyPayLink(record)}
+                              >
+                                <Copy className="h-4 w-4 mr-2" />
+                                Copy Payment Link
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
                                 onClick={() => handleSettle(record)}
                                 disabled={isSettling}
                               >
+                                <CheckCircle className="h-4 w-4 mr-2" />
                                 {isSettling ? "Settling…" : "Settle"}
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
@@ -783,6 +844,7 @@ export default function Invoices() {
                                 onClick={() => handleAcceptOffer(record)}
                                 disabled={isAccepting}
                               >
+                                <FileCheck className="h-4 w-4" />
                                 {isAccepting ? "Processing…" : "Accept Offer"}
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
