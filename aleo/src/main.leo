@@ -2,7 +2,7 @@
 // Cryptographically prevents double-factoring fraud while maintaining complete privacy
 import credits.aleo;
 
-program zk_factor_9588.aleo {
+program zk_factor_9589.aleo {
     // Simple admin-controlled upgradable constructor for MVP
     // Can be upgraded to multi-sig governance later
     // IMPORTANT: Replace with actual admin address before deployment
@@ -43,6 +43,19 @@ program zk_factor_9588.aleo {
         invoice_hash: field,
         recourse: bool,
     }
+
+    record FactoringOffer {
+        owner: address,              // Factor
+        original_creditor: address,  // Business that created the original invoice
+        debtor: address,             // Customer who owes payment
+        amount: u64,                 // Full invoice amount in microcredits
+        due_date: u64,               // Original invoice due date (Unix timestamp)
+        advance_rate: u16,           // Agreed rate in basis points (e.g. 9500 = 95%)
+        invoice_hash: field,         // Links back to the original off-chain invoice
+        nonce: field,                // Carried over from Invoice for record uniqueness
+        metadata: u128,              // Carried over from Invoice (invoice number, flags)
+    }
+
 
     // Factor registration and statistics
     struct FactorInfo {
@@ -139,38 +152,109 @@ program zk_factor_9588.aleo {
         Mapping::set(active_factors, factor, updated_info);
     }
 
-    // Factor an invoice - atomic swap of invoice for payment
-    async transition factor_invoice(
+
+    // Called by: Business
+    // Inputs:    Invoice (owned by business), factor address, agreed rate
+    // Outputs:   FactoringOffer (owned by factor)
+    //
+    // This is the business's commitment — once called, the Invoice is
+    // consumed and cannot be double-factored. The business cannot back out.
+    // The factor receives an FactoringOffer they can accept at any time.
+    async transition authorize_factoring(
         invoice: Invoice,
         factor: address,
         advance_rate: u16,
-        payment: credits.aleo/credits
-    ) -> (FactoredInvoice, credits.aleo/credits, credits.aleo/credits, Future) {
+    ) -> (FactoringOffer, Future) {
+
+        // Only the invoice owner (business) can initiate factoring
         assert(invoice.owner == self.caller);
+
+        // Enforce advance rate bounds: 50% (5000) to 99% (9900) basis points
         assert(advance_rate >= 5000u16 && advance_rate <= 9900u16);
-        let advance_amount: u64 = (invoice.amount * (advance_rate as u64)) / 10000u64;
-        assert(payment.microcredits >= advance_amount);
-        let factored: FactoredInvoice = FactoredInvoice {
-            owner: factor,
-            original_creditor: self.caller,
+
+        let offer: FactoringOffer = FactoringOffer {
+            owner: factor,                   // Factor receives and can act on this
+            original_creditor: self.caller,  // Business retains identity for payment routing
             debtor: invoice.debtor,
             amount: invoice.amount,
-            advance_amount: advance_amount,
             due_date: invoice.due_date,
-            factoring_date: 0u64,
             advance_rate: advance_rate,
             invoice_hash: invoice.invoice_hash,
-            recourse: false,
+            nonce: invoice.nonce,
+            metadata: invoice.metadata,
         };
-        let (business_payment, change): (credits.aleo/credits, credits.aleo/credits) = credits.aleo/transfer_private(payment, self.caller, advance_amount);
-        return (factored, business_payment, change, finalize_factor_invoice(factor, invoice.invoice_hash));
+
+        return (offer, finalize_authorize_factoring(factor, invoice.invoice_hash));
     }
 
-    async function finalize_factor_invoice(factor: address, invoice_hash: field) {
+    async function finalize_authorize_factoring(factor: address, invoice_hash: field) {
+        // Verify the chosen factor is registered and active in the protocol.
+        // Mapping::get panics if the key doesn't exist — unregistered factors
+        // will cause this to fail, blocking the whole transaction.
         let factor_info: FactorInfo = Mapping::get(active_factors, factor);
         assert(factor_info.is_active);
+    }
+
+    // Called by: Factor
+    // Inputs:    FactoringOffer (owned by factor), credits (owned by factor)
+    // Outputs:   FactoredInvoice (owned by factor), payment to business, change
+    //
+    // Because the factor is self.caller, they legally own both inputs.
+    // This is what makes the payment routing correct — the factor's own
+    // credits are transferred to the business, not the business's credits
+    // going back to themselves.
+    async transition execute_factoring(
+        offer: FactoringOffer,
+        payment: credits.aleo/credits,
+    ) -> (FactoredInvoice, credits.aleo/credits, credits.aleo/credits, Future) {
+
+        // Only the factor (offer.owner) can execute — prevents anyone else
+        // from accepting an offer intended for a specific factor
+        assert(offer.owner == self.caller);
+
+        // Safe multiplication using u128 to prevent overflow before dividing
+        // back down to u64. Mirrors the advance rate calculation from the old code.
+        let product: u128 = (offer.amount as u128) * (offer.advance_rate as u128);
+        let advance_amount: u64 = (product / 10000u128) as u64;
+
+        // Factor must provide enough credits to cover the advance payment
+        assert(payment.microcredits >= advance_amount);
+
+        // Build the FactoredInvoice — factor owns this as proof of purchase.
+        // They will present this record later when the debtor pays (settle_invoice).
+        let factored: FactoredInvoice = FactoredInvoice {
+            owner: self.caller,                   // Factor holds this as their asset
+            original_creditor: offer.original_creditor,
+            debtor: offer.debtor,
+            amount: offer.amount,
+            advance_amount: advance_amount,
+            due_date: offer.due_date,
+            factoring_date: 0u64,                 // block.timestamp not available in transition scope
+            advance_rate: offer.advance_rate,
+            invoice_hash: offer.invoice_hash,
+            recourse: false,
+        };
+
+        // Factor (self.caller) owns `payment`, transfers advance_amount to business.
+        // `change` is the leftover credits returned to the factor.
+        // This is the key fix — factor pays business, not business paying themselves.
+        let (business_payment, change): (credits.aleo/credits, credits.aleo/credits) =
+            credits.aleo/transfer_private(payment, offer.original_creditor, advance_amount);
+
+        return (factored, business_payment, change, finalize_execute_factoring(self.caller, offer.invoice_hash));
+    }
+
+    async function finalize_execute_factoring(factor: address, invoice_hash: field) {
+        // Re-verify factor is still active at execution time.
+        // Protects against a factor being deregistered between Step 1 and Step 2.
+        let factor_info: FactorInfo = Mapping::get(active_factors, factor);
+        assert(factor_info.is_active);
+
+        // Increment global protocol counter (key 1 = total factored)
         let total_factored: u64 = Mapping::get_or_use(protocol_stats, 1u8, 0u64);
         Mapping::set(protocol_stats, 1u8, total_factored + 1u64);
+
+        // Update this factor's personal total_factored count
         let updated_factor: FactorInfo = FactorInfo {
             is_active: factor_info.is_active,
             min_advance_rate: factor_info.min_advance_rate,
@@ -180,6 +264,49 @@ program zk_factor_9588.aleo {
         };
         Mapping::set(active_factors, factor, updated_factor);
     }
+
+
+    // Factor an invoice - atomic swap of invoice for payment
+//    async transition factor_invoice(
+//        invoice: Invoice,
+//        factor: address,
+//        advance_rate: u16,
+//        payment: credits.aleo/credits
+//    ) -> (FactoredInvoice, credits.aleo/credits, credits.aleo/credits, Future) {
+//        assert(invoice.owner == self.caller);
+//        assert(advance_rate >= 5000u16 && advance_rate <= 9900u16);
+//        let advance_amount: u64 = (invoice.amount * (advance_rate as u64)) / 10000u64;
+//        assert(payment.microcredits >= advance_amount);
+//        let factored: FactoredInvoice = FactoredInvoice {
+//            owner: factor,
+//            original_creditor: self.caller,
+//            debtor: invoice.debtor,
+//            amount: invoice.amount,
+//            advance_amount: advance_amount,
+//            due_date: invoice.due_date,
+//            factoring_date: 0u64,
+//            advance_rate: advance_rate,
+//            invoice_hash: invoice.invoice_hash,
+//            recourse: false,
+//        };
+//        let (business_payment, change): (credits.aleo/credits, credits.aleo/credits) = credits.aleo/transfer_private(payment, self.caller, advance_amount);
+//        return (factored, business_payment, change, finalize_factor_invoice(factor, invoice.invoice_hash));
+//    }
+
+//    async function finalize_factor_invoice(factor: address, invoice_hash: field) {
+//        let factor_info: FactorInfo = Mapping::get(active_factors, factor);
+//        assert(factor_info.is_active);
+//        let total_factored: u64 = Mapping::get_or_use(protocol_stats, 1u8, 0u64);
+//        Mapping::set(protocol_stats, 1u8, total_factored + 1u64);
+//        let updated_factor: FactorInfo = FactorInfo {
+//            is_active: factor_info.is_active,
+//            min_advance_rate: factor_info.min_advance_rate,
+//            max_advance_rate: factor_info.max_advance_rate,
+//            total_factored: factor_info.total_factored + 1u64,
+//            registration_date: factor_info.registration_date,
+//        };
+//        Mapping::set(active_factors, factor, updated_factor);
+//    }
 
     // Settle a factored invoice
     async transition settle_invoice(

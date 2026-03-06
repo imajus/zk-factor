@@ -214,12 +214,11 @@ export default function Marketplace() {
 
     await execute({
       program: PROGRAM_ID,
-      function: "factor_invoice",
+      function: "authorize_factoring",
       inputs: [
-        invoice.recordPlaintext,
-        selectedFactor.address,
-        `${advanceRateBps}u16`,
-        creditsRecord.recordPlaintext,
+        invoice.recordPlaintext, // their Invoice record
+        selectedFactor.address, // who they're offering to
+        `${advanceRateBps}u16`, // agreed rate
       ],
       fee: 100_000,
       privateFee: false,

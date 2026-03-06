@@ -106,6 +106,10 @@ export default function Invoices() {
     (r) => r.recordName === "FactoredInvoice" && !r.spent,
   );
 
+  const offerRecords = ((records as AleoRecord[]) ?? []).filter(
+    (r) => r.recordName === "FactoringOffer" && !r.spent,
+  );
+
   const filteredInvoices = invoiceRecords
     .filter((r) => {
       if (!searchQuery) return true;
@@ -203,6 +207,62 @@ export default function Invoices() {
     });
   };
 
+  const handleAcceptOffer = async (record: AleoRecord) => {
+    const recordId =
+      record.commitment ?? getField(record.recordPlaintext, "invoice_hash");
+    setSettlingId(recordId);
+
+    let creditsRecord: AleoRecord | undefined;
+    try {
+      const creditsRecords = (await requestRecords(
+        "credits.aleo",
+        true,
+      )) as AleoRecord[];
+      const offerAmount = parseInt(
+        getField(record.recordPlaintext, "amount").replace(/u64$/, ""),
+        10,
+      );
+      const advanceRateBps = parseInt(
+        getField(record.recordPlaintext, "advance_rate").replace(/u16$/, ""),
+        10,
+      );
+      // Factor needs enough credits to cover the advance they'll pay to business
+      const advanceAmount = Math.floor((offerAmount * advanceRateBps) / 10000);
+      creditsRecord = creditsRecords
+        .filter((r) => !r.spent)
+        .find(
+          (r) =>
+            parseInt(
+              getField(r.recordPlaintext, "microcredits").replace(/u64$/, ""),
+              10,
+            ) >= advanceAmount,
+        );
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to fetch credits",
+      );
+      setSettlingId(null);
+      return;
+    }
+
+    if (!creditsRecord) {
+      toast.error("Insufficient credits to fund this factoring");
+      setSettlingId(null);
+      return;
+    }
+
+    await execute({
+      program: PROGRAM_ID,
+      function: "execute_factoring",
+      inputs: [
+        record.recordPlaintext, // FactoringOffer owned by factor
+        creditsRecord.recordPlaintext, // factor's own credits → pays business
+      ],
+      fee: 100_000,
+      privateFee: false,
+    });
+  };
+
   if (!isConnected) {
     return (
       <div className="container py-6">
@@ -248,6 +308,13 @@ export default function Invoices() {
           onClick={() => setRecordTypeFilter("factored")}
         >
           Factored ({factoredRecords.length})
+        </Button>
+        <Button
+          variant={recordTypeFilter === "offers" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setRecordTypeFilter("offers")}
+        >
+          Pending Offers ({offerRecords.length})
         </Button>
       </div>
 
@@ -575,6 +642,148 @@ export default function Invoices() {
                                 disabled={isSettling}
                               >
                                 {isSettling ? "Settling…" : "Settle"}
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  window.open(
+                                    `${import.meta.env.VITE_ALEO_EXPLORER}/transaction/${record.transactionId}`,
+                                    "_blank",
+                                  )
+                                }
+                              >
+                                <ExternalLink className="h-4 w-4 mr-2" />
+                                View on Explorer
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {recordTypeFilter === "offers" && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Pending Offers</CardTitle>
+            <CardDescription>
+              {isLoading
+                ? "Loading…"
+                : `${offerRecords.length} offer${offerRecords.length !== 1 ? "s" : ""} awaiting your acceptance`}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Invoice Hash</TableHead>
+                  <TableHead className="hidden md:table-cell">
+                    Business
+                  </TableHead>
+                  <TableHead>Amount</TableHead>
+                  <TableHead className="hidden sm:table-cell">Rate</TableHead>
+                  <TableHead className="w-10"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  Array.from({ length: 3 }).map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell>
+                        <Skeleton className="h-4 w-32" />
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        <Skeleton className="h-4 w-24" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-4 w-20" />
+                      </TableCell>
+                      <TableCell className="hidden sm:table-cell">
+                        <Skeleton className="h-4 w-12" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-8 w-8" />
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : offerRecords.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={5}
+                      className="text-center py-12 text-muted-foreground"
+                    >
+                      No pending offers
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  offerRecords.map((record, idx) => {
+                    const invoiceHash = getField(
+                      record.recordPlaintext,
+                      "invoice_hash",
+                    );
+                    const aleoAmount = microToAleo(
+                      getField(record.recordPlaintext, "amount") || "0u64",
+                    );
+                    const rate =
+                      parseInt(
+                        getField(
+                          record.recordPlaintext,
+                          "advance_rate",
+                        ).replace(/u16$/, ""),
+                        10,
+                      ) / 100;
+                    const originalCreditor = getField(
+                      record.recordPlaintext,
+                      "original_creditor",
+                    );
+                    const recordId = record.commitment ?? invoiceHash;
+                    const isAccepting = settlingId === recordId;
+                    return (
+                      <TableRow key={invoiceHash || idx}>
+                        <TableCell>
+                          <span className="font-mono text-sm">
+                            {invoiceHash.slice(0, 12)}…
+                          </span>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          <AddressDisplay
+                            address={originalCreditor}
+                            chars={4}
+                            showExplorer
+                          />
+                        </TableCell>
+                        <TableCell className="font-mono">
+                          {aleoAmount.toLocaleString(undefined, {
+                            maximumFractionDigits: 6,
+                          })}{" "}
+                          ALEO
+                        </TableCell>
+                        <TableCell className="hidden sm:table-cell">
+                          {rate.toFixed(2)}%
+                        </TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                              >
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() => handleAcceptOffer(record)}
+                                disabled={isAccepting}
+                              >
+                                {isAccepting ? "Processing…" : "Accept Offer"}
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
