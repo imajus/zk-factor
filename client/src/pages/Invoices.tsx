@@ -42,12 +42,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { AleoNetworkClient } from "@provablehq/sdk";
 import { useWallet } from "@/contexts/WalletContext";
 import { useTransaction } from "@/hooks/use-transaction";
 import { formatDate, getDaysUntilDue } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { PROGRAM_ID } from "@/lib/config";
+import { PROGRAM_ID, API_ENDPOINT } from "@/lib/config";
 
 interface AleoRecord {
   recordName: string;
@@ -89,6 +90,7 @@ export default function Invoices() {
   const [sortBy, setSortBy] = useState<string>("due");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [settlingId, setSettlingId] = useState<string | null>(null);
+  const [settledHashes, setSettledHashes] = useState<Set<string>>(new Set());
 
   const {
     data: records,
@@ -113,6 +115,27 @@ export default function Invoices() {
   const offerRecords = ((records as AleoRecord[]) ?? []).filter(
     (r) => r.recordName === "FactoringOffer" && !r.spent,
   );
+
+  // Check settled status for each factored record
+  useEffect(() => {
+    if (!factoredRecords.length) return;
+    const client = new AleoNetworkClient(API_ENDPOINT);
+    factoredRecords.forEach(async (record) => {
+      const hash = getField(record.recordPlaintext, "invoice_hash");
+      try {
+        const result = await client.getProgramMappingValue(
+          PROGRAM_ID,
+          "settled_invoices",
+          hash,
+        );
+        if (result) {
+          setSettledHashes((prev) => new Set([...prev, hash]));
+        }
+      } catch {
+        // not settled yet
+      }
+    });
+  }, [factoredRecords.length]);
 
   const filteredInvoices = invoiceRecords
     .filter((r) => {
@@ -172,6 +195,23 @@ export default function Invoices() {
     const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
     const recordId = record.commitment ?? invoiceHash;
     setSettlingId(recordId);
+
+    // Check if already settled by debtor
+    try {
+      const client = new AleoNetworkClient(API_ENDPOINT);
+      const settled = await client.getProgramMappingValue(
+        PROGRAM_ID,
+        "settled_invoices",
+        invoiceHash,
+      );
+      if (settled) {
+        toast.success("Invoice already settled by debtor — no action needed.");
+        setSettlingId(null);
+        return;
+      }
+    } catch {
+      // not settled, continue
+    }
 
     let creditsRecord: AleoRecord | undefined;
     try {
@@ -258,7 +298,6 @@ export default function Invoices() {
         getField(record.recordPlaintext, "advance_rate").replace(/u16$/, ""),
         10,
       );
-      // Factor needs enough credits to cover the advance they'll pay to business
       const advanceAmount = Math.floor((offerAmount * advanceRateBps) / 10000);
       creditsRecord = creditsRecords
         .filter((r) => !r.spent)
@@ -287,8 +326,8 @@ export default function Invoices() {
       program: PROGRAM_ID,
       function: "execute_factoring",
       inputs: [
-        record.recordPlaintext, // FactoringOffer owned by factor
-        creditsRecord.recordPlaintext, // factor's own credits → pays business
+        record.recordPlaintext,
+        creditsRecord.recordPlaintext,
       ],
       fee: 100_000,
       privateFee: false,
@@ -645,6 +684,7 @@ export default function Invoices() {
                     );
                     const recordId = record.commitment ?? invoiceHash;
                     const isSettling = settlingId === recordId;
+                    const isSettled = settledHashes.has(invoiceHash);
                     return (
                       <TableRow key={invoiceHash || idx}>
                         <TableCell>
@@ -669,8 +709,16 @@ export default function Invoices() {
                           {rate.toFixed(2)}%
                         </TableCell>
                         <TableCell>
-                          <Badge variant="outline" className="text-xs">
-                            Pending
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "text-xs",
+                              isSettled
+                                ? "text-green-600 border-green-300"
+                                : "text-yellow-600 border-yellow-300",
+                            )}
+                          >
+                            {isSettled ? "Settled" : "Pending"}
                           </Badge>
                         </TableCell>
                         <TableCell>
@@ -687,6 +735,7 @@ export default function Invoices() {
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem
                                 onClick={() => handleRequestPayment(record)}
+                                disabled={isSettled}
                               >
                                 <Receipt className="h-4 w-4 mr-2" />
                                 Request Payment from Debtor
@@ -699,7 +748,7 @@ export default function Invoices() {
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 onClick={() => handleSettle(record)}
-                                disabled={isSettling}
+                                disabled={isSettling || isSettled}
                               >
                                 <CheckCircle className="h-4 w-4 mr-2" />
                                 {isSettling ? "Settling…" : "Settle"}
@@ -844,7 +893,7 @@ export default function Invoices() {
                                 onClick={() => handleAcceptOffer(record)}
                                 disabled={isAccepting}
                               >
-                                <FileCheck className="h-4 w-4" />
+                                <FileCheck className="h-4 w-4 mr-2" />
                                 {isAccepting ? "Processing…" : "Accept Offer"}
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
