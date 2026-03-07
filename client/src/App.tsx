@@ -16,6 +16,7 @@ import Marketplace from "./pages/Marketplace";
 import Transactions from "./pages/Transactions";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
+import Pay from "./pages/Pay";
 
 const queryClient = new QueryClient();
 const wallets = [new ShieldWalletAdapter()];
@@ -43,6 +44,8 @@ const App = () => (
                 <Route path="/transactions" element={<Transactions />} />
                 <Route path="/portfolio" element={<Dashboard />} />
                 <Route path="/settings" element={<Settings />} />
+                <Route path="/pay" element={<Pay />} />
+
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
               </Routes>

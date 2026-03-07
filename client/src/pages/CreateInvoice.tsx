@@ -387,17 +387,17 @@ export default function CreateInvoice() {
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Invoice #</span>
-                    <span className="font-mono">{invoiceNumber || '—'}</span>
+                    <span className="font-mono">{invoiceNumber || '-'}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Amount</span>
                     <span className="font-mono font-semibold">
-                      {amount ? `${parseFloat(amount).toLocaleString()} ALEO` : '—'}
+                      {amount ? `${parseFloat(amount).toLocaleString()} ALEO` : '-'}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Due Date</span>
-                    <span>{dueDate ? format(dueDate, 'MMM d, yyyy') : '—'}</span>
+                    <span>{dueDate ? format(dueDate, 'MMM d, yyyy') : '-'}</span>
                   </div>
                 </div>
                 <Separator />

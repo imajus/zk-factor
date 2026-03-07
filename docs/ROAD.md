@@ -11,21 +11,25 @@
 ## Phase 1: MVP Launch (Testnet)
 
 Core platform functionality:
-- Invoice creation (mint_invoice)
-- Fraud prevention (serial number verification)
-- Atomic swaps (factor_invoice)
+
+- Invoice creation (`mint_invoice`)
+- Fraud prevention (serial number verification / UTXO consumption model)
+- Two-step factoring (`authorize_factoring` → `execute_factoring`)
+- Private debtor payment (`create_payment_request` → `pay_invoice`)
 - Marketplace (factor discovery and browsing)
-- Settlement (settle_invoice)
-- Basic web UI for business and factor roles
+- Settlement (`settle_invoice`)
+- Basic web UI for business, factor, and debtor roles
+- Shield Wallet integration
 
 ## Phase 2: Enhanced Features
 
-- USDCx payments integration
-- Partial factoring (sell portion of invoice)
-- Recourse tracking (handle debtor non-payment)
-- Multi-factor syndication (large invoices split across factors)
+- USDCx stablecoin payments integration
+- Partial factoring (sell portion of invoice, retain the rest)
+- Recourse tracking (handle debtor non-payment and return to business)
+- Multi-factor syndication (large invoices split across multiple factors)
 - Mobile wallet support
-- API integration for accounting software
+- API integration for accounting software (QuickBooks, Xero, Sage — matching FundThrough's distribution)
+- ZK credit scoring based on payment history (prove history without revealing details)
 
 ## Phase 3: Mainnet Launch
 
@@ -35,6 +39,9 @@ Core platform functionality:
 - Factor partnerships (onboard 5-10 progressive factors)
 - Production monitoring infrastructure
 - Real-world transaction volume
+- Cross-border factoring with oracle integration
+- Automated settlement verification
+- Delegated proving infrastructure (reduce client-side proof generation time)
 
 ## Phase 4: Enterprise Scale
 
@@ -44,6 +51,8 @@ Core platform functionality:
 - White-label licensing for banks/fintechs
 - Delegated proving (reduce client-side computation)
 - Compliance framework (KYC/AML integration points)
+- Advanced analytics dashboards
+- Institutional API integration
 
 ## Phase 5: Ecosystem Expansion
 
@@ -52,3 +61,5 @@ Core platform functionality:
 - Banking partnerships
 - Multi-chain bridge support
 - Debtor notification system (privacy-preserving payment instructions)
+- White-label deployment options for enterprise factoring companies
+- Enterprise sales team and dedicated support

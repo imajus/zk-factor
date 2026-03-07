@@ -74,7 +74,9 @@ export default function Settings() {
   const queryClient = useQueryClient();
   const { address, network, disconnect, isConnected } = useWallet();
   const { execute, status, error: txError, reset } = useTransaction();
-  const [activeOp, setActiveOp] = useState<"register" | "deregister" | null>(null);
+  const [activeOp, setActiveOp] = useState<"register" | "deregister" | null>(
+    null,
+  );
   const isRegistering = activeOp === "register" && status !== "idle";
   const isDeregistering = activeOp === "deregister" && status !== "idle";
   const [theme, setTheme] = useState<"light" | "dark" | "system">("dark");
@@ -114,26 +116,34 @@ export default function Settings() {
   };
 
   useEffect(() => {
-    if (status === "pending") {
-      const id = activeOp === "register" ? "register-factor" : "deregister-factor";
+    if (status === "submitting") {
+      const id =
+        activeOp === "register" ? "register-factor" : "deregister-factor";
+      toast.loading("Generating proof…", { id });
+    } else if (status === "pending") {
+      const id =
+        activeOp === "register" ? "register-factor" : "deregister-factor";
       toast.loading("Broadcasting…", { id });
-    }
-    if (status === "accepted") {
+    } else if (status === "accepted") {
       if (activeOp === "register") {
         toast.success("Registered as factor!", { id: "register-factor" });
       } else if (activeOp === "deregister") {
-        toast.success("Deregistered from factor network!", { id: "deregister-factor" });
+        toast.success("Deregistered from factor network!", {
+          id: "deregister-factor",
+        });
       }
       queryClient.invalidateQueries({ queryKey: ["factor_status", address] });
       setActiveOp(null);
       reset();
-    }
-    if (status === "failed") {
-      const id = activeOp === "register" ? "register-factor" : "deregister-factor";
+    } else if (status === "failed") {
+      const id =
+        activeOp === "register" ? "register-factor" : "deregister-factor";
       if (activeOp === "register") {
         const msg = txError || "Registration failed";
         toast.error(
-          msg.includes("already") || msg.includes("active") ? "Already registered as factor" : msg,
+          msg.includes("already") || msg.includes("active")
+            ? "Already registered as factor"
+            : msg,
           { id },
         );
       } else {
@@ -147,7 +157,6 @@ export default function Settings() {
   const handleRegister = async () => {
     if (!registrationValid) return;
     setActiveOp("register");
-    toast.loading("Generating proof…", { id: "register-factor" });
     await execute({
       program: PROGRAM_ID,
       function: "register_factor",
@@ -159,7 +168,6 @@ export default function Settings() {
 
   const handleDeregister = async () => {
     setActiveOp("deregister");
-    toast.loading("Generating proof…", { id: "deregister-factor" });
     await execute({
       program: PROGRAM_ID,
       function: "deregister_factor",
@@ -436,7 +444,6 @@ export default function Settings() {
             </CardContent>
           </Card>
         </TabsContent>
-
       </Tabs>
     </div>
   );

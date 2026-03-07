@@ -1,0 +1,670 @@
+openapi: 3.0.3
+info:
+  title: ZK Factor API
+  description: |
+    Privacy-preserving invoice factoring platform on Aleo blockchain.
+    
+    ## How it works
+    ZK Factor uses Aleo's UTXO record model to cryptographically prevent 
+    double-factoring fraud. Invoice records are consumed (spent) during 
+    factoring — making reuse impossible at the protocol level, with no 
+    central database required.
+
+    ## Two-step factoring flow
+    1. **Business** calls `POST /factoring/authorize` → Invoice consumed, InvoiceOffer sent to factor
+    2. **Factor** calls `POST /factoring/execute` → Factor pays business, FactoredInvoice created
+
+    ## Authentication
+    All write endpoints require a connected Aleo wallet. The wallet signs 
+    transactions client-side — no private keys are ever sent to this API.
+    Read endpoints (mappings, stats) are public.
+
+  version: 1.0.0
+  contact:
+    name: ZK Factor
+    url: https://github.com/imajus/zk-factor
+
+servers:
+  - url: https://api.explorer.provable.com/v1
+    description: Aleo Testnet (public RPC — read-only mappings)
+  - url: http://localhost:3000/api
+    description: Local development server
+
+tags:
+  - name: Invoices
+    description: Create and manage invoice records
+  - name: Factoring
+    description: Two-step factoring handshake between business and factor
+  - name: Settlement
+    description: Invoice settlement after debtor payment
+  - name: Factors
+    description: Factor registration and discovery
+  - name: Protocol
+    description: Public protocol statistics and health
+
+paths:
+
+  # ─── INVOICES ────────────────────────────────────────────────
+
+  /invoices:
+    post:
+      tags: [Invoices]
+      summary: Create a new invoice
+      description: |
+        Calls `mint_invoice` on `zk_factor_9588.aleo`.
+        Creates a private Invoice record owned by the caller's wallet.
+        The record is encrypted — only the owner can read it.
+
+        **Leo transition:** `mint_invoice(debtor, amount, due_date, invoice_hash, metadata)`
+      operationId: createInvoice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInvoiceRequest'
+            example:
+              debtor: "aleo1lmxnpf55l6fucq4ygnz3uhcv42hyangx494n7lvdeagrsycruv8syheh2h"
+              amount: 100000
+              due_date: 1780000000
+              invoice_hash: "1field"
+              metadata: 0
+      responses:
+        '202':
+          description: Transaction submitted to Aleo network
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/WalletNotConnected'
+
+  /invoices/{address}:
+    get:
+      tags: [Invoices]
+      summary: Get all invoices for an address
+      description: |
+        Scans wallet records and returns all unspent Invoice records 
+        owned by the given address. Requires the wallet's view key 
+        to decrypt private records.
+      operationId: getInvoices
+      parameters:
+        - name: address
+          in: path
+          required: true
+          description: Aleo wallet address (aleo1...)
+          schema:
+            $ref: '#/components/schemas/AleoAddress'
+      responses:
+        '200':
+          description: List of unspent invoice records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InvoiceRecord'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ─── FACTORING ───────────────────────────────────────────────
+
+  /factoring/authorize:
+    post:
+      tags: [Factoring]
+      summary: "Step 1 (Business): Authorize factoring of an invoice"
+      description: |
+        Called by the **business**. Consumes the Invoice record and creates 
+        an InvoiceOffer record owned by the factor.
+
+        **This is the double-spend prevention step.** Once the Invoice is 
+        consumed, its serial number is published on-chain and it cannot be 
+        factored again — by any factor, anywhere.
+
+        **Leo transition:** `authorize_factoring(invoice, factor, advance_rate)`
+
+        After this call succeeds, the factor will find an InvoiceOffer 
+        in their wallet via record scanning.
+      operationId: authorizeFactoring
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthorizeFactoringRequest'
+            example:
+              invoice_plaintext: "{ owner: aleo1rhg....private, debtor: aleo1lmx....private, amount: 100000u64.private, due_date: 9999999999u64.private, invoice_hash: 1field.private, nonce: 1233...field.private, metadata: 0u128.private, _nonce: 1114...group.public, _version: 1u8.public }"
+              factor_address: "aleo1ashyu96tjwe63u0gtnnv8z5lhapdu4l5pys32mh2wyv9ry421pgqem8lam"
+              advance_rate: 9500
+      responses:
+        '202':
+          description: |
+            Transaction submitted. Factor will receive InvoiceOffer 
+            in their wallet after block confirmation (~20 seconds).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          description: Invoice already factored (double-spend detected)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "DOUBLE_SPEND"
+                message: "This invoice has already been factored. Serial number is spent."
+
+  /factoring/execute:
+    post:
+      tags: [Factoring]
+      summary: "Step 2 (Factor): Execute factoring and pay business"
+      description: |
+        Called by the **factor**. Consumes the InvoiceOffer (from Step 1) 
+        and the factor's own credits record. Transfers the advance payment 
+        to the business and creates a FactoredInvoice record for the factor.
+
+        **Payment routing:** Factor owns both inputs → factor pays business.
+        This is the fix for the self-payment bug in the original design.
+
+        **Leo transition:** `execute_factoring(offer, payment)`
+      operationId: executeFactoring
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecuteFactoringRequest'
+            example:
+              offer_plaintext: "{ owner: aleo1factor....private, original_creditor: aleo1business....private, ... }"
+              payment_plaintext: "{ owner: aleo1factor....private, microcredits: 100000u64.private, ... }"
+      responses:
+        '202':
+          description: |
+            Transaction submitted. Business receives advance payment.
+            Factor receives FactoredInvoice record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecuteFactoringResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '402':
+          description: Insufficient credits to cover advance payment
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ─── SETTLEMENT ──────────────────────────────────────────────
+
+  /settlement:
+    post:
+      tags: [Settlement]
+      summary: Settle a factored invoice
+      description: |
+        Called by the **factor** after the debtor pays. Consumes the 
+        FactoredInvoice record and marks the invoice as settled in the 
+        `settled_invoices` public mapping.
+
+        **Double-settlement prevention:** The finalize block checks the 
+        mapping before allowing settlement — attempting to settle twice 
+        will fail.
+
+        **Leo transition:** `settle_invoice(factored, payment)`
+      operationId: settleInvoice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SettleInvoiceRequest'
+      responses:
+        '202':
+          description: Settlement transaction submitted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionResponse'
+        '409':
+          description: Invoice already settled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "ALREADY_SETTLED"
+                message: "This invoice has already been settled."
+
+  /settlement/{invoice_hash}:
+    get:
+      tags: [Settlement]
+      summary: Check settlement status of an invoice
+      description: |
+        Queries the `settled_invoices` public mapping on-chain.
+        No wallet required — this data is publicly visible.
+      operationId: getSettlementStatus
+      parameters:
+        - name: invoice_hash
+          in: path
+          required: true
+          description: The invoice_hash field value (Aleo field element)
+          schema:
+            type: string
+            example: "1field"
+      responses:
+        '200':
+          description: Settlement info (or not settled)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettlementInfo'
+        '404':
+          description: Invoice not yet settled (mapping key does not exist)
+
+  # ─── FACTORS ─────────────────────────────────────────────────
+
+  /factors:
+    get:
+      tags: [Factors]
+      summary: List all registered factors
+      description: |
+        Returns all addresses in the `factor_addresses` storage array 
+        and their corresponding `active_factors` mapping data.
+        All public data — no wallet required.
+      operationId: listFactors
+      responses:
+        '200':
+          description: List of registered factoring companies
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FactorInfo'
+
+    post:
+      tags: [Factors]
+      summary: Register as a factoring company
+      description: |
+        Calls `register_factor` on the smart contract.
+        The caller's wallet address is registered as a factor.
+
+        **Leo transition:** `register_factor(min_advance_rate, max_advance_rate)`
+      operationId: registerFactor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterFactorRequest'
+            example:
+              min_advance_rate: 8000
+              max_advance_rate: 9500
+      responses:
+        '202':
+          description: Registration transaction submitted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionResponse'
+        '409':
+          description: Address already registered as a factor
+
+  /factors/{address}:
+    get:
+      tags: [Factors]
+      summary: Get factor info
+      description: Queries the `active_factors` public mapping for a specific address.
+      operationId: getFactorInfo
+      parameters:
+        - name: address
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/AleoAddress'
+      responses:
+        '200':
+          description: Factor registration info
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorInfo'
+        '404':
+          description: Address not registered as a factor
+
+    delete:
+      tags: [Factors]
+      summary: Deregister as a factoring company
+      description: |
+        Calls `deregister_factor`. Sets `is_active: false` in the mapping.
+        The address remains in `factor_addresses` for historical tracking.
+
+        **Leo transition:** `deregister_factor()`
+      operationId: deregisterFactor
+      parameters:
+        - name: address
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/AleoAddress'
+      responses:
+        '202':
+          description: Deregistration transaction submitted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionResponse'
+
+  # ─── PROTOCOL ────────────────────────────────────────────────
+
+  /protocol/stats:
+    get:
+      tags: [Protocol]
+      summary: Get protocol statistics
+      description: |
+        Reads the `protocol_stats` public mapping.
+
+        | Key | Meaning |
+        |-----|---------|
+        | 0   | Total invoices minted |
+        | 1   | Total invoices factored |
+        | 2   | Total invoices settled |
+        | 3   | Total volume (microcredits) |
+      operationId: getProtocolStats
+      responses:
+        '200':
+          description: Protocol-wide statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProtocolStats'
+              example:
+                total_invoices: 142
+                total_factored: 98
+                total_settled: 61
+                total_volume_microcredits: 9800000000
+
+  /protocol/health:
+    get:
+      tags: [Protocol]
+      summary: API health check
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  program:
+                    type: string
+                    example: zk_factor_9588.aleo
+                  network:
+                    type: string
+                    example: testnet
+
+
+# ─── COMPONENTS ──────────────────────────────────────────────
+
+components:
+
+  schemas:
+
+    AleoAddress:
+      type: string
+      pattern: '^aleo1[a-z0-9]{58}$'
+      example: "aleo1rhgdu77hgyqd3xjj8ucu3jj9r2krwz6mnzyd80gncr5fxcwlh5rsvzp9px"
+      description: Aleo wallet address (bech32 encoded, always starts with aleo1)
+
+    AleoField:
+      type: string
+      pattern: '^[0-9]+field$'
+      example: "123456field"
+      description: Aleo field element — used for hashes and nonces
+
+    RecordPlaintext:
+      type: string
+      description: |
+        Raw Aleo record plaintext as returned by the wallet adapter.
+        This is the string you pass directly as input to Leo transitions.
+      example: "{ owner: aleo1rhg....private, amount: 100000u64.private, _nonce: 1114...group.public, _version: 1u8.public }"
+
+    CreateInvoiceRequest:
+      type: object
+      required: [debtor, amount, due_date, invoice_hash, metadata]
+      properties:
+        debtor:
+          $ref: '#/components/schemas/AleoAddress'
+          description: Customer who owes payment (cannot be same as caller)
+        amount:
+          type: integer
+          minimum: 1
+          description: Invoice amount in microcredits (1,000,000 = 1 ALEO)
+          example: 100000
+        due_date:
+          type: integer
+          description: Payment due date as Unix timestamp (must be in the future)
+          example: 1780000000
+        invoice_hash:
+          $ref: '#/components/schemas/AleoField'
+          description: Poseidon hash of the off-chain invoice document
+        metadata:
+          type: integer
+          minimum: 0
+          description: |
+            Bit-packed u128. Layout:
+            - Bits 0–31: Invoice number
+            - Bits 32–47: Invoice type flags
+            - Bits 48–127: Reserved
+          example: 0
+
+    InvoiceRecord:
+      type: object
+      properties:
+        owner:
+          $ref: '#/components/schemas/AleoAddress'
+        debtor:
+          $ref: '#/components/schemas/AleoAddress'
+        amount:
+          type: integer
+          description: Microcredits
+        due_date:
+          type: integer
+          description: Unix timestamp
+        invoice_hash:
+          $ref: '#/components/schemas/AleoField'
+        nonce:
+          $ref: '#/components/schemas/AleoField'
+        metadata:
+          type: integer
+        spent:
+          type: boolean
+          description: True if this record has been consumed (invoice factored)
+        record_plaintext:
+          $ref: '#/components/schemas/RecordPlaintext'
+        transaction_id:
+          type: string
+          description: Transaction that created this record
+          example: "at1abc123..."
+
+    AuthorizeFactoringRequest:
+      type: object
+      required: [invoice_plaintext, factor_address, advance_rate]
+      properties:
+        invoice_plaintext:
+          $ref: '#/components/schemas/RecordPlaintext'
+          description: Raw Invoice record from wallet scan (requestRecords result)
+        factor_address:
+          $ref: '#/components/schemas/AleoAddress'
+          description: Address of the registered factor to offer the invoice to
+        advance_rate:
+          type: integer
+          minimum: 5000
+          maximum: 9900
+          description: Agreed advance rate in basis points (5000=50%, 9900=99%)
+          example: 9500
+
+    ExecuteFactoringRequest:
+      type: object
+      required: [offer_plaintext, payment_plaintext]
+      properties:
+        offer_plaintext:
+          $ref: '#/components/schemas/RecordPlaintext'
+          description: InvoiceOffer record received from business (Step 1 output)
+        payment_plaintext:
+          $ref: '#/components/schemas/RecordPlaintext'
+          description: Factor's credits record with sufficient microcredits
+
+    ExecuteFactoringResponse:
+      type: object
+      properties:
+        transaction_id:
+          type: string
+          example: "at1xyz..."
+        advance_amount:
+          type: integer
+          description: Amount transferred to business in microcredits
+          example: 95000
+        remainder_to_factor:
+          type: integer
+          description: Change credits returned to factor in microcredits
+          example: 5000
+
+    SettleInvoiceRequest:
+      type: object
+      required: [factored_plaintext, payment_plaintext]
+      properties:
+        factored_plaintext:
+          $ref: '#/components/schemas/RecordPlaintext'
+          description: FactoredInvoice record owned by the factor
+        payment_plaintext:
+          $ref: '#/components/schemas/RecordPlaintext'
+          description: Credits record with at least invoice.amount microcredits
+
+    SettlementInfo:
+      type: object
+      properties:
+        is_settled:
+          type: boolean
+        settlement_date:
+          type: integer
+          description: Unix timestamp of settlement
+        factor:
+          $ref: '#/components/schemas/AleoAddress'
+
+    RegisterFactorRequest:
+      type: object
+      required: [min_advance_rate, max_advance_rate]
+      properties:
+        min_advance_rate:
+          type: integer
+          minimum: 5000
+          maximum: 9900
+          description: Minimum advance rate this factor offers (basis points)
+          example: 8000
+        max_advance_rate:
+          type: integer
+          minimum: 5000
+          maximum: 9900
+          description: Maximum advance rate this factor offers (basis points)
+          example: 9500
+
+    FactorInfo:
+      type: object
+      properties:
+        address:
+          $ref: '#/components/schemas/AleoAddress'
+        is_active:
+          type: boolean
+        min_advance_rate:
+          type: integer
+          description: Basis points
+        max_advance_rate:
+          type: integer
+          description: Basis points
+        total_factored:
+          type: integer
+          description: Number of invoices this factor has processed
+        registration_date:
+          type: integer
+          description: Unix timestamp of registration
+
+    ProtocolStats:
+      type: object
+      properties:
+        total_invoices:
+          type: integer
+        total_factored:
+          type: integer
+        total_settled:
+          type: integer
+        total_volume_microcredits:
+          type: integer
+
+    TransactionResponse:
+      type: object
+      properties:
+        transaction_id:
+          type: string
+          description: Aleo transaction ID — use this to track confirmation
+          example: "at1abc123xyz..."
+        explorer_url:
+          type: string
+          description: Link to view transaction on block explorer
+          example: "https://testnet.explorer.provable.com/transaction/at1abc123xyz..."
+        status:
+          type: string
+          enum: [pending, accepted, rejected]
+          example: pending
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Machine-readable error code
+          example: "DOUBLE_SPEND"
+        message:
+          type: string
+          description: Human-readable explanation
+          example: "This invoice has already been factored."
+
+  responses:
+    ValidationError:
+      description: Invalid request parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "VALIDATION_ERROR"
+            message: "advance_rate must be between 5000 and 9900"
+
+    WalletNotConnected:
+      description: No wallet connected or transaction not signed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "WALLET_NOT_CONNECTED"
+            message: "Connect your Shield Wallet to perform this action"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "NOT_FOUND"
+            message: "No records found for this address"

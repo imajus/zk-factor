@@ -49,9 +49,9 @@ export function FactorDashboard() {
 
   const dynamicStats = [
     { ...statTemplates[0], value: isLoading ? '…' : String(factoredCount) },
-    { ...statTemplates[1], value: '—' },
+    { ...statTemplates[1], value: '-' },
     { ...statTemplates[2], value: isLoading ? '…' : String(factoredCount) },
-    { ...statTemplates[3], value: '—' },
+    { ...statTemplates[3], value: '-' },
   ];
 
   return (
