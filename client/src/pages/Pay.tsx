@@ -95,7 +95,7 @@ export default function Pay() {
           setSettledHashes((prev) => new Set([...prev, hash]));
         }
       } catch {
-        // not settled yet — ignore
+        // not settled yet - ignore
       }
     });
   }, [notices.length]);
@@ -416,7 +416,7 @@ export default function Pay() {
       )}
 
       <p className="text-xs text-center text-muted-foreground">
-        These invoices are encrypted in your wallet — only you can see them.
+        These invoices are encrypted in your wallet - only you can see them.
         Powered by Aleo private records.
       </p>
     </div>
