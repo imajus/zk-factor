@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useState, useEffect } from "react";
+import { useNavigate, Link } from "react-router-dom";
 import {
   ArrowLeft,
   CalendarIcon,
@@ -8,40 +8,58 @@ import {
   Sparkles,
   FileText,
   Info,
-} from 'lucide-react';
-import { format, addDays } from 'date-fns';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Calendar } from '@/components/ui/calendar';
+} from "lucide-react";
+import { format, addDays } from "date-fns";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Calendar } from "@/components/ui/calendar";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from '@/components/ui/popover';
+} from "@/components/ui/popover";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from '@/components/ui/collapsible';
-import { Separator } from '@/components/ui/separator';
-import { cn } from '@/lib/utils';
-import { toast } from 'sonner';
-import { useWallet } from '@/contexts/WalletContext';
-import { useTransaction } from '@/hooks/use-transaction';
-import { PROGRAM_ID } from '@/lib/config';
-const ALEO_FIELD_MODULUS = 8444461749428370424248824938781546531375899335154063827935233455917409239041n;
+} from "@/components/ui/collapsible";
+import { Separator } from "@/components/ui/separator";
+import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import { useWallet } from "@/contexts/WalletContext";
+import { useTransaction } from "@/hooks/use-transaction";
+import { PROGRAM_ID } from "@/lib/config";
 
-function computeInvoiceHash(invoiceNumber: string, debtor: string, amountMicrocredits: bigint): string {
+const ALEO_FIELD_MODULUS =
+  8444461749428370424248824938781546531375899335154063827935233455917409239041n;
+
+
+async function computeInvoiceHash(
+  invoiceNumber: string,
+  debtor: string,
+  amountMicrocredits: bigint,
+): Promise<string> {
   const canonical = `${invoiceNumber}:${debtor}:${amountMicrocredits}`;
-  const bytes = new TextEncoder().encode(canonical);
+  const encoded = new TextEncoder().encode(canonical);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", encoded);
+  const hashBytes = new Uint8Array(hashBuffer);
+
+  // Pack all 32 bytes into a BigInt
   let value = 0n;
-  for (let i = 0; i < Math.min(16, bytes.length); i++) {
-    value = (value << 8n) | BigInt(bytes[i]);
+  for (const byte of hashBytes) {
+    value = (value << 8n) | BigInt(byte);
   }
+
   return `${value % ALEO_FIELD_MODULUS}field`;
 }
 
@@ -65,16 +83,16 @@ export default function CreateInvoice() {
   const navigate = useNavigate();
   const { isConnected } = useWallet();
   const { execute, status, error: txError } = useTransaction();
-  const isSubmitting = status !== 'idle';
+  const isSubmitting = status !== "idle";
 
-  const [invoiceNumber, setInvoiceNumber] = useState('');
-  const [description, setDescription] = useState('');
-  const [debtorAddress, setDebtorAddress] = useState('');
-  const [amount, setAmount] = useState('');
+  const [invoiceNumber, setInvoiceNumber] = useState("");
+  const [description, setDescription] = useState("");
+  const [debtorAddress, setDebtorAddress] = useState("");
+  const [amount, setAmount] = useState("");
   const [dueDate, setDueDate] = useState<Date>();
   const [items, setItems] = useState<InvoiceItem[]>([]);
   const [makeDebtorPublic, setMakeDebtorPublic] = useState(false);
-  const [internalNotes, setInternalNotes] = useState('');
+  const [internalNotes, setInternalNotes] = useState("");
   const [showPreview, setShowPreview] = useState(false);
 
   const generateInvoiceNumber = () => {
@@ -83,27 +101,45 @@ export default function CreateInvoice() {
   };
 
   const addItem = () => {
-    setItems([...items, { id: crypto.randomUUID(), description: '', quantity: 1, unitPrice: 0 }]);
+    setItems([
+      ...items,
+      { id: crypto.randomUUID(), description: "", quantity: 1, unitPrice: 0 },
+    ]);
   };
 
-  const updateItem = (id: string, field: keyof InvoiceItem, value: string | number) => {
-    setItems(items.map(item => item.id === id ? { ...item, [field]: value } : item));
+  const updateItem = (
+    id: string,
+    field: keyof InvoiceItem,
+    value: string | number,
+  ) => {
+    setItems(
+      items.map((item) =>
+        item.id === id ? { ...item, [field]: value } : item,
+      ),
+    );
   };
 
   const removeItem = (id: string) => {
-    setItems(items.filter(item => item.id !== id));
+    setItems(items.filter((item) => item.id !== id));
   };
 
-  const itemsTotal = items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+  const itemsTotal = items.reduce(
+    (sum, item) => sum + item.quantity * item.unitPrice,
+    0,
+  );
 
   useEffect(() => {
-    if (status === 'submitting') toast.loading('Generating proof…', { id: 'create-invoice' });
-    else if (status === 'pending') toast.loading('Broadcasting…', { id: 'create-invoice' });
-    else if (status === 'accepted') {
-      toast.success('Invoice created successfully!', { id: 'create-invoice' });
-      navigate('/invoices');
-    } else if (status === 'failed') {
-      toast.error(txError || 'Failed to create invoice', { id: 'create-invoice' });
+    if (status === "submitting")
+      toast.loading("Generating proof...", { id: "create-invoice" });
+    else if (status === "pending")
+      toast.loading("Broadcasting...", { id: "create-invoice" });
+    else if (status === "accepted") {
+      toast.success("Invoice created successfully!", { id: "create-invoice" });
+      navigate("/invoices");
+    } else if (status === "failed") {
+      toast.error(txError || "Failed to create invoice", {
+        id: "create-invoice",
+      });
     }
   }, [status, txError, navigate]);
 
@@ -111,13 +147,20 @@ export default function CreateInvoice() {
     e.preventDefault();
     if (!isConnected || !dueDate) return;
     try {
-      const amountMicrocredits = BigInt(Math.round(parseFloat(amount) * 1_000_000));
+      const amountMicrocredits = BigInt(
+        Math.round(parseFloat(amount) * 1_000_000),
+      );
       const dueDateUnix = BigInt(Math.floor(dueDate.getTime() / 1000));
-      const invoiceHash = computeInvoiceHash(invoiceNumber, debtorAddress, amountMicrocredits);
+      // await because computeInvoiceHash is now async (uses crypto.subtle)
+      const invoiceHash = await computeInvoiceHash(
+        invoiceNumber,
+        debtorAddress,
+        amountMicrocredits,
+      );
       const metadata = encodeMetadata(invoiceNumber);
       await execute({
         program: PROGRAM_ID,
-        function: 'mint_invoice',
+        function: "mint_invoice",
         inputs: [
           debtorAddress,
           `${amountMicrocredits}u64`,
@@ -129,12 +172,17 @@ export default function CreateInvoice() {
         privateFee: false,
       });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to create invoice', { id: 'create-invoice' });
+      toast.error(
+        err instanceof Error ? err.message : "Failed to create invoice",
+        { id: "create-invoice" },
+      );
     }
   };
 
-  const isValidAddress = (addr: string) => addr.startsWith('aleo1') && addr.length === 63;
-  const isFormValid = isConnected && !!invoiceNumber && !!debtorAddress && !!amount && !!dueDate;
+  const isValidAddress = (addr: string) =>
+    addr.startsWith("aleo1") && addr.length === 63;
+  const isFormValid =
+    isConnected && !!invoiceNumber && !!debtorAddress && !!amount && !!dueDate;
 
   return (
     <div className="container py-6 max-w-4xl">
@@ -147,7 +195,9 @@ export default function CreateInvoice() {
         </Button>
         <div>
           <h1 className="text-2xl font-bold">Create Invoice</h1>
-          <p className="text-muted-foreground">Mint a new invoice record on-chain</p>
+          <p className="text-muted-foreground">
+            Mint a new invoice record on-chain
+          </p>
         </div>
       </div>
 
@@ -176,11 +226,17 @@ export default function CreateInvoice() {
                       maxLength={32}
                       required
                     />
-                    <Button type="button" variant="outline" onClick={generateInvoiceNumber}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={generateInvoiceNumber}
+                    >
                       <Sparkles className="h-4 w-4" />
                     </Button>
                   </div>
-                  <p className="text-xs text-muted-foreground">Internal reference number</p>
+                  <p className="text-xs text-muted-foreground">
+                    Internal reference number
+                  </p>
                 </div>
 
                 {/* Description */}
@@ -212,9 +268,13 @@ export default function CreateInvoice() {
                     required
                   />
                   {debtorAddress && !isValidAddress(debtorAddress) && (
-                    <p className="text-xs text-destructive">Invalid Aleo address format</p>
+                    <p className="text-xs text-destructive">
+                      Invalid Aleo address format
+                    </p>
                   )}
-                  <p className="text-xs text-muted-foreground">Customer who will pay this invoice</p>
+                  <p className="text-xs text-muted-foreground">
+                    Customer who will pay this invoice
+                  </p>
                 </div>
 
                 {/* Amount */}
@@ -232,7 +292,8 @@ export default function CreateInvoice() {
                   />
                   {amount && (
                     <p className="text-xs text-muted-foreground">
-                      ≈ {(parseFloat(amount) * 1000000).toLocaleString()} microcredits
+                      ≈ {(parseFloat(amount) * 1000000).toLocaleString()}{" "}
+                      microcredits
                     </p>
                   )}
                 </div>
@@ -246,12 +307,12 @@ export default function CreateInvoice() {
                         <Button
                           variant="outline"
                           className={cn(
-                            'justify-start text-left font-normal flex-1',
-                            !dueDate && 'text-muted-foreground'
+                            "justify-start text-left font-normal flex-1",
+                            !dueDate && "text-muted-foreground",
                           )}
                         >
                           <CalendarIcon className="mr-2 h-4 w-4" />
-                          {dueDate ? format(dueDate, 'PPP') : 'Pick a date'}
+                          {dueDate ? format(dueDate, "PPP") : "Pick a date"}
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent className="w-auto p-0" align="start">
@@ -264,13 +325,28 @@ export default function CreateInvoice() {
                         />
                       </PopoverContent>
                     </Popover>
-                    <Button type="button" variant="outline" size="sm" onClick={() => setDueDate(addDays(new Date(), 30))}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setDueDate(addDays(new Date(), 30))}
+                    >
                       +30d
                     </Button>
-                    <Button type="button" variant="outline" size="sm" onClick={() => setDueDate(addDays(new Date(), 60))}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setDueDate(addDays(new Date(), 60))}
+                    >
                       +60d
                     </Button>
-                    <Button type="button" variant="outline" size="sm" onClick={() => setDueDate(addDays(new Date(), 90))}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setDueDate(addDays(new Date(), 90))}
+                    >
                       +90d
                     </Button>
                   </div>
@@ -282,7 +358,9 @@ export default function CreateInvoice() {
             <Card>
               <CardHeader>
                 <CardTitle>Invoice Items (Optional)</CardTitle>
-                <CardDescription>Add line items for detailed invoicing</CardDescription>
+                <CardDescription>
+                  Add line items for detailed invoicing
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {items.length > 0 && (
@@ -293,30 +371,50 @@ export default function CreateInvoice() {
                           <Input
                             placeholder="Item description"
                             value={item.description}
-                            onChange={(e) => updateItem(item.id, 'description', e.target.value)}
+                            onChange={(e) =>
+                              updateItem(item.id, "description", e.target.value)
+                            }
                           />
                         </div>
                         <Input
                           type="number"
                           placeholder="Qty"
-                          value={item.quantity || ''}
-                          onChange={(e) => updateItem(item.id, 'quantity', parseFloat(e.target.value) || 0)}
+                          value={item.quantity || ""}
+                          onChange={(e) =>
+                            updateItem(
+                              item.id,
+                              "quantity",
+                              parseFloat(e.target.value) || 0,
+                            )
+                          }
                           className="w-20"
                           min="1"
                         />
                         <Input
                           type="number"
                           placeholder="Price"
-                          value={item.unitPrice || ''}
-                          onChange={(e) => updateItem(item.id, 'unitPrice', parseFloat(e.target.value) || 0)}
+                          value={item.unitPrice || ""}
+                          onChange={(e) =>
+                            updateItem(
+                              item.id,
+                              "unitPrice",
+                              parseFloat(e.target.value) || 0,
+                            )
+                          }
                           className="w-28"
                           min="0"
                           step="0.01"
                         />
                         <div className="w-28 text-right font-mono text-sm py-2">
-                          {(item.quantity * item.unitPrice).toLocaleString()} ALEO
+                          {(item.quantity * item.unitPrice).toLocaleString()}{" "}
+                          ALEO
                         </div>
-                        <Button type="button" variant="ghost" size="icon" onClick={() => removeItem(item.id)}>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeItem(item.id)}
+                        >
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
@@ -324,16 +422,28 @@ export default function CreateInvoice() {
                     <Separator />
                     <div className="flex justify-between items-center">
                       <span className="text-sm font-medium">Total</span>
-                      <span className="font-mono font-semibold">{itemsTotal.toLocaleString()} ALEO</span>
+                      <span className="font-mono font-semibold">
+                        {itemsTotal.toLocaleString()} ALEO
+                      </span>
                     </div>
                     {itemsTotal > 0 && (
-                      <Button type="button" variant="outline" size="sm" onClick={() => setAmount(itemsTotal.toString())}>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setAmount(itemsTotal.toString())}
+                      >
                         Use as Invoice Amount
                       </Button>
                     )}
                   </div>
                 )}
-                <Button type="button" variant="outline" onClick={addItem} className="w-full">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={addItem}
+                  className="w-full"
+                >
                   <Plus className="h-4 w-4 mr-2" />
                   Add Item
                 </Button>
@@ -350,10 +460,15 @@ export default function CreateInvoice() {
                   <Checkbox
                     id="makeDebtorPublic"
                     checked={makeDebtorPublic}
-                    onCheckedChange={(checked) => setMakeDebtorPublic(checked as boolean)}
+                    onCheckedChange={(checked) =>
+                      setMakeDebtorPublic(checked as boolean)
+                    }
                   />
                   <div className="space-y-1">
-                    <Label htmlFor="makeDebtorPublic" className="cursor-pointer">
+                    <Label
+                      htmlFor="makeDebtorPublic"
+                      className="cursor-pointer"
+                    >
                       Make debtor address public
                     </Label>
                     <p className="text-xs text-muted-foreground">
@@ -362,7 +477,9 @@ export default function CreateInvoice() {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="internalNotes">Internal Notes (Optional)</Label>
+                  <Label htmlFor="internalNotes">
+                    Internal Notes (Optional)
+                  </Label>
                   <Textarea
                     id="internalNotes"
                     value={internalNotes}
@@ -387,23 +504,31 @@ export default function CreateInvoice() {
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Invoice #</span>
-                    <span className="font-mono">{invoiceNumber || '-'}</span>
+                    <span className="font-mono">{invoiceNumber || "-"}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Amount</span>
                     <span className="font-mono font-semibold">
-                      {amount ? `${parseFloat(amount).toLocaleString()} ALEO` : '-'}
+                      {amount
+                        ? `${parseFloat(amount).toLocaleString()} ALEO`
+                        : "-"}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Due Date</span>
-                    <span>{dueDate ? format(dueDate, 'MMM d, yyyy') : '-'}</span>
+                    <span>
+                      {dueDate ? format(dueDate, "MMM d, yyyy") : "-"}
+                    </span>
                   </div>
                 </div>
                 <Separator />
                 <Collapsible open={showPreview} onOpenChange={setShowPreview}>
                   <CollapsibleTrigger asChild>
-                    <Button variant="ghost" size="sm" className="w-full justify-between">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full justify-between"
+                    >
                       Technical Details
                       <Info className="h-4 w-4" />
                     </Button>
@@ -431,13 +556,17 @@ export default function CreateInvoice() {
                   size="lg"
                   disabled={isSubmitting || !isFormValid}
                 >
-                  {!isConnected ? 'Connect Wallet' : isSubmitting ? 'Creating…' : 'Create Invoice'}
+                  {!isConnected
+                    ? "Connect Wallet"
+                    : isSubmitting
+                      ? "Creating..."
+                      : "Create Invoice"}
                 </Button>
                 <Button
                   type="button"
                   variant="ghost"
                   className="w-full"
-                  onClick={() => navigate('/invoices')}
+                  onClick={() => navigate("/invoices")}
                 >
                   Cancel
                 </Button>
