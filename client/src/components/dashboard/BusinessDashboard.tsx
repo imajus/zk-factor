@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link } from "react-router-dom";
 import {
   FileText,
   TrendingUp,
@@ -7,34 +7,39 @@ import {
   Plus,
   Users,
   ArrowRight,
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { StatCard } from '@/components/ui/stat-card';
-import { useQuery } from '@tanstack/react-query';
-import { useWallet } from '@/contexts/WalletContext';
-import { PROGRAM_ID } from '@/lib/config';
-
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { StatCard } from "@/components/ui/stat-card";
+import { useQuery } from "@tanstack/react-query";
+import { useWallet } from "@/contexts/WalletContext";
+import { PROGRAM_ID } from "@/lib/config";
 
 const stats = [
   {
-    title: 'Total Invoices',
-    value: '—',
+    title: "Total Invoices",
+    value: "-",
     icon: <FileText className="h-5 w-5 text-primary" />,
   },
   {
-    title: 'Total Factored',
-    value: '—',
+    title: "Total Factored",
+    value: "-",
     icon: <TrendingUp className="h-5 w-5 text-primary" />,
   },
   {
-    title: 'Pending Requests',
-    value: '—',
+    title: "Pending Requests",
+    value: "-",
     icon: <Clock className="h-5 w-5 text-primary" />,
   },
   {
-    title: 'Available to Factor',
-    value: '—',
+    title: "Available to Factor",
+    value: "-",
     icon: <CheckCircle2 className="h-5 w-5 text-primary" />,
   },
 ];
@@ -43,20 +48,24 @@ export function BusinessDashboard() {
   const { requestRecords, isConnected } = useWallet();
 
   const { data: records, isLoading } = useQuery({
-    queryKey: ['records', PROGRAM_ID, 'dashboard'],
+    queryKey: ["records", PROGRAM_ID, "dashboard"],
     queryFn: () => requestRecords(PROGRAM_ID, true),
     enabled: isConnected,
     staleTime: 60_000,
   });
 
-  const invoiceCount = (records as Array<{ recordName: string; spent: boolean }> ?? []).filter((r) => r.recordName === 'Invoice' && !r.spent).length;
-  const factoredCount = (records as Array<{ recordName: string; spent: boolean }> ?? []).filter((r) => r.recordName === 'FactoredInvoice' && !r.spent).length;
+  const invoiceCount = (
+    (records as Array<{ recordName: string; spent: boolean }>) ?? []
+  ).filter((r) => r.recordName === "Invoice" && !r.spent).length;
+  const factoredCount = (
+    (records as Array<{ recordName: string; spent: boolean }>) ?? []
+  ).filter((r) => r.recordName === "FactoredInvoice" && !r.spent).length;
 
   const dynamicStats = [
-    { ...stats[0], value: isLoading ? '…' : String(invoiceCount) },
-    { ...stats[1], value: isLoading ? '…' : String(factoredCount) },
-    { ...stats[2], value: '—' },
-    { ...stats[3], value: isLoading ? '…' : String(invoiceCount) },
+    { ...stats[0], value: isLoading ? "…" : String(invoiceCount) },
+    { ...stats[1], value: isLoading ? "…" : String(factoredCount) },
+    { ...stats[2], value: "-" },
+    { ...stats[3], value: isLoading ? "…" : String(invoiceCount) },
   ];
 
   return (
@@ -65,7 +74,9 @@ export function BusinessDashboard() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Dashboard</h1>
-          <p className="text-muted-foreground">Manage your invoices and factoring requests</p>
+          <p className="text-muted-foreground">
+            Manage your invoices and factoring requests
+          </p>
         </div>
         <div className="flex gap-2">
           <Button asChild>

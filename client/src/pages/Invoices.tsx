@@ -49,14 +49,6 @@ import { formatDate, getDaysUntilDue } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { PROGRAM_ID, API_ENDPOINT } from "@/lib/config";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-} from "@/components/ui/dialog";
-import { DialogTitle } from "@radix-ui/react-dialog";
 
 interface AleoRecord {
   recordName: string;
@@ -99,8 +91,6 @@ export default function Invoices() {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [settlingId, setSettlingId] = useState<string | null>(null);
   const [settledHashes, setSettledHashes] = useState<Set<string>>(new Set());
-  const [privacyWarningRecord, setPrivacyWarningRecord] =
-    useState<AleoRecord | null>(null);
 
   const {
     data: records,
@@ -236,18 +226,13 @@ export default function Invoices() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes("already exists in the ledger")) {
-        toast.error("Already published — copy the link and send it to your debtor.");
+        toast.error(
+          "Already published - copy the link and send it to your debtor.",
+        );
       } else {
         toast.error("Could not publish payment request. Try again.");
       }
     }
-  };
-
-  const handleCopyPayLink = (record: AleoRecord) => {
-    const hash = getField(record.recordPlaintext, "invoice_hash");
-    const url = `${window.location.origin}/pay?hash=${hash}`;
-    navigator.clipboard.writeText(url);
-    toast.success("Payment link copied — send this to your debtor");
   };
 
   const handleAcceptOffer = async (record: AleoRecord) => {
@@ -532,22 +517,6 @@ export default function Invoices() {
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem
-                                onClick={() => {
-                                  const hash = getField(
-                                    invoice.recordPlaintext,
-                                    "invoice_hash",
-                                  );
-                                  const url = `${window.location.origin}/pay?hash=${hash}`;
-                                  navigator.clipboard.writeText(url);
-                                  toast.success(
-                                    "Payment link copied — send this to your debtor",
-                                  );
-                                }}
-                              >
-                                <Copy className="h-4 w-4 mr-2" />
-                                Copy Debtor Payment Link
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
                                 onClick={() =>
                                   window.open(
                                     `${import.meta.env.VITE_ALEO_EXPLORER}/transaction/${invoice.transactionId}`,
@@ -702,16 +671,11 @@ export default function Invoices() {
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem
-                                onClick={() => setPrivacyWarningRecord(record)}
+                                onClick={() => handleRequestPayment(record)}
+                                disabled={isSettled}
                               >
                                 <Receipt className="h-4 w-4 mr-2" />
                                 Request Payment from Debtor
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() => handleCopyPayLink(record)}
-                              >
-                                <Copy className="h-4 w-4 mr-2" />
-                                Copy Payment Link
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 onClick={() => handleSettle(record)}
@@ -744,64 +708,6 @@ export default function Invoices() {
           </CardContent>
         </Card>
       )}
-
-      <Dialog
-        open={!!privacyWarningRecord}
-        onOpenChange={(open) => {
-          if (!open) setPrivacyWarningRecord(null);
-        }}
-      >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <AlertCircle className="h-5 w-5 text-destructive" />
-              Privacy Warning
-            </DialogTitle>
-            <DialogDescription asChild>
-              <div className="space-y-3 pt-2 text-left">
-                <div>
-                  Requesting payment will <strong>permanently publish</strong>{" "}
-                  the following information on the public Aleo blockchain:
-                </div>
-                <ul className="list-disc pl-5 space-y-1 text-sm">
-                  <li>Invoice amount</li>
-                  <li>Debtor's wallet address</li>
-                  <li>Your (factor) wallet address</li>
-                  <li>Invoice due date</li>
-                </ul>
-                <div className="text-sm">
-                  This data will be visible to <strong>anyone, forever</strong>{" "}
-                  - including anyone who queries the chain in the future. It
-                  cannot be deleted or hidden after publishing.
-                </div>
-                <div className="text-sm text-muted-foreground">
-                  Only proceed if you're ready to collect payment from the
-                  debtor.
-                </div>
-              </div>
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setPrivacyWarningRecord(null)}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                if (privacyWarningRecord) {
-                  handleRequestPayment(privacyWarningRecord);
-                  setPrivacyWarningRecord(null);
-                }
-              }}
-            >
-              Publish & Request Payment
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {recordTypeFilter === "offers" && (
         <Card>

@@ -1,5 +1,8 @@
+# Product Requirements Document
+
 ## Table of Contents
 
+- [What is ZK Factor?](#what-is-zk-factor)
 - [What is Invoice Factoring?](#what-is-invoice-factoring)
 - [What is Double-Factoring Fraud?](#what-is-double-factoring-fraud)
 - [Why Aleo is Perfect for This](#why-aleo-is-perfect-for-this)
@@ -7,7 +10,13 @@
 - [Pain Points by User Type](#pain-points-by-user-type)
 - [MVP Features](#mvp-features)
 - [User Flows](#user-flows)
+- [How We Built It](#how-we-built-it)
+- [What We Learned](#what-we-learned)
 - [Revenue Model Ideas](#revenue-model-ideas)
+
+## What is ZK Factor?
+
+ZK Factor is a privacy-preserving invoice factoring platform built on Aleo blockchain. It cryptographically prevents double-factoring fraud while keeping invoice amounts, business relationships, and transaction details completely private. Businesses mint invoice records, factors purchase them through atomic swaps, and the UTXO consumption model makes re-factoring the same invoice mathematically impossible.
 
 ## What is Invoice Factoring?
 
@@ -33,11 +42,9 @@ Double Factoring Fraud occurs when a company sells the same invoice to more than
 5. Retailer pays $100,000 → only ONE factor gets paid
 6. Two factors lose $95,000 each
 
-Industry reports indicate that up to 15% of submitted invoices may contain errors or fraudulent elements, and factoring firms can face losses of millions annually if fraud goes undetected.
+Industry reports indicate that up to 15% of submitted invoices may contain errors or fraudulent elements, and factoring firms can face losses of millions annually if fraud goes undetected. The [$2.3 billion First Brands Group case](https://www.funderintel.com/post/the-2-3-billion-vanishing-act-first-brands-and-the-factoring-fraud-that-shocked-wall-street) is under DOJ investigation as of 2025.
 
-**Current "solutions" are inadequate:** Establishing a centralized, real-time database to record and track the status of receivables can help prevent duplicate financing. This allows financiers to check whether a receivable has already been financed before approving a transaction.
-
-But these databases are:
+**Current "solutions" are inadequate:**
 
 - Siloed (factors don't share data with competitors)
 - Require trust in central operator
@@ -56,12 +63,12 @@ No central database needed. No trust required. Cryptographically impossible to d
 
 ## Target Audience
 
-|Segment|Pain Points|
-|---|---|
-|**Small/Medium Enterprises (SMEs)**|Cash flow gaps, rejected by banks, long payment cycles|
-|**Factoring Companies**|Fraud losses, verification costs, competitive data sharing|
-|**International Traders**|Cross-border verification, currency risk, trust issues|
-|**Manufacturing/Logistics**|60-90 day payment terms, seasonal cash needs|
+| Segment                             | Pain Points                                                |
+| ----------------------------------- | ---------------------------------------------------------- |
+| **Small/Medium Enterprises (SMEs)** | Cash flow gaps, rejected by banks, long payment cycles     |
+| **Factoring Companies**             | Fraud losses, verification costs, competitive data sharing |
+| **International Traders**           | Cross-border verification, currency risk, trust issues     |
+| **Manufacturing/Logistics**         | 60-90 day payment terms, seasonal cash needs               |
 
 **Primary users:**
 
@@ -80,44 +87,44 @@ No central database needed. No trust required. Cryptographically impossible to d
 
 ### For Factoring Companies:
 
-- Fraud undermines trust between businesses, financiers, and other stakeholders. It creates uncertainty and discourages participation in the factoring market.
-- Resolving disputes can involve lengthy and costly legal battles, further straining resources and damaging reputations.
+- Fraud undermines trust between businesses, financiers, and other stakeholders
+- Resolving disputes can involve lengthy and costly legal battles
 - No way to verify if invoice was already factored elsewhere
 - Manual debtor verification is expensive
 
 ### For the Ecosystem:
 
-- The lack of preventive mechanisms incentivizes fraudulent behavior, leading to a higher overall risk profile for the industry.
+- The lack of preventive mechanisms incentivizes fraudulent behavior, leading to a higher overall risk profile for the industry
 
 ## MVP Features
 
 ### Must Have (Wave 1-2):
 
-|Feature|Description|Aleo Implementation|
-|---|---|---|
-|**Invoice Registration**|Business creates invoice record|`mint_invoice()` → private `Invoice` record|
-|**Factor Verification**|Factor checks invoice not already sold|Query serial number registry (fails if exists)|
-|**Factoring Transaction**|Business sells invoice to factor|`factor_invoice()` consumes Invoice, mints `FactoredInvoice` to factor|
-|**Anti-Double-Factor**|Cryptographic guarantee|Serial number published on-chain = spent|
-|**Payment Settlement**|Debtor pays, factor receives|`settle_invoice()` releases escrowed funds|
+| Feature                   | Description                            | Aleo Implementation                                                    |
+| ------------------------- | -------------------------------------- | ---------------------------------------------------------------------- |
+| **Invoice Registration**  | Business creates invoice record        | `mint_invoice()` → private `Invoice` record                            |
+| **Factor Verification**   | Factor checks invoice not already sold | Query serial number registry (fails if exists)                         |
+| **Factoring Transaction** | Business sells invoice to factor       | `factor_invoice()` consumes Invoice, mints `FactoredInvoice` to factor |
+| **Anti-Double-Factor**    | Cryptographic guarantee                | Serial number published on-chain = spent                               |
+| **Payment Settlement**    | Debtor pays, factor receives           | `settle_invoice()` releases escrowed funds                             |
 
 ### Should Have (Wave 3-4):
 
-|Feature|Description|
-|---|---|
-|**USDCx Payment Integration**|Accept and settle payments in USDCx stablecoin|
-|**Partial Factoring**|Sell 50% of invoice, keep 50%|
-|**Recourse Tracking**|If debtor doesn't pay, track return to business|
-|**Multi-Factor Syndication**|Large invoices split across multiple factors|
-|**Credit Scoring**|ZK proof of payment history without revealing details|
+| Feature                            | Description                                           |
+| ---------------------------------- | ----------------------------------------------------- |
+| **Stablecoin Payment Integration** | Accept and settle payments in USDCx stablecoin        |
+| **Partial Factoring**              | Sell 50% of invoice, keep 50%                         |
+| **Recourse Tracking**              | If debtor doesn't pay, track return to business       |
+| **Multi-Factor Syndication**       | Large invoices split across multiple factors          |
+| **Credit Scoring**                 | ZK proof of payment history without revealing details |
 
 ### Nice to Have (Wave 5+):
 
-|Feature|Description|
-|---|---|
-|**Cross-border Factoring**|Multi-currency support|
-|**Supply Chain Integration**|Auto-generate invoices from delivery confirmation|
-|**Debtor Notification**|Privacy-preserving payment instructions|
+| Feature                      | Description                                       |
+| ---------------------------- | ------------------------------------------------- |
+| **Cross-border Factoring**   | Multi-currency support                            |
+| **Supply Chain Integration** | Auto-generate invoices from delivery confirmation |
+| **Debtor Notification**      | Privacy-preserving payment instructions           |
 
 ## User Flows
 
@@ -127,12 +134,14 @@ No central database needed. No trust required. Cryptographically impossible to d
 flowchart TD
     A[Invoice Creation<br/>mint_invoice]
     B[Factor Discovery<br/>Browse marketplace]
-    C[Factoring Request<br/>request_factoring]
-    D[Factor Approval<br/>Verify serial number]
+    C[Factoring Request<br/>authorize_factoring]
+    D[Factor Approval<br/>execute_factoring]
     E[Atomic Swap<br/>Invoice consumed, payment transferred]
-    F[Settlement<br/>settle_invoice]
+    F[Payment Request<br/>create_payment_request]
+    G[Debtor Payment<br/>pay_invoice]
+    H[Settlement<br/>settle_invoice]
 
-    A --> B --> C --> D --> E --> F
+    A --> B --> C --> D --> E --> F --> G --> H
 ```
 
 ### Flow 2: Attempted Double-Factoring (BLOCKED)
@@ -150,17 +159,61 @@ flowchart TD
 
 **No central database. No trust. Cryptographically impossible.**
 
-### Flow 3: Factor Verifies Invoice Authenticity
+### Flow 3: Debtor Payment Flow (Private)
 
 ```mermaid
 flowchart TD
-    A[Factor Verification]
-    B[ZK Proof from Business<br/>Proves delivery without revealing details]
-    C[Debtor Confirmation<br/>Acknowledges invoice privately]
+    A[Factor sends PaymentNotice record to debtor]
+    B[Debtor connects wallet — encrypted record appears]
+    C[TX1: credits.aleo/transfer_public to factor]
+    D[TX2: pay_invoice consumes PaymentNotice, marks settled]
 
-    A --> B
-    A --> C
-
-    style B fill:#51cf66,color:#000000
-    style C fill:#51cf66,color:#000000
+    A --> B --> C --> D
 ```
+
+The PaymentNotice record is encrypted with the debtor's public key — nothing is readable on-chain. Only the debtor's wallet can decrypt it.
+
+## How We Built It
+
+Designed a UTXO-based record model where Invoice records are consumed during factoring, publishing serial numbers that prevent reuse.
+
+Implemented core Leo transitions:
+
+- `mint_invoice()` creates encrypted invoice records
+- `authorize_factoring()` consumes Invoice → FactoringOffer to factor
+- `execute_factoring()` atomically swaps FactoringOffer for payment while transferring advance to business
+- `create_payment_request()` sends private PaymentNotice record to debtor (nothing public)
+- `pay_invoice()` consumes PaymentNotice and marks invoice settled on-chain
+- `settle_invoice()` allows factor to finalize after debtor payment
+
+Used public mappings for factor registration (`active_factors`) and settlement tracking (`settled_invoices`) while keeping all sensitive data in encrypted records.
+
+Built React frontend with Shield Wallet integration, proof generation progress tracking, and asynchronous record discovery.
+
+**Technologies:**
+
+- Aleo blockchain
+- Leo programming language
+- React + TypeScript with `@provablehq/sdk`
+- Shield Wallet integration
+- zkSNARKs, Poseidon hashing
+- Record encryption, zero-knowledge proofs, on-chain commitments
+
+## What We Learned
+
+The UTXO model requires fundamentally different architectural thinking than account-based systems. Zero-knowledge proofs provide genuine cryptographic confidentiality but introduce latency that challenges traditional UX expectations.
+
+Key lessons:
+
+- **Record discovery limitations** force careful consideration of wallet synchronization flows
+- **Async design isn't optional** when proving may take minutes
+- **Shield Wallet cannot handle cross-program calls** in a single transaction — this required splitting the debtor payment into two sequential transactions
+- **Private records are powerful** — the PaymentNotice pattern eliminates the need for any public mapping to coordinate debtor payment
+- **Blockchain privacy requires thinking beyond cryptography** to include network metadata, timing analysis, and operational security
+
+## Revenue Model Ideas
+
+- **Protocol fee**: 0.3-0.7% of factored amount collected automatically via smart contract
+- **Factor subscriptions**: Monthly fee for unlimited verifications + premium analytics
+- **ZK credit scoring**: Fee-based proof generation for payment history
+- **White-label licensing**: Private instance deployments for banks and fintechs

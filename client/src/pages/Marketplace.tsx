@@ -414,7 +414,7 @@ export default function Marketplace() {
                                           key={r.commitment}
                                           value={r.commitment}
                                         >
-                                          {hash.slice(0, 12)}… — {amount} ALEO
+                                          {hash.slice(0, 12)}… - {amount} ALEO
                                         </SelectItem>
                                       );
                                     })

@@ -1,10 +1,15 @@
-// src/pages/Pay.tsx
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
-import { Wallet, Search, CheckCircle, AlertCircle } from "lucide-react";
+import {
+  Wallet,
+  CheckCircle,
+  AlertCircle,
+  Clock,
+  RefreshCw,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Card,
   CardContent,
@@ -13,74 +18,88 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { AddressDisplay } from "@/components/ui/address-display";
 import { AleoNetworkClient } from "@provablehq/sdk";
-import { formatAleo } from "@/lib/format";
+import { formatDate, getDaysUntilDue } from "@/lib/format";
 import { useWallet } from "@/contexts/WalletContext";
 import { useTransaction } from "@/hooks/use-transaction";
+import { useQuery } from "@tanstack/react-query";
 import { PROGRAM_ID, API_ENDPOINT } from "@/lib/config";
-import { useSearchParams } from "react-router-dom";
+import { cn } from "@/lib/utils";
 
-interface PaymentRequest {
-  factor: string;
-  amount: bigint;
-  due_date: number;
-  debtor: string;
+interface AleoRecord {
+  recordName: string;
+  owner: string;
+  programName: string;
+  recordPlaintext: string;
+  spent: boolean;
+  commitment?: string;
 }
 
-// Parse the raw struct string returned by getProgramMappingValue
-function parsePaymentRequest(raw: string): PaymentRequest | null {
-  try {
-    // Remove outer braces and split by comma
-    const cleaned = raw.replace(/^\{/, "").replace(/\}$/, "").trim();
-
-    const get = (field: string): string => {
-      // Match "field: value" with optional type suffix and trailing comma
-      const regex = new RegExp(`${field}\\s*:\\s*([^,}]+)`);
-      const m = cleaned.match(regex);
-      if (!m) return "";
-      return m[1].trim().replace(/u64$/, "").replace(/u32$/, "").trim();
-    };
-
-    const amount = get("amount");
-    const due_date = get("due_date");
-
-    return {
-      factor: get("factor"),
-      amount: BigInt(amount || "0"),
-      due_date: parseInt(due_date || "0", 10),
-      debtor: get("debtor"),
-    };
-  } catch (e) {
-    console.error("parsePaymentRequest failed:", e, "raw:", raw);
-    return null;
+function getField(plaintext: string, field: string): string {
+  for (const line of plaintext.split("\n")) {
+    const trimmed = line.trimStart();
+    if (!trimmed.startsWith(`${field}:`)) continue;
+    const m = trimmed.match(/^[^:]+:\s*(.+?)\.(?:private|public)/);
+    if (m) return m[1].trim();
   }
+  return "";
+}
+
+function microToAleo(microcredits: string): number {
+  return parseInt(microcredits.replace(/u64$/, ""), 10) / 1_000_000;
+}
+
+function unixToDate(unixSeconds: string): Date {
+  return new Date(parseInt(unixSeconds.replace(/u64$/, ""), 10) * 1000);
 }
 
 export default function Pay() {
-  const { isConnected, address } = useWallet();
+  const { isConnected, address, requestRecords } = useWallet();
   const { execute, status, error: txError, reset } = useTransaction();
+  const [payingId, setPayingId] = useState<string | null>(null);
+  const [paidHashes, setPaidHashes] = useState<Set<string>>(new Set());
+  const [settledHashes, setSettledHashes] = useState<Set<string>>(new Set());
+  const [expandedHash, setExpandedHash] = useState<string | null>(null);
 
-  const [invoiceHash, setInvoiceHash] = useState("");
-  const [paymentRequest, setPaymentRequest] = useState<PaymentRequest | null>(
-    null,
+  const {
+    data: records,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
+    queryKey: ["payment-notices", address],
+    queryFn: () => requestRecords(PROGRAM_ID, true),
+    enabled: isConnected,
+    staleTime: 30_000,
+  });
+
+  const notices = ((records as AleoRecord[]) ?? []).filter(
+    (r) => r.recordName === "PaymentNotice" && !r.spent,
   );
-  const [lookupError, setLookupError] = useState<string | null>(null);
-  const [isLooking, setIsLooking] = useState(false);
-  const [paid, setPaid] = useState(false);
-  const [searchParams] = useSearchParams();
 
-  // At the top of the component, auto-fill if hash is in URL
   useEffect(() => {
-    const hash = searchParams.get("hash");
-    if (hash) {
-      setInvoiceHash(hash);
-      // Auto-trigger lookup
-      handleLookup(hash);
-    }
-  }, []);
+    if (!notices.length) return;
+    const client = new AleoNetworkClient(API_ENDPOINT);
+    notices.forEach(async (record) => {
+      const hash = getField(record.recordPlaintext, "invoice_hash");
+      try {
+        const result = await client.getProgramMappingValue(
+          PROGRAM_ID,
+          "settled_invoices",
+          hash,
+        );
+        if (result) {
+          setSettledHashes((prev) => new Set([...prev, hash]));
+        }
+      } catch {
+        // not settled yet — ignore
+      }
+    });
+  }, [notices.length]);
 
-  // Toast feedback during payment
   useEffect(() => {
     if (status === "submitting")
       toast.loading("Generating proof…", { id: "pay-invoice" });
@@ -88,116 +107,71 @@ export default function Pay() {
       toast.loading("Broadcasting payment…", { id: "pay-invoice" });
     else if (status === "accepted") {
       toast.success("Invoice paid successfully!", { id: "pay-invoice" });
-      setPaid(true);
+      if (payingId) setPaidHashes((prev) => new Set([...prev, payingId]));
+      setPayingId(null);
       reset();
+      refetch();
     } else if (status === "failed") {
       console.error("pay_invoice failed:", txError);
       toast.error(txError || "Payment failed", { id: "pay-invoice" });
+      setPayingId(null);
       reset();
     }
-  }, [status, txError, reset]);
+  }, [status, txError, reset, payingId, refetch]);
 
-  const handleLookup = async (hashOverride?: string) => {
-    const value = hashOverride ?? invoiceHash;
-    if (!value.trim()) return;
-    setIsLooking(true);
-    setLookupError(null);
-    setPaymentRequest(null);
+  const handlePay = async (record: AleoRecord) => {
+    const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
+    const factor = getField(record.recordPlaintext, "factor");
+    const amount = getField(record.recordPlaintext, "amount").replace(
+      /u64$/,
+      "",
+    );
 
-    let raw: unknown;
+    setPayingId(invoiceHash);
+
     try {
-      const client = new AleoNetworkClient(API_ENDPOINT);
-      const hash = value.endsWith("field") ? value : `${value}field`;
-      raw = await client.getProgramMappingValue(
-        PROGRAM_ID,
-        "payment_requests",
-        hash,
-      );
+      toast.loading("Step 1/2: Sending payment…", { id: "pay-invoice" });
+      await execute({
+        program: "credits.aleo",
+        function: "transfer_public",
+        inputs: [factor, `${amount}u64`],
+        fee: 100_000,
+        privateFee: false,
+      });
 
-      const parsed = parsePaymentRequest(String(raw));
-      if (!parsed || parsed.amount === 0n) {
-        setLookupError(
-          "Payment not ready yet. The factor hasn't requested payment for this invoice. " +
-            "Contact the business or factor and ask them to publish the payment request first.",
-        );
-        return;
-      }
-      setPaymentRequest(parsed);
+      toast.loading("Step 2/2: Recording settlement…", { id: "pay-invoice" });
+      await execute({
+        program: PROGRAM_ID,
+        function: "pay_invoice",
+        inputs: [record.recordPlaintext, factor],
+        fee: 100_000,
+        privateFee: false,
+      });
     } catch (err) {
-      // Check what kind of failure this is
-      const msg = err instanceof Error ? err.message : String(err);
-
-      if (
-        msg.includes("key not found") ||
-        msg.includes("null") ||
-        msg.includes("undefined")
-      ) {
-        // Mapping key doesn't exist at all — invoice hash unknown to contract
-        setLookupError(
-          "Invoice not found. Double-check the hash is correct and belongs to this network.",
-        );
-      } else if (msg.includes("not_found") || !raw) {
-        // Key exists but payment request not published yet
-        setLookupError(
-          "Payment not ready yet. The factor hasn't requested payment for this invoice. " +
-            "Contact the business or factor and ask them to publish the payment request first.",
-        );
-      } else {
-        setLookupError("Something went wrong. Try again or contact support.");
-      }
+      console.error("pay_invoice threw:", err);
+      toast.error(err instanceof Error ? err.message : "Payment failed", {
+        id: "pay-invoice",
+      });
+      setPayingId(null);
     }
   };
 
-  const handlePay = async () => {
-    if (!paymentRequest) return;
-
-    const hash = invoiceHash.endsWith("field")
-      ? invoiceHash
-      : `${invoiceHash}field`;
-
-    // Uses credits.aleo/transfer_public — debtor's public balance
-    // is debited, factor receives the funds.
-    await execute({
-      program: PROGRAM_ID,
-      function: "pay_invoice",
-      inputs: [
-        hash,
-        `${paymentRequest.amount}u64`,
-        paymentRequest.factor, // ← add this
-      ],
-      fee: 300_000,
-      privateFee: false,
-    });
-  };
-
-  const isOverdue = paymentRequest
-    ? Date.now() > paymentRequest.due_date * 1000
-    : false;
-
-  const isPaying = status === "submitting" || status === "pending";
-
-  if (paid) {
+  if (!isConnected) {
     return (
-      <div className="container py-6 max-w-md mx-auto">
+      <div className="container py-6 max-w-lg mx-auto space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold">My Invoices</h1>
+          <p className="text-muted-foreground">
+            Connect your wallet to view invoices addressed to you.
+          </p>
+        </div>
         <Card>
-          <CardContent className="pt-8 pb-8 flex flex-col items-center text-center gap-4">
-            <CheckCircle className="h-16 w-16 text-green-500" />
-            <h2 className="text-xl font-bold">Payment Confirmed</h2>
+          <CardContent className="pt-12 pb-12 flex flex-col items-center text-center gap-4">
+            <Wallet className="h-12 w-12 text-muted-foreground" />
             <p className="text-muted-foreground">
-              Invoice{" "}
-              <span className="font-mono">{invoiceHash.slice(0, 12)}…</span> has
-              been paid and settled on-chain.
+              Your pending invoices are encrypted in your wallet. Connect to
+              view and pay them.
             </p>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setPaid(false);
-                setInvoiceHash("");
-                setPaymentRequest(null);
-              }}
-            >
-              Pay Another Invoice
-            </Button>
           </CardContent>
         </Card>
       </div>
@@ -205,138 +179,246 @@ export default function Pay() {
   }
 
   return (
-    <div className="container py-6 max-w-md mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Pay Invoice</h1>
-        <p className="text-muted-foreground">
-          Enter your invoice hash to look up and pay what you owe.
-        </p>
+    <div className="container py-6 max-w-2xl mx-auto space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">My Invoices</h1>
+          <p className="text-muted-foreground">
+            Invoices addressed to your wallet that are pending payment.
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => refetch()}>
+          <RefreshCw className="h-4 w-4 mr-2" />
+          Refresh
+        </Button>
       </div>
 
-      {/* Lookup Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Look Up Invoice</CardTitle>
-          <CardDescription>
-            Find your invoice hash in the original invoice document you
-            received.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="invoice-hash">Invoice Hash</Label>
-            <div className="flex gap-2">
-              <Input
-                id="invoice-hash"
-                placeholder="123456field"
-                value={invoiceHash}
-                onChange={(e) => setInvoiceHash(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleLookup()}
-              />
-              <Button
-                onClick={() => handleLookup()}
-                disabled={!invoiceHash.trim() || isLooking}
-                variant="outline"
-              >
-                <Search className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
+      {isError && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Failed to load invoices. Check your wallet connection and try again.
+          </AlertDescription>
+        </Alert>
+      )}
 
-          {lookupError && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{lookupError}</AlertDescription>
-            </Alert>
-          )}
-        </CardContent>
-      </Card>
+      {isLoading && (
+        <div className="space-y-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Card key={i}>
+              <CardContent className="pt-6 pb-6">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-2">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-4 w-48" />
+                    <Skeleton className="h-4 w-24" />
+                  </div>
+                  <Skeleton className="h-10 w-24" />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
-      {/* Payment Card — shown after successful lookup */}
-      {paymentRequest && (
+      {!isLoading && notices.length === 0 && (
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Payment Details</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Amount */}
-            <div className="rounded-md bg-muted px-4 py-3 text-center">
-              <p className="text-xs text-muted-foreground mb-1">Amount Due</p>
-              <p className="text-2xl font-bold font-mono">
-                {formatAleo(paymentRequest.amount)}
-              </p>
-            </div>
-
-            <Separator />
-
-            {/* Details */}
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Due Date</span>
-                <span
-                  className={isOverdue ? "text-destructive font-medium" : ""}
-                >
-                  {new Date(
-                    paymentRequest.due_date * 1000,
-                  ).toLocaleDateString()}
-                  {isOverdue && " (Overdue)"}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Pay To</span>
-                <span className="font-mono text-xs truncate max-w-[200px]">
-                  {paymentRequest.factor.slice(0, 12)}…
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Payment Method</span>
-                <span className="text-xs">credits.aleo (public)</span>
-              </div>
-            </div>
-
-            {/* Wallet warning */}
-            {!isConnected && (
-              <Alert>
-                <Wallet className="h-4 w-4" />
-                <AlertDescription>
-                  Connect your wallet to pay this invoice.
-                </AlertDescription>
-              </Alert>
-            )}
-
-            {/* Wrong debtor warning */}
-            {isConnected && address && paymentRequest.debtor !== address && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  This invoice is not addressed to your connected wallet.
-                  Expected: {paymentRequest.debtor.slice(0, 12)}…
-                </AlertDescription>
-              </Alert>
-            )}
-
-            <Button
-              onClick={handlePay}
-              disabled={
-                !isConnected ||
-                isPaying ||
-                (!!address && paymentRequest.debtor !== address)
-              }
-              className="w-full"
-              size="lg"
-            >
-              {isPaying
-                ? "Processing…"
-                : `Pay ${formatAleo(paymentRequest.amount)}`}
-            </Button>
-
-            <p className="text-xs text-center text-muted-foreground">
-              Payment is final and settled on the Aleo blockchain. Powered by
-              credits.aleo native payments.
+          <CardContent className="pt-12 pb-12 flex flex-col items-center text-center gap-3">
+            <CheckCircle className="h-12 w-12 text-muted-foreground" />
+            <h3 className="font-medium">No pending invoices</h3>
+            <p className="text-sm text-muted-foreground">
+              You have no invoices to pay right now.
             </p>
           </CardContent>
         </Card>
       )}
+
+      {!isLoading && notices.length > 0 && (
+        <div className="space-y-3">
+          {notices.map((record, idx) => {
+            const invoiceHash = getField(
+              record.recordPlaintext,
+              "invoice_hash",
+            );
+            const factor = getField(record.recordPlaintext, "factor");
+            const amount = microToAleo(
+              getField(record.recordPlaintext, "amount") || "0u64",
+            );
+            const dueDate = unixToDate(
+              getField(record.recordPlaintext, "due_date") || "0u64",
+            );
+            const daysUntil = getDaysUntilDue(dueDate);
+            const isOverdue = daysUntil < 0;
+            const isPaying = payingId === invoiceHash;
+            // Check both session memory AND on-chain mapping
+            const isPaid =
+              paidHashes.has(invoiceHash) || settledHashes.has(invoiceHash);
+            const isExpanded = expandedHash === invoiceHash;
+
+            return (
+              <Card
+                key={invoiceHash || idx}
+                className={cn(
+                  "transition-colors",
+                  isPaid && "opacity-60",
+                  isOverdue && !isPaid && "border-destructive/50",
+                )}
+              >
+                <CardHeader
+                  className="pb-2 cursor-pointer select-none"
+                  onClick={() =>
+                    setExpandedHash(isExpanded ? null : invoiceHash)
+                  }
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-1">
+                      <CardTitle className="text-base font-mono">
+                        {invoiceHash.slice(0, 16)}…
+                      </CardTitle>
+                      <CardDescription className="flex items-center gap-1">
+                        Pay to:{" "}
+                        <AddressDisplay
+                          address={factor}
+                          chars={6}
+                          showExplorer
+                        />
+                      </CardDescription>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-xl font-bold font-mono">
+                        {amount.toLocaleString(undefined, {
+                          maximumFractionDigits: 6,
+                        })}{" "}
+                        ALEO
+                      </p>
+                      <div className="flex items-center justify-end gap-1 mt-1">
+                        <Clock className="h-3 w-3 text-muted-foreground" />
+                        <span
+                          className={cn(
+                            "text-xs",
+                            isOverdue
+                              ? "text-destructive font-medium"
+                              : daysUntil < 7
+                                ? "text-yellow-600"
+                                : "text-muted-foreground",
+                          )}
+                        >
+                          {isOverdue
+                            ? `${Math.abs(daysUntil)} days overdue`
+                            : daysUntil === 0
+                              ? "Due today"
+                              : `Due ${formatDate(dueDate)}`}
+                        </span>
+                        {isExpanded ? (
+                          <ChevronUp className="h-3 w-3 text-muted-foreground ml-1" />
+                        ) : (
+                          <ChevronDown className="h-3 w-3 text-muted-foreground ml-1" />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </CardHeader>
+
+                <CardContent className="pt-0 space-y-3">
+                  {isExpanded && (
+                    <div className="rounded-md bg-muted px-4 py-3 space-y-2 text-sm">
+                      <div className="flex justify-between gap-4">
+                        <span className="text-muted-foreground shrink-0">
+                          Full Invoice Hash
+                        </span>
+                        <span className="font-mono text-xs break-all text-right">
+                          {invoiceHash}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Amount</span>
+                        <span className="font-mono font-medium">
+                          {amount.toLocaleString(undefined, {
+                            maximumFractionDigits: 6,
+                          })}{" "}
+                          ALEO
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Due Date</span>
+                        <span
+                          className={
+                            isOverdue ? "text-destructive font-medium" : ""
+                          }
+                        >
+                          {dueDate.toLocaleDateString()}
+                          {isOverdue && " (Overdue)"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-muted-foreground">
+                          Factor Address
+                        </span>
+                        <AddressDisplay
+                          address={factor}
+                          chars={8}
+                          showExplorer
+                        />
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">
+                          Payment Method
+                        </span>
+                        <span className="text-xs">credits.aleo (public)</span>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between">
+                    {isPaid ? (
+                      <Badge
+                        variant="outline"
+                        className="text-green-600 border-green-300"
+                      >
+                        <CheckCircle className="h-3 w-3 mr-1" />
+                        Paid
+                      </Badge>
+                    ) : (
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "text-xs",
+                          isOverdue
+                            ? "text-destructive border-destructive/30"
+                            : "text-yellow-600 border-yellow-300",
+                        )}
+                      >
+                        {isOverdue ? "Overdue" : "Pending"}
+                      </Badge>
+                    )}
+                    <Button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handlePay(record);
+                      }}
+                      disabled={isPaying || isPaid}
+                      size="sm"
+                    >
+                      {isPaying
+                        ? "Processing…"
+                        : isPaid
+                          ? "Paid"
+                          : `Pay ${amount.toLocaleString(undefined, {
+                              maximumFractionDigits: 2,
+                            })} ALEO`}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      <p className="text-xs text-center text-muted-foreground">
+        These invoices are encrypted in your wallet — only you can see them.
+        Powered by Aleo private records.
+      </p>
     </div>
   );
 }
