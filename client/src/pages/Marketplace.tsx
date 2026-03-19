@@ -24,96 +24,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AleoNetworkClient } from "@provablehq/sdk";
 import { useWallet } from "@/contexts/WalletContext";
 import { useTransaction } from "@/hooks/use-transaction";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { PROGRAM_ID, API_ENDPOINT } from "@/lib/config";
-
-interface FactorInfo {
-  address: string;
-  is_active: boolean;
-  min_advance_rate: number;
-  max_advance_rate: number;
-  total_factored: number;
-  registration_date: number;
-}
-
-interface AleoRecord {
-  recordName: string;
-  recordPlaintext: string;
-  spent: boolean;
-  commitment: string;
-  owner: string;
-  sender: string;
-  programName: string;
-  blockHeight?: number;
-  transactionId?: string;
-}
-
-function getField(plaintext: string, field: string): string {
-  for (const line of plaintext.split("\n")) {
-    const trimmed = line.trimStart();
-    if (!trimmed.startsWith(`${field}:`)) continue;
-    const m = trimmed.match(/^[^:]+:\s*(.+?)\.(?:private|public)/);
-    if (m) return m[1].trim();
-  }
-  return "";
-}
-
-function parseFactorInfo(address: string, plaintext: string): FactorInfo {
-  const get = (field: string) => {
-    for (const line of plaintext.split("\n")) {
-      const t = line.trimStart();
-      if (!t.startsWith(`${field}:`)) continue;
-      // Record field format: "field: value.private" or "field: value.public"
-      const m = t.match(/^[^:]+:\s*(.+?)\.(?:private|public)/);
-      if (m) return m[1].trim();
-      // Mapping/struct format: "field: value," or "field: value"
-      const s = t.match(/^[^:]+:\s*(.+?)(?:,\s*)?$/);
-      if (s) return s[1].replace(/,$/, "").trim();
-    }
-    return "";
-  };
-  return {
-    address,
-    is_active: get("is_active") === "true",
-    min_advance_rate: parseInt(get("min_advance_rate"), 10),
-    max_advance_rate: parseInt(get("max_advance_rate"), 10),
-    total_factored: parseInt(get("total_factored"), 10),
-    registration_date: parseInt(get("registration_date"), 10),
-  };
-}
-
-async function fetchActiveFactors(): Promise<FactorInfo[]> {
-  const client = new AleoNetworkClient(API_ENDPOINT);
-  const lenRaw = await client.getProgramMappingValue(
-    PROGRAM_ID,
-    "factor_addresses__len__",
-    "false",
-  );
-  const len = parseInt(String(lenRaw), 10);
-  if (!len) return [];
-  const indices = Array.from({ length: len }, (_, i) => i);
-  const addresses = await Promise.all(
-    indices.map((i) =>
-      client.getProgramMappingValue(
-        PROGRAM_ID,
-        "factor_addresses__",
-        `${i}u32`,
-      ),
-    ),
-  );
-  const infos = await Promise.all(
-    addresses.map((addr) =>
-      client.getProgramMappingValue(PROGRAM_ID, "active_factors", String(addr)),
-    ),
-  );
-  return infos
-    .map((raw, i) => parseFactorInfo(String(addresses[i]), String(raw)))
-    .filter((f) => f.is_active);
-}
+import { PROGRAM_ID } from "@/lib/config";
+import { type AleoRecord, getField } from "@/lib/aleo-records";
+import { type FactorInfo, fetchActiveFactors } from "@/lib/aleo-factors";
 
 export default function Marketplace() {
   const queryClient = useQueryClient();
