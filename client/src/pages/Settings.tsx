@@ -35,40 +35,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useWallet } from "@/contexts/WalletContext";
 import { useTransaction } from "@/hooks/use-transaction";
 import { toast } from "sonner";
-import { PROGRAM_ID, API_ENDPOINT } from "@/lib/config";
-import { AleoNetworkClient } from "@provablehq/sdk";
-
-interface FactorStatus {
-  is_active: boolean;
-  min_advance_rate: number;
-  max_advance_rate: number;
-}
-
-const networkClient = new AleoNetworkClient(API_ENDPOINT);
-
-function parseLeoField(plaintext: string, field: string): string {
-  const m = plaintext.match(new RegExp(`${field}:\\s*([^,}\\s]+)`));
-  return m ? m[1] : "";
-}
-
-async function fetchFactorStatus(
-  address: string,
-): Promise<FactorStatus | null> {
-  try {
-    const value = await networkClient.getProgramMappingValue(
-      PROGRAM_ID,
-      "active_factors",
-      address,
-    );
-    return {
-      is_active: parseLeoField(value, "is_active") === "true",
-      min_advance_rate: parseInt(parseLeoField(value, "min_advance_rate"), 10),
-      max_advance_rate: parseInt(parseLeoField(value, "max_advance_rate"), 10),
-    };
-  } catch {
-    return null;
-  }
-}
+import { PROGRAM_ID } from "@/lib/config";
+import { type FactorStatus, fetchFactorStatus } from "@/lib/aleo-factors";
 
 export default function Settings() {
   const queryClient = useQueryClient();
