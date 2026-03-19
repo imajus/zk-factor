@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": ["Bash(openspec:*)", "Bash(find:*)"]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/init.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
