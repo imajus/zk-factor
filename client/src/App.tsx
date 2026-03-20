@@ -14,11 +14,6 @@ import { RequireAuth } from "@/components/layout/RequireAuth";
 import { BusinessDashboard } from "@/components/dashboard/BusinessDashboard";
 import { FactorDashboard } from "@/components/dashboard/FactorDashboard";
 import CreateInvoice from "./pages/CreateInvoice";
-
-function Dashboard() {
-  const { activeRole } = useWallet();
-  return activeRole === "factor" ? <FactorDashboard /> : <BusinessDashboard />;
-}
 import Marketplace from "./pages/Marketplace";
 import Transactions from "./pages/Transactions";
 import Settings from "./pages/Settings";
@@ -31,6 +26,11 @@ import Roadmap from "./pages/Roadmap";
 import Landing from "./pages/Landing";
 import SelectRole from "./pages/SelectRole";
 import RegisterFactor from "./pages/RegisterFactor";
+
+function Dashboard() {
+  const { activeRole } = useWallet();
+  return activeRole === "factor" ? <FactorDashboard /> : <BusinessDashboard />;
+}
 
 const queryClient = new QueryClient();
 const wallets = [new ShieldWalletAdapter()];
