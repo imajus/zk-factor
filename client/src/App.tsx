@@ -9,8 +9,9 @@ import { DecryptPermission } from "@provablehq/aleo-wallet-adaptor-core";
 import { NETWORK, WHITELISTED_PROGRAMS } from "@/lib/config";
 import { WalletProvider } from "@/contexts/WalletContext";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { PublicLayout } from "@/components/layout/PublicLayout";
+import { RequireAuth } from "@/components/layout/RequireAuth";
 import Dashboard from "./pages/Dashboard";
-import Invoices from "./pages/Invoices";
 import CreateInvoice from "./pages/CreateInvoice";
 import Marketplace from "./pages/Marketplace";
 import Transactions from "./pages/Transactions";
@@ -35,21 +36,80 @@ const App = () => (
           <Toaster />
           <Sonner />
           <BrowserRouter>
-            <AppLayout>
-              <Routes>
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/invoices" element={<Invoices />} />
-                <Route path="/invoices/create" element={<CreateInvoice />} />
-                <Route path="/marketplace" element={<Marketplace />} />
-                <Route path="/transactions" element={<Transactions />} />
-                <Route path="/portfolio" element={<Dashboard />} />
-                <Route path="/settings" element={<Settings />} />
-                <Route path="/pay" element={<Pay />} />
+            <Routes>
+              {/* Public routes */}
+              <Route
+                path="/"
+                element={
+                  <PublicLayout>
+                    <Dashboard />
+                  </PublicLayout>
+                }
+              />
+              <Route
+                path="/pay"
+                element={
+                  <PublicLayout>
+                    <Pay />
+                  </PublicLayout>
+                }
+              />
 
-                {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </AppLayout>
+              {/* Protected routes */}
+              <Route
+                path="/dashboard"
+                element={
+                  <RequireAuth>
+                    <AppLayout>
+                      <Dashboard />
+                    </AppLayout>
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/invoices/create"
+                element={
+                  <RequireAuth>
+                    <AppLayout>
+                      <CreateInvoice />
+                    </AppLayout>
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/marketplace"
+                element={
+                  <RequireAuth>
+                    <AppLayout>
+                      <Marketplace />
+                    </AppLayout>
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/transactions"
+                element={
+                  <RequireAuth>
+                    <AppLayout>
+                      <Transactions />
+                    </AppLayout>
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/settings"
+                element={
+                  <RequireAuth>
+                    <AppLayout>
+                      <Settings />
+                    </AppLayout>
+                  </RequireAuth>
+                }
+              />
+
+              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+              <Route path="*" element={<NotFound />} />
+            </Routes>
           </BrowserRouter>
         </WalletProvider>
       </AleoWalletProvider>
