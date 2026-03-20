@@ -354,6 +354,21 @@ const network = import.meta.env.VITE_ALEO_NETWORK;
 - Handle async record availability gracefully
 - Provide transaction status updates
 
+## Icon Sourcing
+
+Use the **Better Icons** skill (`better-icons`) for sourcing SVGs from 200+ Iconify libraries.
+
+**Gotchas:**
+- `search_icons` requires **single-keyword** queries — multi-word queries return 0 results
+- `recommend_icons` MCP tool returns empty results — use `search_icons` instead
+- `get_icon <prefix:name>` returns SVG with `fill="currentColor"` on path elements — set `fill="none"` on the wrapper `<g>` to get clean outlines
+- Preferred collection for outline icons: `tabler:` prefix
+
+**Icon component pattern** (`client/src/components/icons/`):
+- Props: `{ className?: string; size?: number }`
+- Use `currentColor` for stroke, `viewBox` sized to icon, `width={size} height={size}`
+- Composite icons: use SVG `<g transform="translate(...) scale(...)">` to layer multiple icons
+
 ## Related Documentation
 
 - Root project overview: @CLAUDE.md
