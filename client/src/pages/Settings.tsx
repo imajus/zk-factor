@@ -112,6 +112,43 @@ export default function Settings() {
         </p>
       </div>
 
+      {/* Inline Factor Registration Status */}
+      {isConnected && !statusLoading && (
+        <Card className="mb-6">
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Building2 className="h-5 w-5 text-muted-foreground" />
+                <div>
+                  <p className="text-sm font-medium">Factor Registration</p>
+                  <p className="text-xs text-muted-foreground">
+                    {factorStatus?.is_active
+                      ? `Min ${(factorStatus.min_advance_rate / 100).toFixed(2)}% · Max ${(factorStatus.max_advance_rate / 100).toFixed(2)}%`
+                      : "Not registered as a factor"}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge variant={factorStatus?.is_active ? "default" : "outline"}>
+                  {factorStatus?.is_active ? "Active" : "Inactive"}
+                </Badge>
+                {factorStatus?.is_active && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleDeregister}
+                    disabled={isDeregistering || !isConnected}
+                    className="text-destructive hover:text-destructive"
+                  >
+                    {isDeregistering ? "Deregistering…" : "Deregister"}
+                  </Button>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Tabs defaultValue="wallet" className="space-y-6">
         <TabsList className="grid grid-cols-3 w-full">
           <TabsTrigger value="wallet" className="gap-2">
