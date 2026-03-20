@@ -32,9 +32,10 @@ import { PROGRAM_ID } from "@/lib/config";
 import { type AleoRecord, getField } from "@/lib/aleo-records";
 import { type FactorInfo, fetchActiveFactors } from "@/lib/aleo-factors";
 
+
 export default function Marketplace() {
   const queryClient = useQueryClient();
-  const { isConnected, requestRecords } = useWallet();
+  const { isConnected, requestRecords, activeRole } = useWallet();
   const { execute, status, error: txError, reset } = useTransaction();
   const isFactoring = status !== "idle";
   const [searchQuery, setSearchQuery] = useState("");
@@ -111,13 +112,19 @@ export default function Marketplace() {
     });
   };
 
+  const isFactor = activeRole === "factor";
+
   return (
     <div className="container py-6">
       {/* Page Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold">Browse Factors</h1>
+        <h1 className="text-2xl font-bold">
+          {isFactor ? "Invoice Marketplace" : "Browse Factors"}
+        </h1>
         <p className="text-muted-foreground">
-          Find the best factoring terms for your invoices
+          {isFactor
+            ? "View registered factors and available factoring opportunities"
+            : "Find the best factoring terms for your invoices"}
         </p>
       </div>
 
@@ -277,7 +284,9 @@ export default function Marketplace() {
                         }}
                       >
                         <DialogTrigger asChild>
-                          <Button className="w-full">Factor Invoice</Button>
+                          <Button className="w-full">
+                            {isFactor ? "View Details" : "Factor Invoice"}
+                          </Button>
                         </DialogTrigger>
                         <DialogContent className="max-w-md">
                           <DialogHeader>

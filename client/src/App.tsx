@@ -7,11 +7,12 @@ import { AleoWalletProvider } from "@provablehq/aleo-wallet-adaptor-react";
 import { ShieldWalletAdapter } from "@provablehq/aleo-wallet-adaptor-shield";
 import { DecryptPermission } from "@provablehq/aleo-wallet-adaptor-core";
 import { NETWORK, WHITELISTED_PROGRAMS } from "@/lib/config";
-import { WalletProvider } from "@/contexts/WalletContext";
+import { WalletProvider, useWallet } from "@/contexts/WalletContext";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { PublicLayout } from "@/components/layout/PublicLayout";
 import { RequireAuth } from "@/components/layout/RequireAuth";
-import Dashboard from "./pages/Dashboard";
+import { BusinessDashboard } from "@/components/dashboard/BusinessDashboard";
+import { FactorDashboard } from "@/components/dashboard/FactorDashboard";
 import CreateInvoice from "./pages/CreateInvoice";
 import Marketplace from "./pages/Marketplace";
 import Transactions from "./pages/Transactions";
@@ -25,6 +26,11 @@ import Roadmap from "./pages/Roadmap";
 import Landing from "./pages/Landing";
 import SelectRole from "./pages/SelectRole";
 import RegisterFactor from "./pages/RegisterFactor";
+
+function Dashboard() {
+  const { activeRole } = useWallet();
+  return activeRole === "factor" ? <FactorDashboard /> : <BusinessDashboard />;
+}
 
 const queryClient = new QueryClient();
 const wallets = [new ShieldWalletAdapter()];
