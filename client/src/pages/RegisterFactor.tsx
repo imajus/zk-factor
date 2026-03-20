@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Briefcase, Zap } from "lucide-react";
+import { ArrowLeft, Zap } from "lucide-react";
+import { FactorIcon } from "@/components/icons/RoleIcons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -79,9 +80,7 @@ export default function RegisterFactor() {
 
       <div className="w-full max-w-lg space-y-6">
         <div className="text-center space-y-2">
-          <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10 mx-auto mb-4">
-            <Briefcase className="h-7 w-7 text-primary" />
-          </div>
+          <FactorIcon size={64} className="text-primary mx-auto mb-4" />
           <h1 className="text-3xl font-bold">Register as Factor</h1>
           <p className="text-muted-foreground">
             Set your advance rates to appear in the marketplace. Registration

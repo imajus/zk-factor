@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
-import { Building2, Briefcase, ArrowRight, Zap } from "lucide-react";
+import { ArrowRight, Zap } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -9,6 +10,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useWallet } from "@/contexts/WalletContext";
+import { CreditorIcon, FactorIcon } from "@/components/icons/RoleIcons";
 
 export default function SelectRole() {
   const navigate = useNavigate();
@@ -45,9 +47,7 @@ export default function SelectRole() {
           {/* Creditor card */}
           <Card className="group relative cursor-pointer border-2 transition-all hover:border-primary hover:shadow-lg">
             <CardHeader className="pb-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 mb-2">
-                <Building2 className="h-6 w-6 text-primary" />
-              </div>
+              <CreditorIcon size={56} className="text-primary mb-2" />
               <CardTitle className="text-xl">Creditor</CardTitle>
               <CardDescription>
                 I have outstanding invoices and want to access immediate
@@ -85,9 +85,7 @@ export default function SelectRole() {
           {/* Factor card */}
           <Card className="group relative cursor-pointer border-2 transition-all hover:border-primary hover:shadow-lg">
             <CardHeader className="pb-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 mb-2">
-                <Briefcase className="h-6 w-6 text-primary" />
-              </div>
+              <FactorIcon size={56} className="text-primary mb-2" />
               <CardTitle className="text-xl">Factor</CardTitle>
               <CardDescription>
                 I'm a factoring company looking to purchase verified invoices
