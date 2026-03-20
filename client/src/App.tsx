@@ -18,6 +18,10 @@ import Transactions from "./pages/Transactions";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import Pay from "./pages/Pay";
+import About from "./pages/About";
+import Terms from "./pages/Terms";
+import Privacy from "./pages/Privacy";
+import Roadmap from "./pages/Roadmap";
 
 const queryClient = new QueryClient();
 const wallets = [new ShieldWalletAdapter()];
@@ -51,6 +55,38 @@ const App = () => (
                 element={
                   <PublicLayout>
                     <Pay />
+                  </PublicLayout>
+                }
+              />
+              <Route
+                path="/about"
+                element={
+                  <PublicLayout>
+                    <About />
+                  </PublicLayout>
+                }
+              />
+              <Route
+                path="/terms"
+                element={
+                  <PublicLayout>
+                    <Terms />
+                  </PublicLayout>
+                }
+              />
+              <Route
+                path="/privacy"
+                element={
+                  <PublicLayout>
+                    <Privacy />
+                  </PublicLayout>
+                }
+              />
+              <Route
+                path="/roadmap"
+                element={
+                  <PublicLayout>
+                    <Roadmap />
                   </PublicLayout>
                 }
               />
