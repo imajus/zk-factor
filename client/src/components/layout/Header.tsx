@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { ExternalLink, Copy, LogOut, Menu, X, Zap } from "lucide-react";
+import { ExternalLink, Copy, LogOut, Menu, X, Zap, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
