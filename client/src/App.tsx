@@ -23,6 +23,8 @@ import Terms from "./pages/Terms";
 import Privacy from "./pages/Privacy";
 import Roadmap from "./pages/Roadmap";
 import Landing from "./pages/Landing";
+import SelectRole from "./pages/SelectRole";
+import RegisterFactor from "./pages/RegisterFactor";
 
 const queryClient = new QueryClient();
 const wallets = [new ShieldWalletAdapter()];
@@ -89,6 +91,24 @@ const App = () => (
                   <PublicLayout>
                     <Roadmap />
                   </PublicLayout>
+                }
+              />
+
+              {/* Protected routes — role selection */}
+              <Route
+                path="/select-role"
+                element={
+                  <RequireAuth>
+                    <SelectRole />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/register-factor"
+                element={
+                  <RequireAuth>
+                    <RegisterFactor />
+                  </RequireAuth>
                 }
               />
 

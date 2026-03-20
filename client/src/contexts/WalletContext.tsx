@@ -19,6 +19,8 @@ import type { WalletName } from "@provablehq/aleo-wallet-standard";
 
 export type UserRole = "business" | "factor" | null;
 
+const roleStorageKey = (address: string) => `zk_factor_role_${address}`;
+
 interface AppWalletContextType {
   isConnected: boolean;
   address: string | null;
@@ -53,10 +55,17 @@ function WalletContextInner({ children }: { children: ReactNode }) {
   const adapter = useAdapterWallet();
 
   useEffect(() => {
-    if (!adapter.connected) {
+    if (adapter.connected && adapter.address) {
+      const stored = localStorage.getItem(roleStorageKey(adapter.address));
+      if (stored === "business" || stored === "factor") {
+        setActiveRoleState(stored);
+      } else {
+        setActiveRoleState(null);
+      }
+    } else if (!adapter.connected) {
       setActiveRoleState(null);
     }
-  }, [adapter.connected]);
+  }, [adapter.connected, adapter.address]);
 
   const connect = useCallback(async () => {
     if (adapter.wallets.length > 0 && !adapter.wallet) {
@@ -70,9 +79,19 @@ function WalletContextInner({ children }: { children: ReactNode }) {
     setActiveRoleState(null);
   }, [adapter]);
 
-  const setActiveRole = useCallback((role: UserRole) => {
-    setActiveRoleState(role);
-  }, []);
+  const setActiveRole = useCallback(
+    (role: UserRole) => {
+      setActiveRoleState(role);
+      if (adapter.address) {
+        if (role) {
+          localStorage.setItem(roleStorageKey(adapter.address), role);
+        } else {
+          localStorage.removeItem(roleStorageKey(adapter.address));
+        }
+      }
+    },
+    [adapter.address],
+  );
 
   const formatAddress = useCallback((address: string, chars: number = 6) => {
     if (!address) return "";

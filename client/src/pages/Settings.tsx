@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Wallet,
   Palette,
@@ -11,8 +12,6 @@ import {
   Building2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Card,
   CardContent,
@@ -36,20 +35,15 @@ import { useWallet } from "@/contexts/WalletContext";
 import { useTransaction } from "@/hooks/use-transaction";
 import { toast } from "sonner";
 import { PROGRAM_ID } from "@/lib/config";
-import { type FactorStatus, fetchFactorStatus } from "@/lib/aleo-factors";
+import { fetchFactorStatus } from "@/lib/aleo-factors";
 
 export default function Settings() {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { address, network, disconnect, isConnected } = useWallet();
   const { execute, status, error: txError, reset } = useTransaction();
-  const [activeOp, setActiveOp] = useState<"register" | "deregister" | null>(
-    null,
-  );
-  const isRegistering = activeOp === "register" && status !== "idle";
-  const isDeregistering = activeOp === "deregister" && status !== "idle";
+  const [isDeregistering, setIsDeregistering] = useState(false);
   const [theme, setTheme] = useState<"light" | "dark" | "system">("dark");
-  const [minRate, setMinRate] = useState("");
-  const [maxRate, setMaxRate] = useState("");
 
   const { data: factorStatus, isLoading: statusLoading } = useQuery({
     queryKey: ["factor_status", address],
@@ -57,15 +51,6 @@ export default function Settings() {
     enabled: isConnected && !!address,
     staleTime: 60_000,
   });
-
-  const minRateBps = minRate ? parseInt(minRate, 10) : 0;
-  const maxRateBps = maxRate ? parseInt(maxRate, 10) : 0;
-  const registrationValid =
-    minRateBps >= 5000 &&
-    minRateBps <= 9900 &&
-    maxRateBps >= 5000 &&
-    maxRateBps <= 9900 &&
-    minRateBps <= maxRateBps;
 
   const handleThemeChange = (value: "light" | "dark" | "system") => {
     setTheme(value);
@@ -84,58 +69,29 @@ export default function Settings() {
   };
 
   useEffect(() => {
+    if (!isDeregistering) return;
     if (status === "submitting") {
-      const id =
-        activeOp === "register" ? "register-factor" : "deregister-factor";
-      toast.loading("Generating proof…", { id });
+      toast.loading("Generating proof…", { id: "deregister-factor" });
     } else if (status === "pending") {
-      const id =
-        activeOp === "register" ? "register-factor" : "deregister-factor";
-      toast.loading("Broadcasting…", { id });
+      toast.loading("Broadcasting…", { id: "deregister-factor" });
     } else if (status === "accepted") {
-      if (activeOp === "register") {
-        toast.success("Registered as factor!", { id: "register-factor" });
-      } else if (activeOp === "deregister") {
-        toast.success("Deregistered from factor network!", {
-          id: "deregister-factor",
-        });
-      }
+      toast.success("Deregistered from factor network!", {
+        id: "deregister-factor",
+      });
       queryClient.invalidateQueries({ queryKey: ["factor_status", address] });
-      setActiveOp(null);
+      setIsDeregistering(false);
       reset();
     } else if (status === "failed") {
-      const id =
-        activeOp === "register" ? "register-factor" : "deregister-factor";
-      if (activeOp === "register") {
-        const msg = txError || "Registration failed";
-        toast.error(
-          msg.includes("already") || msg.includes("active")
-            ? "Already registered as factor"
-            : msg,
-          { id },
-        );
-      } else {
-        toast.error(txError || "Deregistration failed", { id });
-      }
-      setActiveOp(null);
+      toast.error(txError || "Deregistration failed", {
+        id: "deregister-factor",
+      });
+      setIsDeregistering(false);
       reset();
     }
-  }, [status, txError, activeOp, queryClient, address, reset]);
-
-  const handleRegister = async () => {
-    if (!registrationValid) return;
-    setActiveOp("register");
-    await execute({
-      program: PROGRAM_ID,
-      function: "register_factor",
-      inputs: [`${minRateBps}u16`, `${maxRateBps}u16`],
-      fee: 100_000,
-      privateFee: false,
-    });
-  };
+  }, [status, txError, isDeregistering, queryClient, address, reset]);
 
   const handleDeregister = async () => {
-    setActiveOp("deregister");
+    setIsDeregistering(true);
     await execute({
       program: PROGRAM_ID,
       function: "deregister_factor",
@@ -259,54 +215,19 @@ export default function Settings() {
 
               <Separator />
 
-              {/* Register form */}
+              {/* Register redirect */}
               {!factorStatus?.is_active && (
-                <div className="space-y-4">
+                <div className="space-y-2">
                   <h3 className="font-medium text-sm">Register as Factor</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="min-rate">
-                        Min Advance Rate (basis points)
-                      </Label>
-                      <Input
-                        id="min-rate"
-                        type="number"
-                        placeholder="e.g. 7000 for 70%"
-                        value={minRate}
-                        onChange={(e) => setMinRate(e.target.value)}
-                        min="5000"
-                        max="9900"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="max-rate">
-                        Max Advance Rate (basis points)
-                      </Label>
-                      <Input
-                        id="max-rate"
-                        type="number"
-                        placeholder="e.g. 9500 for 95%"
-                        value={maxRate}
-                        onChange={(e) => setMaxRate(e.target.value)}
-                        min="5000"
-                        max="9900"
-                      />
-                    </div>
-                  </div>
-                  {(minRate || maxRate) && !registrationValid && (
-                    <p className="text-xs text-destructive">
-                      Rates must be between 5000–9900 basis points, and min ≤
-                      max
-                    </p>
-                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Register your address on the factor network to appear in the
+                    marketplace and purchase invoices.
+                  </p>
                   <Button
-                    onClick={handleRegister}
-                    disabled={
-                      !registrationValid || isRegistering || !isConnected
-                    }
+                    onClick={() => navigate("/register-factor")}
                     className="w-full"
                   >
-                    {isRegistering ? "Registering…" : "Register as Factor"}
+                    Register as Factor
                   </Button>
                 </div>
               )}
