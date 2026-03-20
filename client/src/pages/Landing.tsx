@@ -140,6 +140,9 @@ export default function Landing() {
       {/* ── Hero ── */}
       <section className="relative overflow-hidden isolate min-h-[88vh] flex items-center">
 
+        {/* Dot-grid texture */}
+        <div className="dot-grid absolute inset-0 -z-30" />
+
         {/* Animated grid */}
         <div className="hero-grid absolute inset-0 -z-20" />
 
@@ -157,20 +160,20 @@ export default function Landing() {
 
         {/* Content */}
         <div className="container py-24 text-center space-y-7 relative z-10">
-          <Badge variant="secondary" className="text-xs px-3 py-1 backdrop-blur-sm animate-pulse-ring">
+          <Badge variant="secondary" className="stagger-in stagger-in-1 text-xs px-3 py-1 backdrop-blur-sm animate-pulse-ring">
             Built on Aleo · Powered by ZK Proofs
           </Badge>
 
-          <h1 className="text-shimmer text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight max-w-3xl mx-auto leading-[1.1]">
+          <h1 className="stagger-in stagger-in-2 text-shimmer text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight max-w-3xl mx-auto leading-[1.1]">
             Confidential Invoice Factoring on Aleo
           </h1>
 
-          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+          <p className="stagger-in stagger-in-3 text-lg text-muted-foreground max-w-2xl mx-auto">
             Sell your invoices for immediate cash. Cryptographically prevent double-factoring fraud.
             Keep every business relationship completely private.
           </p>
 
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+          <div className="stagger-in stagger-in-4 flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
             {wallets.length === 0 ? (
               <Button size="lg" className="gap-2 glow-primary" asChild>
                 <a href={SHIELD_WALLET_URL} target="_blank" rel="noopener noreferrer">
@@ -193,7 +196,7 @@ export default function Landing() {
           </div>
 
           {/* Trust indicators */}
-          <div className="flex flex-wrap items-center justify-center gap-6 pt-4 text-xs text-muted-foreground">
+          <div className="stagger-in stagger-in-5 flex flex-wrap items-center justify-center gap-6 pt-4 text-xs text-muted-foreground">
             {['Zero-knowledge proofs', 'Non-custodial', 'Auditable on-chain'].map((label) => (
               <span key={label} className="flex items-center gap-1.5">
                 <CheckCircle className="h-3.5 w-3.5 text-primary" />

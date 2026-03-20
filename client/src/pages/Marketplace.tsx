@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { Search, Users, AlertCircle, RefreshCw } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Search, Users, AlertCircle, RefreshCw, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -207,14 +208,26 @@ export default function Marketplace() {
               ))
             ) : filteredFactors.length === 0 ? (
               <div className="col-span-2">
-                <Card className="p-12 text-center">
-                  <Users className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                  <h3 className="text-lg font-medium mb-2">
-                    No active factors registered
-                  </h3>
-                  <p className="text-muted-foreground">
-                    No factors are currently registered on the network
-                  </p>
+                <Card className="border-dashed">
+                  <CardContent className="py-16 text-center space-y-4">
+                    <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+                      <Users className="h-8 w-8 text-primary" />
+                    </div>
+                    <div className="space-y-1">
+                      <h3 className="text-lg font-semibold">
+                        No active factors yet
+                      </h3>
+                      <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+                        Be the first to register as a factor on the network and start purchasing invoices.
+                      </p>
+                    </div>
+                    <Button asChild>
+                      <Link to="/settings">
+                        Register as Factor
+                        <ArrowRight className="h-4 w-4 ml-2" />
+                      </Link>
+                    </Button>
+                  </CardContent>
                 </Card>
               </div>
             ) : (

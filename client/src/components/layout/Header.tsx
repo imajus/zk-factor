@@ -13,6 +13,7 @@ import {
   ChevronDown,
   Loader2,
 } from "lucide-react";
+import { ALEO_EXPLORER } from "@/lib/config";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -194,9 +195,15 @@ export function Header() {
                     <Copy className="h-4 w-4 mr-2" />
                     Copy Address
                   </DropdownMenuItem>
-                  <DropdownMenuItem>
-                    <ExternalLink className="h-4 w-4 mr-2" />
-                    View on Explorer
+                  <DropdownMenuItem asChild>
+                    <a
+                      href={`${ALEO_EXPLORER}/address/${address}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <ExternalLink className="h-4 w-4 mr-2" />
+                      View on Explorer
+                    </a>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
