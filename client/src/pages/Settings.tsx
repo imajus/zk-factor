@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTheme } from "next-themes";
 import {
   Wallet,
   Palette,
@@ -35,7 +36,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useWallet } from "@/contexts/WalletContext";
 import { useTransaction } from "@/hooks/use-transaction";
 import { toast } from "sonner";
-import { PROGRAM_ID } from "@/lib/config";
+import { PROGRAM_ID, ALEO_EXPLORER } from "@/lib/config";
 import { fetchFactorStatus } from "@/lib/aleo-factors";
 
 export default function Settings() {
@@ -44,7 +45,7 @@ export default function Settings() {
   const { address, network, disconnect, isConnected } = useWallet();
   const { execute, status, error: txError, reset } = useTransaction();
   const [isDeregistering, setIsDeregistering] = useState(false);
-  const [theme, setTheme] = useState<"light" | "dark" | "system">("dark");
+  const { theme, setTheme } = useTheme();
 
   const { data: factorStatus, isLoading: statusLoading } = useQuery({
     queryKey: ["factor_status", address],
@@ -53,19 +54,8 @@ export default function Settings() {
     staleTime: 60_000,
   });
 
-  const handleThemeChange = (value: "light" | "dark" | "system") => {
+  const handleThemeChange = (value: string) => {
     setTheme(value);
-    if (value === "dark") {
-      document.documentElement.classList.add("dark");
-    } else if (value === "light") {
-      document.documentElement.classList.remove("dark");
-    } else {
-      if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
-        document.documentElement.classList.add("dark");
-      } else {
-        document.documentElement.classList.remove("dark");
-      }
-    }
     toast.success(`Theme changed to ${value}`);
   };
 
@@ -193,9 +183,15 @@ export default function Settings() {
               </div>
               <Separator />
               <div className="flex gap-2">
-                <Button variant="outline" className="flex-1">
-                  <ExternalLink className="h-4 w-4 mr-2" />
-                  View on Explorer
+                <Button variant="outline" className="flex-1" asChild>
+                  <a
+                    href={`${ALEO_EXPLORER}/address/${address}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    View on Explorer
+                  </a>
                 </Button>
                 <Button variant="destructive" onClick={disconnect}>
                   Disconnect
@@ -312,9 +308,7 @@ export default function Settings() {
                       key={value}
                       variant={theme === value ? "default" : "outline"}
                       className="justify-start"
-                      onClick={() =>
-                        handleThemeChange(value as "light" | "dark" | "system")
-                      }
+                      onClick={() => handleThemeChange(value)}
                     >
                       <Icon className="h-4 w-4 mr-2" />
                       {label}

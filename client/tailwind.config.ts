@@ -95,8 +95,17 @@ export default {
   			'2xl': 'var(--shadow-2xl)'
   		},
 		fontFamily: {
+			heading: [
+				'Satoshi',
+				'ui-sans-serif',
+				'system-ui',
+				'-apple-system',
+				'BlinkMacSystemFont',
+				'Segoe UI',
+				'Roboto',
+				'sans-serif'
+			],
 			sans: [
-				'Inter',
 				'ui-sans-serif',
 				'system-ui',
 				'-apple-system',

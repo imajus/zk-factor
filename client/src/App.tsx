@@ -1,3 +1,4 @@
+import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -36,18 +37,19 @@ const queryClient = new QueryClient();
 const wallets = [new ShieldWalletAdapter()];
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <AleoWalletProvider
-        wallets={wallets}
-        network={NETWORK}
-        decryptPermission={DecryptPermission.OnChainHistory}
-        programs={WHITELISTED_PROGRAMS}
-        autoConnect
-      >
-        <WalletProvider>
-          <Toaster />
-          <Sonner />
+  <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <AleoWalletProvider
+          wallets={wallets}
+          network={NETWORK}
+          decryptPermission={DecryptPermission.OnChainHistory}
+          programs={WHITELISTED_PROGRAMS}
+          autoConnect
+        >
+          <WalletProvider>
+            <Toaster />
+            <Sonner />
           <BrowserRouter>
             <Routes>
               {/* Public routes */}
@@ -173,11 +175,12 @@ const App = () => (
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
-          </BrowserRouter>
-        </WalletProvider>
-      </AleoWalletProvider>
-    </TooltipProvider>
-  </QueryClientProvider>
+            </BrowserRouter>
+          </WalletProvider>
+        </AleoWalletProvider>
+      </TooltipProvider>
+    </QueryClientProvider>
+  </ThemeProvider>
 );
 
 export default App;
