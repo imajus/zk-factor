@@ -70,6 +70,7 @@ function WalletContextInner({ children }: { children: ReactNode }) {
   const connect = useCallback(async () => {
     if (adapter.wallets.length > 0 && !adapter.wallet) {
       adapter.selectWallet(adapter.wallets[0].adapter.name);
+      return;
     }
     await adapter.connect(NETWORK);
   }, [adapter]);
