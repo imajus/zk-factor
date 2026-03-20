@@ -1,4 +1,5 @@
 import { Shield, Zap, Ban, ArrowRight, ExternalLink, CheckCircle, TrendingUp } from 'lucide-react';
+import { Link, Navigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -59,14 +60,11 @@ function timeAgo(date: Date): string {
 }
 
 export default function Landing() {
-  const { wallets, connecting, connect, selectWallet } = useWallet();
+  const { isConnected, wallets } = useWallet();
 
-  const handleConnect = async () => {
-    if (wallets.length > 0) {
-      selectWallet(wallets[0].adapter.name);
-    }
-    await connect();
-  };
+  if (isConnected) {
+    return <Navigate to="/dashboard" replace />;
+  }
 
   return (
     <div className="flex flex-col">
@@ -92,9 +90,11 @@ export default function Landing() {
               </a>
             </Button>
           ) : (
-            <Button size="lg" className="gap-2" onClick={handleConnect} disabled={connecting}>
-              {connecting ? 'Connecting…' : 'Connect Wallet to Start'}
-              {!connecting && <ArrowRight className="h-4 w-4" />}
+            <Button size="lg" className="gap-2" asChild>
+              <Link to="/dashboard">
+                Get Started
+                <ArrowRight className="h-4 w-4" />
+              </Link>
             </Button>
           )}
         </div>
