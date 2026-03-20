@@ -45,7 +45,7 @@ export default function SelectRole() {
 
         <div className="grid md:grid-cols-2 gap-6">
           {/* Creditor card */}
-          <Card className="group relative cursor-pointer border-2 transition-all hover:border-primary hover:shadow-lg">
+          <Card className="group relative flex flex-col cursor-pointer border-2 transition-all hover:border-primary hover:shadow-lg">
             <CardHeader className="pb-4">
               <CreditorIcon size={56} className="text-primary mb-2" />
               <CardTitle className="text-xl">Creditor</CardTitle>
@@ -54,7 +54,7 @@ export default function SelectRole() {
                 financing
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="flex flex-1 flex-col justify-between gap-4">
               <ul className="space-y-2 text-sm text-muted-foreground">
                 <li className="flex items-start gap-2">
                   <span className="mt-0.5 h-4 w-4 shrink-0 rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">
@@ -83,7 +83,7 @@ export default function SelectRole() {
           </Card>
 
           {/* Factor card */}
-          <Card className="group relative cursor-pointer border-2 transition-all hover:border-primary hover:shadow-lg">
+          <Card className="group relative flex flex-col cursor-pointer border-2 transition-all hover:border-primary hover:shadow-lg">
             <CardHeader className="pb-4">
               <FactorIcon size={56} className="text-primary mb-2" />
               <CardTitle className="text-xl">Factor</CardTitle>
@@ -91,7 +91,7 @@ export default function SelectRole() {
                 I'm a factoring company looking to purchase verified invoices
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="flex flex-1 flex-col justify-between gap-4">
               <ul className="space-y-2 text-sm text-muted-foreground">
                 <li className="flex items-start gap-2">
                   <span className="mt-0.5 h-4 w-4 shrink-0 rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">

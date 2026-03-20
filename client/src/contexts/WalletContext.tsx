@@ -8,6 +8,7 @@ import {
 } from "react";
 import { useWallet as useAdapterWallet } from "@provablehq/aleo-wallet-adaptor-react";
 import { NETWORK } from "@/lib/config";
+import { fetchFactorStatus } from "@/lib/aleo-factors";
 import type {
   Network,
   TransactionOptions,
@@ -42,6 +43,7 @@ interface AppWalletContextType {
   ) => Promise<unknown[]>;
   requestTransactionHistory: (program: string) => Promise<TxHistoryResult>;
   activeRole: UserRole;
+  resolvingRole: boolean;
   setActiveRole: (role: UserRole) => void;
   formatAddress: (address: string, chars?: number) => string;
 }
@@ -52,19 +54,27 @@ const AppWalletContext = createContext<AppWalletContextType | undefined>(
 
 function WalletContextInner({ children }: { children: ReactNode }) {
   const [activeRole, setActiveRoleState] = useState<UserRole>(null);
+  const [resolvingRole, setResolvingRole] = useState(false);
   const adapter = useAdapterWallet();
 
   useEffect(() => {
-    if (adapter.connected && adapter.address) {
-      const stored = localStorage.getItem(roleStorageKey(adapter.address));
-      if (stored === "business" || stored === "factor") {
-        setActiveRoleState(stored);
-      } else {
-        setActiveRoleState(null);
-      }
-    } else if (!adapter.connected) {
-      setActiveRoleState(null);
+    if (!adapter.connected || !adapter.address) {
+      if (!adapter.connected) setActiveRoleState(null);
+      return;
     }
+    const stored = localStorage.getItem(roleStorageKey(adapter.address));
+    if (stored === "business" || stored === "factor") {
+      setActiveRoleState(stored);
+      return;
+    }
+    setResolvingRole(true);
+    fetchFactorStatus(adapter.address).then((status) => {
+      if (status?.is_active) {
+        setActiveRoleState("factor");
+        localStorage.setItem(roleStorageKey(adapter.address!), "factor");
+      }
+      setResolvingRole(false);
+    });
   }, [adapter.connected, adapter.address]);
 
   const connect = useCallback(async () => {
@@ -115,6 +125,7 @@ function WalletContextInner({ children }: { children: ReactNode }) {
         requestRecords: adapter.requestRecords,
         requestTransactionHistory: adapter.requestTransactionHistory,
         activeRole,
+        resolvingRole,
         setActiveRole,
         formatAddress,
       }}
