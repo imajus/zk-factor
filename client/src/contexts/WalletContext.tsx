@@ -8,6 +8,7 @@ import {
 } from "react";
 import { useWallet as useAdapterWallet } from "@provablehq/aleo-wallet-adaptor-react";
 import { NETWORK } from "@/lib/config";
+import { fetchFactorStatus } from "@/lib/aleo-factors";
 import type {
   Network,
   TransactionOptions,
@@ -18,6 +19,8 @@ import type { Wallet } from "@provablehq/aleo-wallet-adaptor-react";
 import type { WalletName } from "@provablehq/aleo-wallet-standard";
 
 export type UserRole = "business" | "factor" | null;
+
+const roleStorageKey = (address: string) => `zk_factor_role_${address}`;
 
 interface AppWalletContextType {
   isConnected: boolean;
@@ -40,6 +43,7 @@ interface AppWalletContextType {
   ) => Promise<unknown[]>;
   requestTransactionHistory: (program: string) => Promise<TxHistoryResult>;
   activeRole: UserRole;
+  resolvingRole: boolean;
   setActiveRole: (role: UserRole) => void;
   formatAddress: (address: string, chars?: number) => string;
 }
@@ -50,17 +54,33 @@ const AppWalletContext = createContext<AppWalletContextType | undefined>(
 
 function WalletContextInner({ children }: { children: ReactNode }) {
   const [activeRole, setActiveRoleState] = useState<UserRole>(null);
+  const [resolvingRole, setResolvingRole] = useState(false);
   const adapter = useAdapterWallet();
 
   useEffect(() => {
-    if (!adapter.connected) {
-      setActiveRoleState(null);
+    if (!adapter.connected || !adapter.address) {
+      if (!adapter.connected) setActiveRoleState(null);
+      return;
     }
-  }, [adapter.connected]);
+    const stored = localStorage.getItem(roleStorageKey(adapter.address));
+    if (stored === "business" || stored === "factor") {
+      setActiveRoleState(stored);
+      return;
+    }
+    setResolvingRole(true);
+    fetchFactorStatus(adapter.address).then((status) => {
+      if (status?.is_active) {
+        setActiveRoleState("factor");
+        localStorage.setItem(roleStorageKey(adapter.address!), "factor");
+      }
+      setResolvingRole(false);
+    });
+  }, [adapter.connected, adapter.address]);
 
   const connect = useCallback(async () => {
     if (adapter.wallets.length > 0 && !adapter.wallet) {
       adapter.selectWallet(adapter.wallets[0].adapter.name);
+      return;
     }
     await adapter.connect(NETWORK);
   }, [adapter]);
@@ -70,9 +90,19 @@ function WalletContextInner({ children }: { children: ReactNode }) {
     setActiveRoleState(null);
   }, [adapter]);
 
-  const setActiveRole = useCallback((role: UserRole) => {
-    setActiveRoleState(role);
-  }, []);
+  const setActiveRole = useCallback(
+    (role: UserRole) => {
+      setActiveRoleState(role);
+      if (adapter.address) {
+        if (role) {
+          localStorage.setItem(roleStorageKey(adapter.address), role);
+        } else {
+          localStorage.removeItem(roleStorageKey(adapter.address));
+        }
+      }
+    },
+    [adapter.address],
+  );
 
   const formatAddress = useCallback((address: string, chars: number = 6) => {
     if (!address) return "";
@@ -95,6 +125,7 @@ function WalletContextInner({ children }: { children: ReactNode }) {
         requestRecords: adapter.requestRecords,
         requestTransactionHistory: adapter.requestTransactionHistory,
         activeRole,
+        resolvingRole,
         setActiveRole,
         formatAddress,
       }}
