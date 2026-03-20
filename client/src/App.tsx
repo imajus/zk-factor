@@ -22,6 +22,7 @@ import About from "./pages/About";
 import Terms from "./pages/Terms";
 import Privacy from "./pages/Privacy";
 import Roadmap from "./pages/Roadmap";
+import Landing from "./pages/Landing";
 
 const queryClient = new QueryClient();
 const wallets = [new ShieldWalletAdapter()];
@@ -46,7 +47,7 @@ const App = () => (
                 path="/"
                 element={
                   <PublicLayout>
-                    <Dashboard />
+                    <Landing />
                   </PublicLayout>
                 }
               />
