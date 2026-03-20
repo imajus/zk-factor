@@ -11,6 +11,7 @@ import {
   Building2,
   Briefcase,
   ChevronDown,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -135,8 +136,12 @@ export function Header() {
                       className="hidden sm:flex gap-1.5 items-center h-7 px-2 text-xs"
                       disabled={switchingRole}
                     >
-                      <RoleIcon className="h-3 w-3" />
-                      {roleLabel}
+                      {switchingRole ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <RoleIcon className="h-3 w-3" />
+                      )}
+                      {switchingRole ? "Checking…" : roleLabel}
                       <ChevronDown className="h-3 w-3 opacity-60" />
                     </Button>
                   </DropdownMenuTrigger>
@@ -276,8 +281,12 @@ export function Header() {
                       : "text-muted-foreground hover:text-foreground hover:bg-muted",
                   )}
                 >
-                  <Briefcase className="h-4 w-4" />
-                  Factor
+                  {switchingRole ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Briefcase className="h-4 w-4" />
+                  )}
+                  {switchingRole ? "Checking…" : "Factor"}
                 </button>
               </>
             )}
