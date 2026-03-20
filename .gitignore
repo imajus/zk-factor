@@ -1,3 +1,4 @@
 .env
 .playwright-mcp
 .firecrawl/
+client/package-lock.json
