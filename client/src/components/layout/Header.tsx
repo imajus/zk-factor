@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Wallet, ExternalLink, Copy, LogOut, Menu, X, Zap } from "lucide-react";
+import { ExternalLink, Copy, LogOut, Menu, X, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -16,12 +16,9 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 const navItems = [
-  { label: "Dashboard", href: "/" },
-  { label: "Invoices", href: "/invoices", businessOnly: true },
-  { label: "Portfolio", href: "/portfolio", factorOnly: true },
+  { label: "Dashboard", href: "/dashboard" },
   { label: "Marketplace", href: "/marketplace" },
   { label: "Transactions", href: "/transactions" },
-  // { label: "Pay Invoice", href: "/pay", public: true }, // Only visible when debtor gets invoice link
   { label: "Settings", href: "/settings" },
 ];
 
@@ -31,20 +28,12 @@ export function Header() {
   const {
     isConnected,
     address,
-    activeRole,
-    connect,
     disconnect,
     formatAddress,
     network,
   } = useWallet();
 
-  const filteredNavItems = navItems.filter((item) => {
-    // if (item.public) return true;
-    if (!isConnected) return false;
-    if (item.businessOnly) return activeRole === "business";
-    if (item.factorOnly) return activeRole === "factor";
-    return true;
-  });
+  const filteredNavItems = navItems.filter(() => isConnected);
 
   const copyAddress = () => {
     if (address) {
@@ -135,18 +124,6 @@ export function Header() {
                 </DropdownMenuContent>
               </DropdownMenu>
             </>
-          )}
-
-          {!isConnected && (
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" asChild>
-                <Link to="/pay">Pay an Invoice</Link>
-              </Button>
-              <Button onClick={connect} className="gap-2">
-                <Wallet className="h-4 w-4" />
-                Connect Wallet
-              </Button>
-            </div>
           )}
 
           {/* Mobile Menu Toggle */}
