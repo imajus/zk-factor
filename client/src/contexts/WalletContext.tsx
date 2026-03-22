@@ -7,6 +7,8 @@ import {
   ReactNode,
 } from "react";
 import { useWallet as useAdapterWallet } from "@provablehq/aleo-wallet-adaptor-react";
+import { usePrivy } from "@privy-io/react-auth";
+import type { LoginModalOptions } from "@privy-io/react-auth";
 import { NETWORK } from "@/lib/config";
 import { fetchFactorStatus } from "@/lib/aleo-factors";
 import type {
@@ -46,6 +48,11 @@ interface AppWalletContextType {
   resolvingRole: boolean;
   setActiveRole: (role: UserRole) => void;
   formatAddress: (address: string, chars?: number) => string;
+  // Privy — null when user connected via Shield Wallet only
+  email: string | null;
+  privyReady: boolean;
+  loginWithPrivy: (options?: LoginModalOptions) => void;
+  logoutPrivy: () => Promise<void>;
 }
 
 const AppWalletContext = createContext<AppWalletContextType | undefined>(
@@ -56,6 +63,30 @@ function WalletContextInner({ children }: { children: ReactNode }) {
   const [activeRole, setActiveRoleState] = useState<UserRole>(null);
   const [resolvingRole, setResolvingRole] = useState(false);
   const adapter = useAdapterWallet();
+
+  let privyReady = false;
+  let privyAuthenticated = false;
+  let privyUser: ReturnType<typeof usePrivy>["user"] | null = null;
+  let loginWithPrivy: (options?: LoginModalOptions) => void = () => {};
+  let logoutPrivy: () => Promise<void> = async () => {};
+
+  // If PrivyProvider is not mounted (or app ID is invalid), keep the app functional.
+  try {
+    const privy = usePrivy();
+    privyReady = privy.ready;
+    privyAuthenticated = privy.authenticated;
+    privyUser = privy.user;
+    loginWithPrivy = privy.login;
+    logoutPrivy = privy.logout;
+  } catch {
+    // Privy integration is optional.
+  }
+
+  // Derive email from Privy session
+  const email: string | null =
+    privyAuthenticated && privyUser?.email?.address
+      ? privyUser.email.address
+      : null;
 
   useEffect(() => {
     if (!adapter.connected || !adapter.address) {
@@ -80,9 +111,27 @@ function WalletContextInner({ children }: { children: ReactNode }) {
   const connect = useCallback(async () => {
     if (adapter.wallets.length > 0 && !adapter.wallet) {
       adapter.selectWallet(adapter.wallets[0].adapter.name);
-      return;
+      // Let the adapter process wallet selection before connect is attempted.
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
     }
-    await adapter.connect(NETWORK);
+
+    try {
+      await adapter.connect(NETWORK);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      const walletNotSelected = /wallet.*not.*selected|select.*wallet/i.test(
+        message,
+      );
+
+      if (walletNotSelected && adapter.wallets.length > 0) {
+        adapter.selectWallet(adapter.wallets[0].adapter.name);
+        await new Promise((resolve) => window.setTimeout(resolve, 50));
+        await adapter.connect(NETWORK);
+        return;
+      }
+
+      throw error;
+    }
   }, [adapter]);
 
   const disconnect = useCallback(async () => {
@@ -128,6 +177,10 @@ function WalletContextInner({ children }: { children: ReactNode }) {
         resolvingRole,
         setActiveRole,
         formatAddress,
+        email,
+        privyReady,
+        loginWithPrivy,
+        logoutPrivy,
       }}
     >
       {children}

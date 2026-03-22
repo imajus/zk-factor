@@ -13,6 +13,7 @@ import {
   CheckCircle,
   FileCheck,
   AlertCircle,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -38,6 +39,8 @@ import { toast } from "sonner";
 import { PROGRAM_ID, API_ENDPOINT } from "@/lib/config";
 import {
   type AleoRecord,
+  decodeInvoiceCurrencyFromMetadata,
+  getPersistedInvoiceCurrency,
   getField,
   microToAleo,
   unixToDate,
@@ -49,6 +52,7 @@ export function BusinessDashboard() {
   const { execute, status, error: txError, reset } = useTransaction();
   const [settlingId, setSettlingId] = useState<string | null>(null);
   const [settledHashes, setSettledHashes] = useState<Set<string>>(new Set());
+  const [settlingRecourseId, setSettlingRecourseId] = useState<string | null>(null);
 
   const {
     data: records,
@@ -71,10 +75,31 @@ export function BusinessDashboard() {
   const offerRecords = ((records as AleoRecord[]) ?? []).filter(
     (r) => r.recordName === "FactoringOffer" && !r.spent,
   );
+  // RecourseNotice records sent to the business (they are the original_creditor)
+  const recourseNoticeRecords = ((records as AleoRecord[]) ?? []).filter(
+    (r) => r.recordName === "RecourseNotice" && !r.spent,
+  );
+
+  const getInvoiceCurrency = (record: AleoRecord): "ALEO" | "USDCx" => {
+    const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
+    const metadata = getField(record.recordPlaintext, "metadata");
+    const fromMetadata = decodeInvoiceCurrencyFromMetadata(metadata);
+    const cached = getPersistedInvoiceCurrency(invoiceHash);
+    return cached ?? fromMetadata;
+  };
 
   const totalValue = invoiceRecords.reduce((sum, r) => {
     return sum + microToAleo(getField(r.recordPlaintext, "amount") || "0u64");
   }, 0);
+  const invoiceCurrencies = new Set(
+    invoiceRecords.map((r) => getInvoiceCurrency(r)),
+  );
+  const totalValueUnit =
+    invoiceCurrencies.size === 1
+      ? Array.from(invoiceCurrencies)[0]
+      : invoiceCurrencies.size > 1
+        ? "Mixed"
+        : "ALEO";
 
   // Check settled status for each factored record
   useEffect(() => {
@@ -106,6 +131,7 @@ export function BusinessDashboard() {
       toast.success("Transaction confirmed!", { id: "tx-op" });
       queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
       setSettlingId(null);
+      setSettlingRecourseId(null);
       reset();
     } else if (status === "failed") {
       const msg = txError || "Transaction failed";
@@ -114,6 +140,7 @@ export function BusinessDashboard() {
         { id: "tx-op" },
       );
       setSettlingId(null);
+      setSettlingRecourseId(null);
       reset();
     }
   }, [status, txError, queryClient, reset]);
@@ -208,6 +235,58 @@ export function BusinessDashboard() {
     });
   };
 
+  // Business settles a recourse claim by repaying the factor's advance
+  const handleSettleRecourse = async (notice: AleoRecord) => {
+    const invoiceHash = getField(notice.recordPlaintext, "invoice_hash");
+    const advanceAmountRaw = getField(notice.recordPlaintext, "advance_amount");
+    const advanceAmount = parseInt(advanceAmountRaw.replace(/u64$/, ""), 10);
+    const recordId = notice.commitment ?? invoiceHash;
+    setSettlingRecourseId(recordId);
+
+    let creditsRecord: AleoRecord | undefined;
+    try {
+      const creditsRecords = (await requestRecords(
+        "credits.aleo",
+        true,
+      )) as AleoRecord[];
+      creditsRecord = creditsRecords
+        .filter((r) => !r.spent)
+        .find(
+          (r) =>
+            parseInt(
+              getField(r.recordPlaintext, "microcredits").replace(/u64$/, ""),
+              10,
+            ) >= advanceAmount,
+        );
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to fetch credits",
+      );
+      setSettlingRecourseId(null);
+      return;
+    }
+    if (!creditsRecord) {
+      toast.error("Insufficient credits to repay the advance amount");
+      setSettlingRecourseId(null);
+      return;
+    }
+    try {
+      await execute({
+        program: PROGRAM_ID,
+        function: "settle_recourse",
+        inputs: [notice.recordPlaintext, creditsRecord.recordPlaintext],
+        fee: 100_000,
+        privateFee: false,
+      });
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Recourse settlement failed",
+        { id: "tx-op" },
+      );
+      setSettlingRecourseId(null);
+    }
+  };
+
   const dynamicStats = [
     {
       title: "Total Invoices",
@@ -219,7 +298,7 @@ export function BusinessDashboard() {
       value: isLoading
         ? "…"
         : totalValue.toLocaleString(undefined, { maximumFractionDigits: 2 }) +
-          " ALEO",
+          ` ${totalValueUnit}`,
       icon: <TrendingUp className="h-5 w-5 text-primary" />,
     },
     {
@@ -276,6 +355,7 @@ export function BusinessDashboard() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {invoiceRecords.map((invoice, idx) => {
           const invoiceHash = getField(invoice.recordPlaintext, "invoice_hash");
+          const currency = getInvoiceCurrency(invoice);
           const dueDate = unixToDate(
             getField(invoice.recordPlaintext, "due_date") || "0u64",
           );
@@ -285,7 +365,10 @@ export function BusinessDashboard() {
           const debtor = getField(invoice.recordPlaintext, "debtor");
           const daysUntil = getDaysUntilDue(dueDate);
           return (
-            <Card key={invoiceHash || idx} className="hover:border-primary/50 transition-colors">
+            <Card
+              key={invoiceHash || idx}
+              className="hover:border-primary/50 transition-colors"
+            >
               <CardContent className="pt-4 space-y-3">
                 <div className="flex items-start justify-between">
                   <span className="font-mono text-sm text-muted-foreground">
@@ -293,7 +376,11 @@ export function BusinessDashboard() {
                   </span>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 -mt-1 -mr-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 -mt-1 -mr-1"
+                      >
                         <MoreHorizontal className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
@@ -320,7 +407,10 @@ export function BusinessDashboard() {
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Amount</span>
                     <span className="font-mono font-medium">
-                      {aleoAmount.toLocaleString(undefined, { maximumFractionDigits: 6 })} ALEO
+                      {aleoAmount.toLocaleString(undefined, {
+                        maximumFractionDigits: 6,
+                      })}{" "}
+                      {currency}
                     </span>
                   </div>
                   <div className="flex justify-between">
@@ -405,7 +495,10 @@ export function BusinessDashboard() {
           const isSettling = settlingId === recordId;
           const isSettled = settledHashes.has(invoiceHash);
           return (
-            <Card key={invoiceHash || idx} className="hover:border-primary/50 transition-colors">
+            <Card
+              key={invoiceHash || idx}
+              className="hover:border-primary/50 transition-colors"
+            >
               <CardContent className="pt-4 space-y-3">
                 <div className="flex items-start justify-between">
                   <span className="font-mono text-sm text-muted-foreground">
@@ -413,7 +506,11 @@ export function BusinessDashboard() {
                   </span>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 -mt-1 -mr-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 -mt-1 -mr-1"
+                      >
                         <MoreHorizontal className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
@@ -450,12 +547,19 @@ export function BusinessDashboard() {
                 <div className="space-y-1 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Creditor</span>
-                    <AddressDisplay address={originalCreditor} chars={4} showExplorer />
+                    <AddressDisplay
+                      address={originalCreditor}
+                      chars={4}
+                      showExplorer
+                    />
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Amount</span>
                     <span className="font-mono font-medium">
-                      {aleoAmount.toLocaleString(undefined, { maximumFractionDigits: 6 })} ALEO
+                      {aleoAmount.toLocaleString(undefined, {
+                        maximumFractionDigits: 6,
+                      })}{" "}
+                      ALEO
                     </span>
                   </div>
                   <div className="flex justify-between">
@@ -533,7 +637,10 @@ export function BusinessDashboard() {
           const recordId = record.commitment ?? invoiceHash;
           const isAccepting = settlingId === recordId;
           return (
-            <Card key={invoiceHash || idx} className="hover:border-primary/50 transition-colors">
+            <Card
+              key={invoiceHash || idx}
+              className="hover:border-primary/50 transition-colors"
+            >
               <CardContent className="pt-4 space-y-3">
                 <span className="font-mono text-sm text-muted-foreground">
                   {invoiceHash.slice(0, 12)}…
@@ -541,12 +648,19 @@ export function BusinessDashboard() {
                 <div className="space-y-1 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Business</span>
-                    <AddressDisplay address={originalCreditor} chars={4} showExplorer />
+                    <AddressDisplay
+                      address={originalCreditor}
+                      chars={4}
+                      showExplorer
+                    />
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Amount</span>
                     <span className="font-mono font-medium">
-                      {aleoAmount.toLocaleString(undefined, { maximumFractionDigits: 6 })} ALEO
+                      {aleoAmount.toLocaleString(undefined, {
+                        maximumFractionDigits: 6,
+                      })}{" "}
+                      ALEO
                     </span>
                   </div>
                   <div className="flex justify-between">
@@ -562,6 +676,92 @@ export function BusinessDashboard() {
                 >
                   <FileCheck className="h-4 w-4 mr-2" />
                   {isAccepting ? "Processing…" : "Accept Offer"}
+                </Button>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const renderRecourseNoticeCards = () => {
+    if (isLoading) {
+      return (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <Card key={i}>
+              <CardContent className="pt-4 space-y-2">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-9 w-full" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      );
+    }
+    if (recourseNoticeRecords.length === 0) {
+      return (
+        <Card className="py-16 text-center">
+          <CardContent>
+            <p className="font-medium">No recourse notices</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              If a factor claims recourse on an overdue invoice, it will appear here
+            </p>
+          </CardContent>
+        </Card>
+      );
+    }
+    return (
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {recourseNoticeRecords.map((notice, idx) => {
+          const invoiceHash = getField(notice.recordPlaintext, "invoice_hash");
+          const factor = getField(notice.recordPlaintext, "factor");
+          const advanceAmount = microToAleo(
+            getField(notice.recordPlaintext, "advance_amount") || "0u64",
+          );
+          const recordId = notice.commitment ?? invoiceHash;
+          const isSettlingThis = settlingRecourseId === recordId;
+          return (
+            <Card
+              key={invoiceHash || idx}
+              className="border-orange-300/50 hover:border-orange-400/60 transition-colors"
+            >
+              <CardContent className="pt-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-orange-500 shrink-0" />
+                  <span className="font-mono text-sm text-muted-foreground">
+                    {invoiceHash.slice(0, 12)}…
+                  </span>
+                </div>
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Factor</span>
+                    <AddressDisplay address={factor} chars={4} showExplorer />
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Amount Owed</span>
+                    <span className="font-mono font-medium text-orange-600">
+                      {advanceAmount.toLocaleString(undefined, {
+                        maximumFractionDigits: 6,
+                      })}{" "}
+                      ALEO
+                    </span>
+                  </div>
+                </div>
+                <Badge variant="outline" className="text-xs text-orange-600 border-orange-300">
+                  Recourse Active
+                </Badge>
+                <Button
+                  size="sm"
+                  className="w-full gap-1.5"
+                  variant="destructive"
+                  onClick={() => handleSettleRecourse(notice)}
+                  disabled={isSettlingThis}
+                >
+                  <CheckCircle className="h-4 w-4" />
+                  {isSettlingThis ? "Repaying…" : "Settle Recourse"}
                 </Button>
               </CardContent>
             </Card>
@@ -602,6 +802,20 @@ export function BusinessDashboard() {
         ))}
       </div>
 
+      {/* Recourse alert banner */}
+      {recourseNoticeRecords.length > 0 && (
+        <Card className="border-orange-300/50 bg-orange-50/50 dark:bg-orange-950/20">
+          <CardContent className="pt-4 flex items-center gap-3">
+            <AlertTriangle className="h-5 w-5 text-orange-500 shrink-0" />
+            <p className="text-sm text-orange-700 dark:text-orange-400">
+              {recourseNoticeRecords.length} recourse notice
+              {recourseNoticeRecords.length !== 1 ? "s" : ""} require your
+              attention. Open the <strong>Recourse</strong> tab to repay.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Error state */}
       {isError && !records && (
         <Card className="border-destructive/50">
@@ -621,19 +835,33 @@ export function BusinessDashboard() {
           <TabsTrigger value="invoices">
             My Invoices
             {!isLoading && invoiceRecords.length > 0 && (
-              <span className="ml-1.5 text-xs opacity-70">({invoiceRecords.length})</span>
+              <span className="ml-1.5 text-xs opacity-70">
+                ({invoiceRecords.length})
+              </span>
             )}
           </TabsTrigger>
           <TabsTrigger value="factored">
             Factored
             {!isLoading && factoredRecords.length > 0 && (
-              <span className="ml-1.5 text-xs opacity-70">({factoredRecords.length})</span>
+              <span className="ml-1.5 text-xs opacity-70">
+                ({factoredRecords.length})
+              </span>
             )}
           </TabsTrigger>
           <TabsTrigger value="offers">
             Pending Offers
             {!isLoading && offerRecords.length > 0 && (
-              <span className="ml-1.5 text-xs opacity-70">({offerRecords.length})</span>
+              <span className="ml-1.5 text-xs opacity-70">
+                ({offerRecords.length})
+              </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="recourse">
+            Recourse
+            {!isLoading && recourseNoticeRecords.length > 0 && (
+              <span className="ml-1.5 text-xs opacity-70 text-orange-500">
+                ({recourseNoticeRecords.length})
+              </span>
             )}
           </TabsTrigger>
         </TabsList>
@@ -648,6 +876,10 @@ export function BusinessDashboard() {
 
         <TabsContent value="offers" className="mt-4">
           {renderOfferCards()}
+        </TabsContent>
+
+        <TabsContent value="recourse" className="mt-4">
+          {renderRecourseNoticeCards()}
         </TabsContent>
       </Tabs>
     </div>

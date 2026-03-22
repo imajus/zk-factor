@@ -1,5 +1,5 @@
 {
-  "program": "zk_factor_9593.aleo",
+  "program": "zk_factor_9596.aleo",
   "version": "0.1.0",
   "description": "",
   "license": "MIT",
@@ -7,6 +7,12 @@
   "dependencies": [
     {
       "name": "credits.aleo",
+      "location": "network",
+      "path": null,
+      "edition": null
+    },
+    {
+      "name": "test_usdcx_stablecoin.aleo",
       "location": "network",
       "path": null,
       "edition": null

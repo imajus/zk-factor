@@ -1,15 +1,15 @@
-import { ReactNode } from 'react';
-import { Link } from 'react-router-dom';
-import { Zap, Wallet } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { useWallet } from '@/contexts/WalletContext';
+import { ReactNode } from "react";
+import { Link } from "react-router-dom";
+import { Zap, Wallet } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useWallet } from "@/contexts/WalletContext";
 
 interface PublicLayoutProps {
   children: ReactNode;
 }
 
 export function PublicLayout({ children }: PublicLayoutProps) {
-  const { isConnected, connect } = useWallet();
+  const { isConnected } = useWallet();
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -26,9 +26,11 @@ export function PublicLayout({ children }: PublicLayoutProps) {
               <Link to="/pay">Pay an Invoice</Link>
             </Button>
             {!isConnected && (
-              <Button onClick={connect} className="gap-2">
-                <Wallet className="h-4 w-4" />
-                Connect Wallet
+              <Button asChild className="gap-2">
+                <Link to="/connect">
+                  <Wallet className="h-4 w-4" />
+                  Connect or Login
+                </Link>
               </Button>
             )}
             {isConnected && (
@@ -44,10 +46,30 @@ export function PublicLayout({ children }: PublicLayoutProps) {
         <div className="container flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
           <p>© 2026 ZK Factor. Built on Aleo.</p>
           <div className="flex items-center gap-4">
-            <Link to="/about" className="hover:text-foreground transition-colors">About</Link>
-            <Link to="/roadmap" className="hover:text-foreground transition-colors">Roadmap</Link>
-            <Link to="/terms" className="hover:text-foreground transition-colors">Terms</Link>
-            <Link to="/privacy" className="hover:text-foreground transition-colors">Privacy</Link>
+            <Link
+              to="/about"
+              className="hover:text-foreground transition-colors"
+            >
+              About
+            </Link>
+            <Link
+              to="/roadmap"
+              className="hover:text-foreground transition-colors"
+            >
+              Roadmap
+            </Link>
+            <Link
+              to="/terms"
+              className="hover:text-foreground transition-colors"
+            >
+              Terms
+            </Link>
+            <Link
+              to="/privacy"
+              className="hover:text-foreground transition-colors"
+            >
+              Privacy
+            </Link>
           </div>
         </div>
       </footer>

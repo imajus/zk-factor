@@ -11,6 +11,10 @@ export interface AleoRecord {
   tag?: string;
 }
 
+type InvoiceCurrency = "ALEO" | "USDCx";
+const INVOICE_METADATA_FLAG_MASK = 1n;
+const INVOICE_CURRENCY_CACHE_KEY = "zkfactor.invoice_currency_map";
+
 export function getField(plaintext: string, field: string): string {
   for (const line of plaintext.split("\n")) {
     const trimmed = line.trimStart();
@@ -27,4 +31,67 @@ export function microToAleo(microcredits: string): number {
 
 export function unixToDate(unixSeconds: string): Date {
   return new Date(parseInt(unixSeconds.replace(/u64$/, ""), 10) * 1000);
+}
+
+export function encodeInvoiceMetadata(
+  invoiceNumber: string,
+  currency: InvoiceCurrency,
+): string {
+  // Reserve the lowest 8 bits for flags to keep metadata extensible.
+  const bytes = new TextEncoder().encode(invoiceNumber);
+  let value = 0n;
+  for (let i = 0; i < Math.min(15, bytes.length); i++) {
+    value = (value << 8n) | BigInt(bytes[i]);
+  }
+  value <<= 8n;
+  if (currency === "USDCx") {
+    value |= INVOICE_METADATA_FLAG_MASK;
+  }
+  return `${value}u128`;
+}
+
+export function decodeInvoiceCurrencyFromMetadata(
+  metadata: string,
+): InvoiceCurrency {
+  const raw = metadata.replace(/u128$/, "").trim();
+  if (!raw) return "ALEO";
+  try {
+    const value = BigInt(raw);
+    return (value & INVOICE_METADATA_FLAG_MASK) === INVOICE_METADATA_FLAG_MASK
+      ? "USDCx"
+      : "ALEO";
+  } catch {
+    return "ALEO";
+  }
+}
+
+export function persistInvoiceCurrency(
+  invoiceHash: string,
+  currency: InvoiceCurrency,
+): void {
+  if (!invoiceHash) return;
+  try {
+    const existing = localStorage.getItem(INVOICE_CURRENCY_CACHE_KEY);
+    const map = existing
+      ? (JSON.parse(existing) as Record<string, InvoiceCurrency>)
+      : {};
+    map[invoiceHash] = currency;
+    localStorage.setItem(INVOICE_CURRENCY_CACHE_KEY, JSON.stringify(map));
+  } catch {
+    // Ignore storage failures (private browsing / quota issues).
+  }
+}
+
+export function getPersistedInvoiceCurrency(
+  invoiceHash: string,
+): InvoiceCurrency | null {
+  if (!invoiceHash) return null;
+  try {
+    const existing = localStorage.getItem(INVOICE_CURRENCY_CACHE_KEY);
+    if (!existing) return null;
+    const map = JSON.parse(existing) as Record<string, InvoiceCurrency>;
+    return map[invoiceHash] ?? null;
+  } catch {
+    return null;
+  }
 }

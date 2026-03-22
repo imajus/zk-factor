@@ -1,6 +1,12 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Search, Users, AlertCircle, RefreshCw, ArrowRight } from "lucide-react";
+import {
+  Search,
+  Users,
+  AlertCircle,
+  RefreshCw,
+  ArrowRight,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,9 +36,13 @@ import { useTransaction } from "@/hooks/use-transaction";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { PROGRAM_ID } from "@/lib/config";
-import { type AleoRecord, getField } from "@/lib/aleo-records";
+import {
+  type AleoRecord,
+  decodeInvoiceCurrencyFromMetadata,
+  getField,
+  getPersistedInvoiceCurrency,
+} from "@/lib/aleo-records";
 import { type FactorInfo, fetchActiveFactors } from "@/lib/aleo-factors";
-
 
 export default function Marketplace() {
   const queryClient = useQueryClient();
@@ -76,6 +86,15 @@ export default function Marketplace() {
   const advanceRateBps = advanceRateInput ? parseInt(advanceRateInput, 10) : 0;
   const advanceRateValid = advanceRateBps >= 5000 && advanceRateBps <= 9900;
 
+  const getInvoiceCurrency = (record: AleoRecord): "ALEO" | "USDCx" => {
+    const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
+    const metadata = getField(record.recordPlaintext, "metadata");
+    const fromMetadata = decodeInvoiceCurrencyFromMetadata(metadata);
+    // Backward compatibility for invoices minted before metadata flagging.
+    const cached = getPersistedInvoiceCurrency(invoiceHash);
+    return cached ?? fromMetadata;
+  };
+
   useEffect(() => {
     if (status === "submitting")
       toast.loading("Generating proof…", { id: "factor-invoice" });
@@ -99,6 +118,8 @@ export default function Marketplace() {
       (r) => r.commitment === selectedInvoiceId,
     );
     if (!invoice) return;
+    const currency = getInvoiceCurrency(invoice);
+    const useToken = currency === "USDCx";
 
     await execute({
       program: PROGRAM_ID,
@@ -107,6 +128,7 @@ export default function Marketplace() {
         invoice.recordPlaintext, // their Invoice record
         selectedFactor.address, // who they're offering to
         `${advanceRateBps}u16`, // agreed rate
+        useToken ? "true" : "false",
       ],
       fee: 100_000,
       privateFee: false,
@@ -218,7 +240,8 @@ export default function Marketplace() {
                         No active factors yet
                       </h3>
                       <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-                        Be the first to register as a factor on the network and start purchasing invoices.
+                        Be the first to register as a factor on the network and
+                        start purchasing invoices.
                       </p>
                     </div>
                     <Button asChild>
@@ -339,6 +362,7 @@ export default function Marketplace() {
                                         r.recordPlaintext,
                                         "invoice_hash",
                                       );
+                                      const currency = getInvoiceCurrency(r);
                                       const amount = (
                                         parseInt(
                                           getField(
@@ -353,7 +377,8 @@ export default function Marketplace() {
                                           key={r.commitment}
                                           value={r.commitment}
                                         >
-                                          {hash.slice(0, 12)}… - {amount} ALEO
+                                          {hash.slice(0, 12)}… - {amount}{" "}
+                                          {currency}
                                         </SelectItem>
                                       );
                                     })

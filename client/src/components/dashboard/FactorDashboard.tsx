@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import {
   Briefcase,
@@ -13,12 +13,11 @@ import {
   CheckCircle,
   FileCheck,
   AlertCircle,
+  AlertTriangle,
+  Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
 import { Badge } from "@/components/ui/badge";
 import { AddressDisplay } from "@/components/ui/address-display";
@@ -40,9 +39,20 @@ import { toast } from "sonner";
 import { PROGRAM_ID, API_ENDPOINT } from "@/lib/config";
 import {
   type AleoRecord,
+  getPersistedInvoiceCurrency,
+  persistInvoiceCurrency,
   getField,
   microToAleo,
+  unixToDate,
 } from "@/lib/aleo-records";
+import { getDaysUntilDue, formatDate } from "@/lib/format";
+
+// An invoice is "overdue" if due_date (Unix seconds) is in the past
+function isOverdue(dueDateRaw: string): boolean {
+  const ts = parseInt(dueDateRaw.replace(/u64$/, ""), 10);
+  if (!ts) return false;
+  return Date.now() / 1000 > ts;
+}
 
 export function FactorDashboard() {
   const queryClient = useQueryClient();
@@ -50,6 +60,11 @@ export function FactorDashboard() {
   const { execute, status, error: txError, reset } = useTransaction();
   const [settlingId, setSettlingId] = useState<string | null>(null);
   const [settledHashes, setSettledHashes] = useState<Set<string>>(new Set());
+  const [reclaimingId, setReclaimingId] = useState<string | null>(null);
+  const pendingAcceptedCurrencyRef = useRef<{
+    invoiceHash: string;
+    currency: "ALEO" | "USDCx";
+  } | null>(null);
 
   const {
     data: records,
@@ -69,6 +84,33 @@ export function FactorDashboard() {
   const offerRecords = ((records as AleoRecord[]) ?? []).filter(
     (r) => r.recordName === "FactoringOffer" && !r.spent,
   );
+  const poolShareRecords = ((records as AleoRecord[]) ?? []).filter(
+    (r) => r.recordName === "PoolShare" && !r.spent,
+  );
+
+  // FactoredInvoice records that are eligible for recourse:
+  //   recourse == true  AND  due_date has passed  AND  not yet settled
+  const recourseEligible = factoredRecords.filter((r) => {
+    const recourse = getField(r.recordPlaintext, "recourse");
+    const dueDate = getField(r.recordPlaintext, "due_date");
+    const invoiceHash = getField(r.recordPlaintext, "invoice_hash");
+    return (
+      recourse === "true" &&
+      isOverdue(dueDate) &&
+      !settledHashes.has(invoiceHash)
+    );
+  });
+
+  const getOfferCurrency = (record: AleoRecord): "ALEO" | "USDCx" => {
+    return getField(record.recordPlaintext, "use_token") === "true"
+      ? "USDCx"
+      : "ALEO";
+  };
+
+  const getFactoredCurrency = (record: AleoRecord): "ALEO" | "USDCx" => {
+    const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
+    return getPersistedInvoiceCurrency(invoiceHash) ?? "ALEO";
+  };
 
   const portfolioValue = factoredRecords.reduce((sum, r) => {
     return sum + microToAleo(getField(r.recordPlaintext, "amount") || "0u64");
@@ -104,17 +146,27 @@ export function FactorDashboard() {
     else if (status === "pending")
       toast.loading("Broadcasting…", { id: "tx-op" });
     else if (status === "accepted") {
+      if (pendingAcceptedCurrencyRef.current) {
+        persistInvoiceCurrency(
+          pendingAcceptedCurrencyRef.current.invoiceHash,
+          pendingAcceptedCurrencyRef.current.currency,
+        );
+        pendingAcceptedCurrencyRef.current = null;
+      }
       toast.success("Transaction confirmed!", { id: "tx-op" });
       queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
       setSettlingId(null);
+      setReclaimingId(null);
       reset();
     } else if (status === "failed") {
+      pendingAcceptedCurrencyRef.current = null;
       const msg = txError || "Transaction failed";
       toast.error(
         msg.includes("already settled") ? "Invoice already settled" : msg,
         { id: "tx-op" },
       );
       setSettlingId(null);
+      setReclaimingId(null);
       reset();
     }
   }, [status, txError, queryClient, reset]);
@@ -163,7 +215,23 @@ export function FactorDashboard() {
   const handleAcceptOffer = async (record: AleoRecord) => {
     const recordId =
       record.commitment ?? getField(record.recordPlaintext, "invoice_hash");
+    const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
+    const currency = getOfferCurrency(record);
     setSettlingId(recordId);
+
+    pendingAcceptedCurrencyRef.current = { invoiceHash, currency };
+
+    if (currency === "USDCx") {
+      await execute({
+        program: PROGRAM_ID,
+        function: "execute_factoring_token",
+        inputs: [record.recordPlaintext],
+        fee: 100_000,
+        privateFee: false,
+      });
+      return;
+    }
+
     let creditsRecord: AleoRecord | undefined;
     try {
       const creditsRecords = (await requestRecords(
@@ -198,6 +266,7 @@ export function FactorDashboard() {
     if (!creditsRecord) {
       toast.error("Insufficient credits to fund this factoring");
       setSettlingId(null);
+      pendingAcceptedCurrencyRef.current = null;
       return;
     }
     await execute({
@@ -207,6 +276,28 @@ export function FactorDashboard() {
       fee: 100_000,
       privateFee: false,
     });
+  };
+
+  // Factor initiates recourse on an overdue FactoredInvoice
+  const handleInitiateRecourse = async (record: AleoRecord) => {
+    const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
+    const recordId = record.commitment ?? invoiceHash;
+    setReclaimingId(recordId);
+    try {
+      await execute({
+        program: PROGRAM_ID,
+        function: "initiate_recourse",
+        inputs: [record.recordPlaintext],
+        fee: 100_000,
+        privateFee: false,
+      });
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Recourse initiation failed",
+        { id: "tx-op" },
+      );
+      setReclaimingId(null);
+    }
   };
 
   const dynamicStats = [
@@ -219,8 +310,9 @@ export function FactorDashboard() {
       title: "Portfolio Value",
       value: isLoading
         ? "…"
-        : portfolioValue.toLocaleString(undefined, { maximumFractionDigits: 2 }) +
-          " ALEO",
+        : portfolioValue.toLocaleString(undefined, {
+            maximumFractionDigits: 2,
+          }) + " Mixed",
       icon: <TrendingUp className="h-5 w-5 text-primary" />,
     },
     {
@@ -277,6 +369,7 @@ export function FactorDashboard() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {factoredRecords.map((record, idx) => {
           const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
+          const currency = getFactoredCurrency(record);
           const aleoAmount = microToAleo(
             getField(record.recordPlaintext, "amount") || "0u64",
           );
@@ -291,11 +384,26 @@ export function FactorDashboard() {
             record.recordPlaintext,
             "original_creditor",
           );
+          const recourseEnabled =
+            getField(record.recordPlaintext, "recourse") === "true";
+          const dueDateRaw = getField(record.recordPlaintext, "due_date");
+          const dueDate = unixToDate(dueDateRaw || "0u64");
+          const daysUntil = getDaysUntilDue(dueDate);
+          const overdue = isOverdue(dueDateRaw);
           const recordId = record.commitment ?? invoiceHash;
           const isSettling = settlingId === recordId;
           const isSettled = settledHashes.has(invoiceHash);
+          const isReclaiming = reclaimingId === recordId;
+          const canRecourse = recourseEnabled && overdue && !isSettled;
+
           return (
-            <Card key={invoiceHash || idx} className="hover:border-primary/50 transition-colors">
+            <Card
+              key={invoiceHash || idx}
+              className={cn(
+                "hover:border-primary/50 transition-colors",
+                canRecourse && "border-orange-300/50",
+              )}
+            >
               <CardContent className="pt-4 space-y-3">
                 <div className="flex items-start justify-between">
                   <span className="font-mono text-sm text-muted-foreground">
@@ -303,7 +411,11 @@ export function FactorDashboard() {
                   </span>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 -mt-1 -mr-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 -mt-1 -mr-1"
+                      >
                         <MoreHorizontal className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
@@ -340,30 +452,72 @@ export function FactorDashboard() {
                 <div className="space-y-1 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Creditor</span>
-                    <AddressDisplay address={originalCreditor} chars={4} showExplorer />
+                    <AddressDisplay
+                      address={originalCreditor}
+                      chars={4}
+                      showExplorer
+                    />
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Amount</span>
                     <span className="font-mono font-medium">
-                      {aleoAmount.toLocaleString(undefined, { maximumFractionDigits: 6 })} ALEO
+                      {aleoAmount.toLocaleString(undefined, {
+                        maximumFractionDigits: 6,
+                      })}{" "}
+                      {currency}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Rate</span>
                     <span>{rate.toFixed(2)}%</span>
                   </div>
-                </div>
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    "text-xs",
-                    isSettled
-                      ? "text-green-600 border-green-300"
-                      : "text-yellow-600 border-yellow-300",
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Due</span>
+                    <div className="text-right">
+                      <span>{formatDate(dueDate)}</span>
+                      {overdue && (
+                        <span className="ml-2 text-xs text-destructive">
+                          {Math.abs(daysUntil)}d overdue
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {recourseEnabled && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Recourse</span>
+                      <Badge variant="outline" className="text-xs border-orange-300 text-orange-600">
+                        Enabled
+                      </Badge>
+                    </div>
                   )}
-                >
-                  {isSettled ? "Settled" : "Active"}
-                </Badge>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "text-xs",
+                      isSettled
+                        ? "text-green-600 border-green-300"
+                        : "text-yellow-600 border-yellow-300",
+                    )}
+                  >
+                    {isSettled ? "Settled" : "Active"}
+                  </Badge>
+
+                  {/* Recourse button — only shown when eligible */}
+                  {canRecourse && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="flex-1 gap-1.5 text-orange-600 border-orange-300 hover:bg-orange-50"
+                      onClick={() => handleInitiateRecourse(record)}
+                      disabled={isReclaiming}
+                    >
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                      {isReclaiming ? "Initiating…" : "Claim Recourse"}
+                    </Button>
+                  )}
+                </div>
               </CardContent>
             </Card>
           );
@@ -405,6 +559,7 @@ export function FactorDashboard() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {offerRecords.map((record, idx) => {
           const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
+          const currency = getOfferCurrency(record);
           const aleoAmount = microToAleo(
             getField(record.recordPlaintext, "amount") || "0u64",
           );
@@ -420,10 +575,15 @@ export function FactorDashboard() {
             record.recordPlaintext,
             "original_creditor",
           );
+          const recourseFlag =
+            getField(record.recordPlaintext, "recourse") === "true";
           const recordId = record.commitment ?? invoiceHash;
           const isAccepting = settlingId === recordId;
           return (
-            <Card key={invoiceHash || idx} className="hover:border-primary/50 transition-colors">
+            <Card
+              key={invoiceHash || idx}
+              className="hover:border-primary/50 transition-colors"
+            >
               <CardContent className="pt-4 space-y-3">
                 <span className="font-mono text-sm text-muted-foreground">
                   {invoiceHash.slice(0, 12)}…
@@ -431,17 +591,30 @@ export function FactorDashboard() {
                 <div className="space-y-1 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Business</span>
-                    <AddressDisplay address={originalCreditor} chars={4} showExplorer />
+                    <AddressDisplay
+                      address={originalCreditor}
+                      chars={4}
+                      showExplorer
+                    />
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Amount</span>
                     <span className="font-mono font-medium">
-                      {aleoAmount.toLocaleString(undefined, { maximumFractionDigits: 6 })} ALEO
+                      {aleoAmount.toLocaleString(undefined, {
+                        maximumFractionDigits: 6,
+                      })}{" "}
+                      {currency}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Rate</span>
                     <span>{rate.toFixed(2)}%</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Recourse</span>
+                    <span className={cn("text-xs", recourseFlag ? "text-orange-500" : "text-muted-foreground")}>
+                      {recourseFlag ? "Yes" : "No"}
+                    </span>
                   </div>
                 </div>
                 <Button
@@ -461,18 +634,109 @@ export function FactorDashboard() {
     );
   };
 
+  const renderPoolShareCards = () => {
+    if (isLoading) {
+      return (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <Card key={i}>
+              <CardContent className="pt-4 space-y-2">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-6 w-16" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      );
+    }
+    if (poolShareRecords.length === 0) {
+      return (
+        <Card className="py-16 text-center">
+          <CardContent className="space-y-4">
+            <Users className="h-12 w-12 mx-auto text-muted-foreground" />
+            <div>
+              <p className="font-medium">No pool shares</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Contribute to a pool from the{" "}
+                <Link to="/pools" className="underline">
+                  Pools page
+                </Link>
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
+    return (
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {poolShareRecords.map((record, idx) => {
+          const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
+          const contributed = microToAleo(
+            getField(record.recordPlaintext, "contributed") || "0u64",
+          );
+          const totalPool = microToAleo(
+            getField(record.recordPlaintext, "total_pool") || "0u64",
+          );
+          const sharePct =
+            totalPool > 0
+              ? ((contributed / totalPool) * 100).toFixed(2)
+              : "0.00";
+          return (
+            <Card
+              key={invoiceHash || idx}
+              className="hover:border-primary/50 transition-colors"
+            >
+              <CardContent className="pt-4 space-y-3">
+                <span className="font-mono text-sm text-muted-foreground">
+                  {invoiceHash.slice(0, 12)}…
+                </span>
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Contributed</span>
+                    <span className="font-mono font-medium">
+                      {contributed.toLocaleString(undefined, {
+                        maximumFractionDigits: 6,
+                      })}{" "}
+                      ALEO
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Share</span>
+                    <span>{sharePct}%</span>
+                  </div>
+                </div>
+                <Badge variant="outline" className="text-xs text-blue-600 border-blue-300">
+                  Pool Share
+                </Badge>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+    );
+  };
+
   return (
     <div className="container py-6 space-y-6">
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Factor Dashboard</h1>
-          <p className="text-muted-foreground">Manage your factoring portfolio</p>
+          <p className="text-muted-foreground">
+            Manage your factoring portfolio
+          </p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => refetch()}>
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
+          </Button>
+          <Button variant="outline" size="sm" asChild>
+            <Link to="/pools">
+              <Users className="h-4 w-4 mr-2" />
+              Pools
+            </Link>
           </Button>
           <Button asChild>
             <Link to="/marketplace">
@@ -489,6 +753,20 @@ export function FactorDashboard() {
           <StatCard key={stat.title} {...stat} />
         ))}
       </div>
+
+      {/* Overdue recourse alert */}
+      {recourseEligible.length > 0 && (
+        <Card className="border-orange-300/50 bg-orange-50/50 dark:bg-orange-950/20">
+          <CardContent className="pt-4 flex items-center gap-3">
+            <AlertTriangle className="h-5 w-5 text-orange-500 shrink-0" />
+            <p className="text-sm text-orange-700 dark:text-orange-400">
+              {recourseEligible.length} overdue invoice
+              {recourseEligible.length !== 1 ? "s" : ""} with recourse enabled.
+              Open the <strong>Portfolio</strong> tab to claim recourse.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Error state */}
       {isError && !records && (
@@ -509,13 +787,25 @@ export function FactorDashboard() {
           <TabsTrigger value="portfolio">
             Portfolio
             {!isLoading && factoredRecords.length > 0 && (
-              <span className="ml-1.5 text-xs opacity-70">({factoredRecords.length})</span>
+              <span className="ml-1.5 text-xs opacity-70">
+                ({factoredRecords.length})
+              </span>
             )}
           </TabsTrigger>
           <TabsTrigger value="offers">
             Pending Offers
             {!isLoading && offerRecords.length > 0 && (
-              <span className="ml-1.5 text-xs opacity-70">({offerRecords.length})</span>
+              <span className="ml-1.5 text-xs opacity-70">
+                ({offerRecords.length})
+              </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="pool-shares">
+            Pool Shares
+            {!isLoading && poolShareRecords.length > 0 && (
+              <span className="ml-1.5 text-xs opacity-70">
+                ({poolShareRecords.length})
+              </span>
             )}
           </TabsTrigger>
         </TabsList>
@@ -526,6 +816,10 @@ export function FactorDashboard() {
 
         <TabsContent value="offers" className="mt-4">
           {renderOfferCards()}
+        </TabsContent>
+
+        <TabsContent value="pool-shares" className="mt-4">
+          {renderPoolShareCards()}
         </TabsContent>
       </Tabs>
     </div>
