@@ -1,5 +1,5 @@
 {
-  "program": "zk_factor_9594.aleo",
+  "program": "zk_factor_9595.aleo",
   "structs": [
     {
       "path": [
@@ -132,6 +132,13 @@
             "Primitive": {
               "UInt": "U128"
             }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "document_cid",
+          "ty": {
+            "Primitive": "Field"
           },
           "mode": "None"
         }
@@ -367,7 +374,7 @@
           "path": [
             "FactorInfo"
           ],
-          "program": "zk_factor_9594"
+          "program": "zk_factor_9595"
         }
       }
     },
@@ -381,7 +388,7 @@
           "path": [
             "SettlementInfo"
           ],
-          "program": "zk_factor_9594"
+          "program": "zk_factor_9595"
         }
       }
     },
@@ -466,6 +473,15 @@
             }
           },
           "mode": "None"
+        },
+        {
+          "name": "document_cid",
+          "ty": {
+            "Plaintext": {
+              "Primitive": "Field"
+            }
+          },
+          "mode": "None"
         }
       ],
       "outputs": [
@@ -475,7 +491,7 @@
               "path": [
                 "Invoice"
               ],
-              "program": "zk_factor_9594"
+              "program": "zk_factor_9595"
             }
           },
           "mode": "None"
@@ -542,7 +558,7 @@
               "path": [
                 "Invoice"
               ],
-              "program": "zk_factor_9594"
+              "program": "zk_factor_9595"
             }
           },
           "mode": "None"
@@ -584,7 +600,7 @@
               "path": [
                 "FactoringOffer"
               ],
-              "program": "zk_factor_9594"
+              "program": "zk_factor_9595"
             }
           },
           "mode": "None"
@@ -606,7 +622,7 @@
               "path": [
                 "FactoringOffer"
               ],
-              "program": "zk_factor_9594"
+              "program": "zk_factor_9595"
             }
           },
           "mode": "None"
@@ -631,7 +647,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_9594"
+              "program": "zk_factor_9595"
             }
           },
           "mode": "None"
@@ -675,7 +691,7 @@
               "path": [
                 "FactoringOffer"
               ],
-              "program": "zk_factor_9594"
+              "program": "zk_factor_9595"
             }
           },
           "mode": "None"
@@ -688,7 +704,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_9594"
+              "program": "zk_factor_9595"
             }
           },
           "mode": "None"
@@ -710,7 +726,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_9594"
+              "program": "zk_factor_9595"
             }
           },
           "mode": "None"
@@ -734,7 +750,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_9594"
+              "program": "zk_factor_9595"
             }
           },
           "mode": "None"
@@ -747,7 +763,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_9594"
+              "program": "zk_factor_9595"
             }
           },
           "mode": "None"
@@ -758,7 +774,7 @@
               "path": [
                 "PaymentNotice"
               ],
-              "program": "zk_factor_9594"
+              "program": "zk_factor_9595"
             }
           },
           "mode": "None"
@@ -776,7 +792,7 @@
               "path": [
                 "PaymentNotice"
               ],
-              "program": "zk_factor_9594"
+              "program": "zk_factor_9595"
             }
           },
           "mode": "None"

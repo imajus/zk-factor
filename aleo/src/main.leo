@@ -3,7 +3,7 @@
 import credits.aleo;
 import test_usdcx_stablecoin.aleo;
 
-program zk_factor_9594.aleo {
+program zk_factor_9595.aleo {
     // Simple admin-controlled upgradable constructor for MVP
     // Can be upgraded to multi-sig governance later
     // IMPORTANT: Replace with actual admin address before deployment
@@ -29,6 +29,12 @@ program zk_factor_9594.aleo {
         invoice_hash: field,
         nonce: field,
         metadata: u128,
+        // IPFS CID encoded as a field element.
+        // 0field = no document attached.
+        // Non-zero = cidToField(cid) from src/lib/ipfs.ts
+        // The full CID string must be stored off-chain — this field only
+        // proves a document exists and hasn't been tampered with.
+        document_cid: field,
     }
 
     // FactoredInvoice record owned by factor after purchase
@@ -85,12 +91,14 @@ program zk_factor_9594.aleo {
     }
 
     // Create an invoice record with validation
+    // document_cid: pass 0field if no document, or cidToField(cid) from src/lib/ipfs.ts
     async transition mint_invoice(
         debtor: address,
         amount: u64,
         due_date: u64,
         invoice_hash: field,
-        metadata: u128
+        metadata: u128,
+        document_cid: field,
     ) -> (Invoice, Future) {
         assert(amount > 0u64);
         assert(debtor != self.caller);
@@ -103,6 +111,7 @@ program zk_factor_9594.aleo {
             invoice_hash: invoice_hash,
             nonce: nonce,
             metadata: metadata,
+            document_cid: document_cid,
         };
         return (invoice, finalize_mint_invoice(due_date));
     }
@@ -290,7 +299,7 @@ program zk_factor_9594.aleo {
     // The token contract deducts from the factor's public balance and credits
     // the business's public balance atomically within the same transaction.
     //
-    // NOTE: usdcx_token.aleo/transfer_public expects (receiver: address, amount: u64).
+    // NOTE: test_usdcx_stablecoin.aleo/transfer_public expects (receiver: address, amount: u128).
     // Both credits.aleo microcredits and USDCx use 6 decimal places, so
     // advance_amount in microcredits == advance_amount in USDCx micro-units (1:1 scale).
     // Adjust if the deployed USDCx program uses a different denomination.
