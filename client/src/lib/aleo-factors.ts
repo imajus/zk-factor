@@ -1,5 +1,6 @@
 import { AleoNetworkClient } from "@provablehq/sdk";
 import { PROGRAM_ID, API_ENDPOINT } from "@/lib/config";
+import { PaymentCurrency } from "@/lib/config";
 
 export interface FactorInfo {
   address: string;
@@ -30,14 +31,29 @@ function parseMappingField(plaintext: string, field: string): string {
   return "";
 }
 
-export function parseFactorInfo(address: string, plaintext: string): FactorInfo {
+export function parseFactorInfo(
+  address: string,
+  plaintext: string,
+): FactorInfo {
   return {
     address,
     is_active: parseMappingField(plaintext, "is_active") === "true",
-    min_advance_rate: parseInt(parseMappingField(plaintext, "min_advance_rate"), 10),
-    max_advance_rate: parseInt(parseMappingField(plaintext, "max_advance_rate"), 10),
-    total_factored: parseInt(parseMappingField(plaintext, "total_factored"), 10),
-    registration_date: parseInt(parseMappingField(plaintext, "registration_date"), 10),
+    min_advance_rate: parseInt(
+      parseMappingField(plaintext, "min_advance_rate"),
+      10,
+    ),
+    max_advance_rate: parseInt(
+      parseMappingField(plaintext, "max_advance_rate"),
+      10,
+    ),
+    total_factored: parseInt(
+      parseMappingField(plaintext, "total_factored"),
+      10,
+    ),
+    registration_date: parseInt(
+      parseMappingField(plaintext, "registration_date"),
+      10,
+    ),
   };
 }
 
@@ -82,10 +98,36 @@ export async function fetchFactorStatus(
     );
     return {
       is_active: parseMappingField(String(value), "is_active") === "true",
-      min_advance_rate: parseInt(parseMappingField(String(value), "min_advance_rate"), 10),
-      max_advance_rate: parseInt(parseMappingField(String(value), "max_advance_rate"), 10),
+      min_advance_rate: parseInt(
+        parseMappingField(String(value), "min_advance_rate"),
+        10,
+      ),
+      max_advance_rate: parseInt(
+        parseMappingField(String(value), "max_advance_rate"),
+        10,
+      ),
     };
   } catch {
     return null;
   }
+}
+
+// Call the correct execute transition based on currency
+export function getExecuteTransition(currency: PaymentCurrency): string {
+  return currency === "USDCx" ? "execute_factoring_token" : "execute_factoring";
+}
+
+// Inputs differ: credits path needs a private record, USDCx uses public balance
+export function buildExecuteInputs(
+  offer: string, // serialized FactoringOffer record
+  advanceAmount: bigint,
+  currency: PaymentCurrency,
+  creditsRecord?: string, // only needed for ALEO path
+): string[] {
+  if (currency === "USDCx") {
+    return [offer]; // USDCx: balance checked on-chain via public mapping
+  }
+  if (!creditsRecord)
+    throw new Error("Credits record required for ALEO payment");
+  return [offer, creditsRecord];
 }

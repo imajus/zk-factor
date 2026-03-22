@@ -1,9 +1,9 @@
 {
-  "program": "zk_factor_9593.aleo",
+  "program": "zk_factor_9594.aleo",
   "version": "0.1.0",
   "description": "",
   "license": "",
-  "leo": "3.4.0",
+  "leo": "3.5.0",
   "dependencies": null,
   "dev_dependencies": null
 }

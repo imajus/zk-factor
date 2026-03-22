@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import {
   Briefcase,
@@ -15,10 +15,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
 import { Badge } from "@/components/ui/badge";
 import { AddressDisplay } from "@/components/ui/address-display";
@@ -40,6 +37,8 @@ import { toast } from "sonner";
 import { PROGRAM_ID, API_ENDPOINT } from "@/lib/config";
 import {
   type AleoRecord,
+  getPersistedInvoiceCurrency,
+  persistInvoiceCurrency,
   getField,
   microToAleo,
 } from "@/lib/aleo-records";
@@ -50,6 +49,10 @@ export function FactorDashboard() {
   const { execute, status, error: txError, reset } = useTransaction();
   const [settlingId, setSettlingId] = useState<string | null>(null);
   const [settledHashes, setSettledHashes] = useState<Set<string>>(new Set());
+  const pendingAcceptedCurrencyRef = useRef<{
+    invoiceHash: string;
+    currency: "ALEO" | "USDCx";
+  } | null>(null);
 
   const {
     data: records,
@@ -69,6 +72,17 @@ export function FactorDashboard() {
   const offerRecords = ((records as AleoRecord[]) ?? []).filter(
     (r) => r.recordName === "FactoringOffer" && !r.spent,
   );
+
+  const getOfferCurrency = (record: AleoRecord): "ALEO" | "USDCx" => {
+    return getField(record.recordPlaintext, "use_token") === "true"
+      ? "USDCx"
+      : "ALEO";
+  };
+
+  const getFactoredCurrency = (record: AleoRecord): "ALEO" | "USDCx" => {
+    const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
+    return getPersistedInvoiceCurrency(invoiceHash) ?? "ALEO";
+  };
 
   const portfolioValue = factoredRecords.reduce((sum, r) => {
     return sum + microToAleo(getField(r.recordPlaintext, "amount") || "0u64");
@@ -104,11 +118,19 @@ export function FactorDashboard() {
     else if (status === "pending")
       toast.loading("Broadcasting…", { id: "tx-op" });
     else if (status === "accepted") {
+      if (pendingAcceptedCurrencyRef.current) {
+        persistInvoiceCurrency(
+          pendingAcceptedCurrencyRef.current.invoiceHash,
+          pendingAcceptedCurrencyRef.current.currency,
+        );
+        pendingAcceptedCurrencyRef.current = null;
+      }
       toast.success("Transaction confirmed!", { id: "tx-op" });
       queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
       setSettlingId(null);
       reset();
     } else if (status === "failed") {
+      pendingAcceptedCurrencyRef.current = null;
       const msg = txError || "Transaction failed";
       toast.error(
         msg.includes("already settled") ? "Invoice already settled" : msg,
@@ -163,7 +185,23 @@ export function FactorDashboard() {
   const handleAcceptOffer = async (record: AleoRecord) => {
     const recordId =
       record.commitment ?? getField(record.recordPlaintext, "invoice_hash");
+    const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
+    const currency = getOfferCurrency(record);
     setSettlingId(recordId);
+
+    pendingAcceptedCurrencyRef.current = { invoiceHash, currency };
+
+    if (currency === "USDCx") {
+      await execute({
+        program: PROGRAM_ID,
+        function: "execute_factoring_token",
+        inputs: [record.recordPlaintext],
+        fee: 100_000,
+        privateFee: false,
+      });
+      return;
+    }
+
     let creditsRecord: AleoRecord | undefined;
     try {
       const creditsRecords = (await requestRecords(
@@ -198,6 +236,7 @@ export function FactorDashboard() {
     if (!creditsRecord) {
       toast.error("Insufficient credits to fund this factoring");
       setSettlingId(null);
+      pendingAcceptedCurrencyRef.current = null;
       return;
     }
     await execute({
@@ -219,8 +258,9 @@ export function FactorDashboard() {
       title: "Portfolio Value",
       value: isLoading
         ? "…"
-        : portfolioValue.toLocaleString(undefined, { maximumFractionDigits: 2 }) +
-          " ALEO",
+        : portfolioValue.toLocaleString(undefined, {
+            maximumFractionDigits: 2,
+          }) + " Mixed",
       icon: <TrendingUp className="h-5 w-5 text-primary" />,
     },
     {
@@ -277,6 +317,7 @@ export function FactorDashboard() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {factoredRecords.map((record, idx) => {
           const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
+          const currency = getFactoredCurrency(record);
           const aleoAmount = microToAleo(
             getField(record.recordPlaintext, "amount") || "0u64",
           );
@@ -295,7 +336,10 @@ export function FactorDashboard() {
           const isSettling = settlingId === recordId;
           const isSettled = settledHashes.has(invoiceHash);
           return (
-            <Card key={invoiceHash || idx} className="hover:border-primary/50 transition-colors">
+            <Card
+              key={invoiceHash || idx}
+              className="hover:border-primary/50 transition-colors"
+            >
               <CardContent className="pt-4 space-y-3">
                 <div className="flex items-start justify-between">
                   <span className="font-mono text-sm text-muted-foreground">
@@ -303,7 +347,11 @@ export function FactorDashboard() {
                   </span>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 -mt-1 -mr-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 -mt-1 -mr-1"
+                      >
                         <MoreHorizontal className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
@@ -340,12 +388,19 @@ export function FactorDashboard() {
                 <div className="space-y-1 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Creditor</span>
-                    <AddressDisplay address={originalCreditor} chars={4} showExplorer />
+                    <AddressDisplay
+                      address={originalCreditor}
+                      chars={4}
+                      showExplorer
+                    />
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Amount</span>
                     <span className="font-mono font-medium">
-                      {aleoAmount.toLocaleString(undefined, { maximumFractionDigits: 6 })} ALEO
+                      {aleoAmount.toLocaleString(undefined, {
+                        maximumFractionDigits: 6,
+                      })}{" "}
+                      {currency}
                     </span>
                   </div>
                   <div className="flex justify-between">
@@ -405,6 +460,7 @@ export function FactorDashboard() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {offerRecords.map((record, idx) => {
           const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
+          const currency = getOfferCurrency(record);
           const aleoAmount = microToAleo(
             getField(record.recordPlaintext, "amount") || "0u64",
           );
@@ -423,7 +479,10 @@ export function FactorDashboard() {
           const recordId = record.commitment ?? invoiceHash;
           const isAccepting = settlingId === recordId;
           return (
-            <Card key={invoiceHash || idx} className="hover:border-primary/50 transition-colors">
+            <Card
+              key={invoiceHash || idx}
+              className="hover:border-primary/50 transition-colors"
+            >
               <CardContent className="pt-4 space-y-3">
                 <span className="font-mono text-sm text-muted-foreground">
                   {invoiceHash.slice(0, 12)}…
@@ -431,12 +490,19 @@ export function FactorDashboard() {
                 <div className="space-y-1 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Business</span>
-                    <AddressDisplay address={originalCreditor} chars={4} showExplorer />
+                    <AddressDisplay
+                      address={originalCreditor}
+                      chars={4}
+                      showExplorer
+                    />
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Amount</span>
                     <span className="font-mono font-medium">
-                      {aleoAmount.toLocaleString(undefined, { maximumFractionDigits: 6 })} ALEO
+                      {aleoAmount.toLocaleString(undefined, {
+                        maximumFractionDigits: 6,
+                      })}{" "}
+                      {currency}
                     </span>
                   </div>
                   <div className="flex justify-between">
@@ -467,7 +533,9 @@ export function FactorDashboard() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Factor Dashboard</h1>
-          <p className="text-muted-foreground">Manage your factoring portfolio</p>
+          <p className="text-muted-foreground">
+            Manage your factoring portfolio
+          </p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => refetch()}>
@@ -509,13 +577,17 @@ export function FactorDashboard() {
           <TabsTrigger value="portfolio">
             Portfolio
             {!isLoading && factoredRecords.length > 0 && (
-              <span className="ml-1.5 text-xs opacity-70">({factoredRecords.length})</span>
+              <span className="ml-1.5 text-xs opacity-70">
+                ({factoredRecords.length})
+              </span>
             )}
           </TabsTrigger>
           <TabsTrigger value="offers">
             Pending Offers
             {!isLoading && offerRecords.length > 0 && (
-              <span className="ml-1.5 text-xs opacity-70">({offerRecords.length})</span>
+              <span className="ml-1.5 text-xs opacity-70">
+                ({offerRecords.length})
+              </span>
             )}
           </TabsTrigger>
         </TabsList>

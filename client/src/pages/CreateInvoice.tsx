@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import {
   ArrowLeft,
@@ -38,11 +38,14 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useWallet } from "@/contexts/WalletContext";
 import { useTransaction } from "@/hooks/use-transaction";
-import { PROGRAM_ID } from "@/lib/config";
+import { PROGRAM_ID, PaymentCurrency } from "@/lib/config";
+import {
+  encodeInvoiceMetadata,
+  persistInvoiceCurrency,
+} from "@/lib/aleo-records";
 
 const ALEO_FIELD_MODULUS =
   8444461749428370424248824938781546531375899335154063827935233455917409239041n;
-
 
 async function computeInvoiceHash(
   invoiceNumber: string,
@@ -63,15 +66,6 @@ async function computeInvoiceHash(
   return `${value % ALEO_FIELD_MODULUS}field`;
 }
 
-function encodeMetadata(invoiceNumber: string): string {
-  const bytes = new TextEncoder().encode(invoiceNumber);
-  let value = 0n;
-  for (let i = 0; i < Math.min(16, bytes.length); i++) {
-    value = (value << 8n) | BigInt(bytes[i]);
-  }
-  return `${value}u128`;
-}
-
 interface InvoiceItem {
   id: string;
   description: string;
@@ -83,7 +77,7 @@ export default function CreateInvoice() {
   const navigate = useNavigate();
   const { isConnected } = useWallet();
   const { execute, status, error: txError } = useTransaction();
-  const isSubmitting = status !== "idle";
+  const isSubmitting = status === "submitting" || status === "pending";
 
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [description, setDescription] = useState("");
@@ -94,6 +88,11 @@ export default function CreateInvoice() {
   const [makeDebtorPublic, setMakeDebtorPublic] = useState(false);
   const [internalNotes, setInternalNotes] = useState("");
   const [showPreview, setShowPreview] = useState(false);
+  const [currency, setCurrency] = useState<PaymentCurrency>("ALEO");
+  const pendingInvoiceRef = useRef<{
+    hash: string;
+    currency: PaymentCurrency;
+  } | null>(null);
 
   const generateInvoiceNumber = () => {
     const timestamp = Date.now().toString(36).toUpperCase();
@@ -134,9 +133,17 @@ export default function CreateInvoice() {
     else if (status === "pending")
       toast.loading("Broadcasting...", { id: "create-invoice" });
     else if (status === "accepted") {
+      if (pendingInvoiceRef.current) {
+        persistInvoiceCurrency(
+          pendingInvoiceRef.current.hash,
+          pendingInvoiceRef.current.currency,
+        );
+        pendingInvoiceRef.current = null;
+      }
       toast.success("Invoice created successfully!", { id: "create-invoice" });
-      navigate("/invoices");
+      navigate("/dashboard");
     } else if (status === "failed") {
+      pendingInvoiceRef.current = null;
       toast.error(txError || "Failed to create invoice", {
         id: "create-invoice",
       });
@@ -157,7 +164,8 @@ export default function CreateInvoice() {
         debtorAddress,
         amountMicrocredits,
       );
-      const metadata = encodeMetadata(invoiceNumber);
+      const metadata = encodeInvoiceMetadata(invoiceNumber, currency);
+      pendingInvoiceRef.current = { hash: invoiceHash, currency };
       await execute({
         program: PROGRAM_ID,
         function: "mint_invoice",
@@ -189,7 +197,7 @@ export default function CreateInvoice() {
       {/* Header */}
       <div className="flex items-center gap-4 mb-6">
         <Button variant="ghost" size="icon" asChild>
-          <Link to="/invoices">
+          <Link to="/dashboard">
             <ArrowLeft className="h-5 w-5" />
           </Link>
         </Button>
@@ -277,9 +285,32 @@ export default function CreateInvoice() {
                   </p>
                 </div>
 
+                {/* Currency */}
+                <div className="space-y-2">
+                  <Label>Payment Currency</Label>
+                  <div className="flex gap-2">
+                    {(["ALEO", "USDCx"] as PaymentCurrency[]).map((c) => (
+                      <Button
+                        key={c}
+                        type="button"
+                        variant={currency === c ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setCurrency(c)}
+                      >
+                        {c}
+                      </Button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {currency === "USDCx"
+                      ? "Factor pays in USDCx stablecoin — no price volatility"
+                      : "Factor pays in native ALEO credits"}
+                  </p>
+                </div>
+
                 {/* Amount */}
                 <div className="space-y-2">
-                  <Label htmlFor="amount">Invoice Amount * (ALEO)</Label>
+                  <Label htmlFor="amount">Invoice Amount * ({currency})</Label>
                   <Input
                     id="amount"
                     type="number"
@@ -566,7 +597,7 @@ export default function CreateInvoice() {
                   type="button"
                   variant="ghost"
                   className="w-full"
-                  onClick={() => navigate("/invoices")}
+                  onClick={() => navigate("/dashboard")}
                 >
                   Cancel
                 </Button>

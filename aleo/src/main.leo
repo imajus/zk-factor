@@ -1,8 +1,9 @@
 // ZK-Factor: Confidential invoice factoring platform on Aleo blockchain
 // Cryptographically prevents double-factoring fraud while maintaining complete privacy
 import credits.aleo;
+import test_usdcx_stablecoin.aleo;
 
-program zk_factor_9593.aleo {
+program zk_factor_9594.aleo {
     // Simple admin-controlled upgradable constructor for MVP
     // Can be upgraded to multi-sig governance later
     // IMPORTANT: Replace with actual admin address before deployment
@@ -54,6 +55,7 @@ program zk_factor_9593.aleo {
         invoice_hash: field,         // Links back to the original off-chain invoice
         nonce: field,                // Carried over from Invoice for record uniqueness
         metadata: u128,              // Carried over from Invoice (invoice number, flags)
+        use_token: bool,             // true = USDCx, false = native credits
     }
 
     // Private record sent to debtor — only their wallet can read it
@@ -65,7 +67,6 @@ program zk_factor_9593.aleo {
         due_date: u64,
         invoice_hash: field,
     }
-
 
     // Factor registration and statistics
     struct FactorInfo {
@@ -162,7 +163,6 @@ program zk_factor_9593.aleo {
         Mapping::set(active_factors, factor, updated_info);
     }
 
-
     // Called by: Business
     // Inputs:    Invoice (owned by business), factor address, agreed rate
     // Outputs:   FactoringOffer (owned by factor)
@@ -174,6 +174,7 @@ program zk_factor_9593.aleo {
         invoice: Invoice,
         factor: address,
         advance_rate: u16,
+        use_token: bool,
     ) -> (FactoringOffer, Future) {
 
         // Only the invoice owner (business) can initiate factoring
@@ -192,6 +193,7 @@ program zk_factor_9593.aleo {
             invoice_hash: invoice.invoice_hash,
             nonce: invoice.nonce,
             metadata: invoice.metadata,
+            use_token: use_token,
         };
 
         return (offer, finalize_authorize_factoring(factor, invoice.invoice_hash));
@@ -205,7 +207,7 @@ program zk_factor_9593.aleo {
         assert(factor_info.is_active);
     }
 
-    // Called by: Factor
+    // Called by: Factor (native credits path)
     // Inputs:    FactoringOffer (owned by factor), credits (owned by factor)
     // Outputs:   FactoredInvoice (owned by factor), payment to business, change
     //
@@ -221,6 +223,11 @@ program zk_factor_9593.aleo {
         // Only the factor (offer.owner) can execute — prevents anyone else
         // from accepting an offer intended for a specific factor
         assert(offer.owner == self.caller);
+
+        // Guard: this transition is only for native credits.
+        // If the offer was authorized with use_token=true, the factor must
+        // call execute_factoring_token instead — prevents silent wrong-path execution.
+        assert(!offer.use_token);
 
         // Safe multiplication using u128 to prevent overflow before dividing
         // back down to u64. Mirrors the advance rate calculation from the old code.
@@ -275,6 +282,71 @@ program zk_factor_9593.aleo {
         Mapping::set(active_factors, factor, updated_factor);
     }
 
+    // Called by: Factor (USDCx stablecoin path)
+    // Inputs:    FactoringOffer (owned by factor)
+    // Outputs:   FactoredInvoice (owned by factor)
+    //
+    // USDCx uses ARC-20 public balances — no private record is passed in.
+    // The token contract deducts from the factor's public balance and credits
+    // the business's public balance atomically within the same transaction.
+    //
+    // NOTE: usdcx_token.aleo/transfer_public expects (receiver: address, amount: u64).
+    // Both credits.aleo microcredits and USDCx use 6 decimal places, so
+    // advance_amount in microcredits == advance_amount in USDCx micro-units (1:1 scale).
+    // Adjust if the deployed USDCx program uses a different denomination.
+    async transition execute_factoring_token(
+        offer: FactoringOffer,
+    ) -> (FactoredInvoice, Future) {
+
+        // Only the factor (offer.owner) can execute
+        assert(offer.owner == self.caller);
+
+        // Guard: this transition is only for USDCx.
+        // If the offer was authorized with use_token=false, the factor must
+        // call execute_factoring instead.
+        assert(offer.use_token);
+
+        // Safe multiplication using u128 to prevent overflow before dividing
+        // back down to u64.
+        let product: u128 = (offer.amount as u128) * (offer.advance_rate as u128);
+        let advance_amount: u64 = (product / 10000u128) as u64;
+
+        let factored: FactoredInvoice = FactoredInvoice {
+            owner: self.caller,
+            original_creditor: offer.original_creditor,
+            debtor: offer.debtor,
+            amount: offer.amount,
+            advance_amount: advance_amount,
+            due_date: offer.due_date,
+            factoring_date: 0u64,
+            advance_rate: offer.advance_rate,
+            invoice_hash: offer.invoice_hash,
+            recourse: false,
+        };
+
+        let transfer_future: Future = test_usdcx_stablecoin.aleo/transfer_public(offer.original_creditor, advance_amount as u128);
+
+        return (factored, finalize_exec_factoring_token(self.caller, offer.invoice_hash, transfer_future));
+    }
+
+    async function finalize_exec_factoring_token(factor: address, invoice_hash: field, transfer_future: Future) {
+        transfer_future.await();
+
+        let factor_info: FactorInfo = Mapping::get(active_factors, factor);
+        assert(factor_info.is_active);
+
+        let total_factored: u64 = Mapping::get_or_use(protocol_stats, 1u8, 0u64);
+        Mapping::set(protocol_stats, 1u8, total_factored + 1u64);
+
+        let updated_factor: FactorInfo = FactorInfo {
+            is_active: factor_info.is_active,
+            min_advance_rate: factor_info.min_advance_rate,
+            max_advance_rate: factor_info.max_advance_rate,
+            total_factored: factor_info.total_factored + 1u64,
+            registration_date: factor_info.registration_date,
+        };
+        Mapping::set(active_factors, factor, updated_factor);
+    }
 
     // Factor an invoice - atomic swap of invoice for payment
 //    async transition factor_invoice(
