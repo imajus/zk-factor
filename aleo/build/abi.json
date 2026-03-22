@@ -1,5 +1,5 @@
 {
-  "program": "zk_factor_9595.aleo",
+  "program": "zk_factor_9596.aleo",
   "structs": [
     {
       "path": [
@@ -313,6 +313,13 @@
             "Primitive": "Boolean"
           },
           "mode": "None"
+        },
+        {
+          "name": "recourse",
+          "ty": {
+            "Primitive": "Boolean"
+          },
+          "mode": "None"
         }
       ]
     },
@@ -361,6 +368,135 @@
           "mode": "None"
         }
       ]
+    },
+    {
+      "path": [
+        "RecourseNotice"
+      ],
+      "fields": [
+        {
+          "name": "owner",
+          "ty": {
+            "Primitive": "Address"
+          },
+          "mode": "None"
+        },
+        {
+          "name": "factor",
+          "ty": {
+            "Primitive": "Address"
+          },
+          "mode": "None"
+        },
+        {
+          "name": "advance_amount",
+          "ty": {
+            "Primitive": {
+              "UInt": "U64"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "invoice_hash",
+          "ty": {
+            "Primitive": "Field"
+          },
+          "mode": "None"
+        }
+      ]
+    },
+    {
+      "path": [
+        "FactorPool"
+      ],
+      "fields": [
+        {
+          "name": "owner",
+          "ty": {
+            "Primitive": "Address"
+          },
+          "mode": "None"
+        },
+        {
+          "name": "invoice_hash",
+          "ty": {
+            "Primitive": "Field"
+          },
+          "mode": "None"
+        },
+        {
+          "name": "target_amount",
+          "ty": {
+            "Primitive": {
+              "UInt": "U64"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "total_contributed",
+          "ty": {
+            "Primitive": {
+              "UInt": "U64"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "is_closed",
+          "ty": {
+            "Primitive": "Boolean"
+          },
+          "mode": "None"
+        }
+      ]
+    },
+    {
+      "path": [
+        "PoolShare"
+      ],
+      "fields": [
+        {
+          "name": "owner",
+          "ty": {
+            "Primitive": "Address"
+          },
+          "mode": "None"
+        },
+        {
+          "name": "pool_id",
+          "ty": {
+            "Primitive": "Field"
+          },
+          "mode": "None"
+        },
+        {
+          "name": "invoice_hash",
+          "ty": {
+            "Primitive": "Field"
+          },
+          "mode": "None"
+        },
+        {
+          "name": "contributed",
+          "ty": {
+            "Primitive": {
+              "UInt": "U64"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "total_pool",
+          "ty": {
+            "Primitive": {
+              "UInt": "U64"
+            }
+          },
+          "mode": "None"
+        }
+      ]
     }
   ],
   "mappings": [
@@ -374,7 +510,7 @@
           "path": [
             "FactorInfo"
           ],
-          "program": "zk_factor_9595"
+          "program": "zk_factor_9596"
         }
       }
     },
@@ -388,7 +524,7 @@
           "path": [
             "SettlementInfo"
           ],
-          "program": "zk_factor_9595"
+          "program": "zk_factor_9596"
         }
       }
     },
@@ -403,6 +539,44 @@
         "Primitive": {
           "UInt": "U64"
         }
+      }
+    },
+    {
+      "name": "recourse_claims",
+      "key": {
+        "Primitive": "Field"
+      },
+      "value": {
+        "Primitive": "Boolean"
+      }
+    },
+    {
+      "name": "pool_contributions",
+      "key": {
+        "Primitive": "Field"
+      },
+      "value": {
+        "Primitive": {
+          "UInt": "U64"
+        }
+      }
+    },
+    {
+      "name": "pool_owners",
+      "key": {
+        "Primitive": "Field"
+      },
+      "value": {
+        "Primitive": "Address"
+      }
+    },
+    {
+      "name": "pool_closed",
+      "key": {
+        "Primitive": "Field"
+      },
+      "value": {
+        "Primitive": "Boolean"
       }
     }
   ],
@@ -491,7 +665,7 @@
               "path": [
                 "Invoice"
               ],
-              "program": "zk_factor_9595"
+              "program": "zk_factor_9596"
             }
           },
           "mode": "None"
@@ -558,7 +732,7 @@
               "path": [
                 "Invoice"
               ],
-              "program": "zk_factor_9595"
+              "program": "zk_factor_9596"
             }
           },
           "mode": "None"
@@ -591,6 +765,15 @@
             }
           },
           "mode": "None"
+        },
+        {
+          "name": "recourse",
+          "ty": {
+            "Plaintext": {
+              "Primitive": "Boolean"
+            }
+          },
+          "mode": "None"
         }
       ],
       "outputs": [
@@ -600,7 +783,7 @@
               "path": [
                 "FactoringOffer"
               ],
-              "program": "zk_factor_9595"
+              "program": "zk_factor_9596"
             }
           },
           "mode": "None"
@@ -622,7 +805,7 @@
               "path": [
                 "FactoringOffer"
               ],
-              "program": "zk_factor_9595"
+              "program": "zk_factor_9596"
             }
           },
           "mode": "None"
@@ -647,7 +830,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_9595"
+              "program": "zk_factor_9596"
             }
           },
           "mode": "None"
@@ -691,7 +874,7 @@
               "path": [
                 "FactoringOffer"
               ],
-              "program": "zk_factor_9595"
+              "program": "zk_factor_9596"
             }
           },
           "mode": "None"
@@ -704,7 +887,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_9595"
+              "program": "zk_factor_9596"
             }
           },
           "mode": "None"
@@ -726,7 +909,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_9595"
+              "program": "zk_factor_9596"
             }
           },
           "mode": "None"
@@ -750,7 +933,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_9595"
+              "program": "zk_factor_9596"
             }
           },
           "mode": "None"
@@ -763,7 +946,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_9595"
+              "program": "zk_factor_9596"
             }
           },
           "mode": "None"
@@ -774,7 +957,7 @@
               "path": [
                 "PaymentNotice"
               ],
-              "program": "zk_factor_9595"
+              "program": "zk_factor_9596"
             }
           },
           "mode": "None"
@@ -792,7 +975,7 @@
               "path": [
                 "PaymentNotice"
               ],
-              "program": "zk_factor_9595"
+              "program": "zk_factor_9596"
             }
           },
           "mode": "None"
@@ -808,6 +991,378 @@
         }
       ],
       "outputs": [
+        {
+          "ty": "Future",
+          "mode": "None"
+        }
+      ]
+    },
+    {
+      "name": "initiate_recourse",
+      "is_async": true,
+      "inputs": [
+        {
+          "name": "factored",
+          "ty": {
+            "Record": {
+              "path": [
+                "FactoredInvoice"
+              ],
+              "program": "zk_factor_9596"
+            }
+          },
+          "mode": "None"
+        }
+      ],
+      "outputs": [
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "RecourseNotice"
+              ],
+              "program": "zk_factor_9596"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "ty": "Future",
+          "mode": "None"
+        }
+      ]
+    },
+    {
+      "name": "settle_recourse",
+      "is_async": true,
+      "inputs": [
+        {
+          "name": "notice",
+          "ty": {
+            "Record": {
+              "path": [
+                "RecourseNotice"
+              ],
+              "program": "zk_factor_9596"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "payment",
+          "ty": {
+            "Record": {
+              "path": [
+                "credits"
+              ],
+              "program": "credits"
+            }
+          },
+          "mode": "None"
+        }
+      ],
+      "outputs": [
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "credits"
+              ],
+              "program": "credits"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "credits"
+              ],
+              "program": "credits"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "ty": "Future",
+          "mode": "None"
+        }
+      ]
+    },
+    {
+      "name": "create_pool",
+      "is_async": true,
+      "inputs": [
+        {
+          "name": "invoice_hash",
+          "ty": {
+            "Plaintext": {
+              "Primitive": "Field"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "target_amount",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        }
+      ],
+      "outputs": [
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "FactorPool"
+              ],
+              "program": "zk_factor_9596"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "ty": "Future",
+          "mode": "None"
+        }
+      ]
+    },
+    {
+      "name": "contribute_to_pool",
+      "is_async": true,
+      "inputs": [
+        {
+          "name": "invoice_hash",
+          "ty": {
+            "Plaintext": {
+              "Primitive": "Field"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "pool_owner",
+          "ty": {
+            "Plaintext": {
+              "Primitive": "Address"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "existing_total",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "payment",
+          "ty": {
+            "Record": {
+              "path": [
+                "credits"
+              ],
+              "program": "credits"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "contribution",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        }
+      ],
+      "outputs": [
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "PoolShare"
+              ],
+              "program": "zk_factor_9596"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "credits"
+              ],
+              "program": "credits"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "credits"
+              ],
+              "program": "credits"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "ty": "Future",
+          "mode": "None"
+        }
+      ]
+    },
+    {
+      "name": "execute_pool_factoring",
+      "is_async": true,
+      "inputs": [
+        {
+          "name": "offer",
+          "ty": {
+            "Record": {
+              "path": [
+                "FactoringOffer"
+              ],
+              "program": "zk_factor_9596"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "pool",
+          "ty": {
+            "Record": {
+              "path": [
+                "FactorPool"
+              ],
+              "program": "zk_factor_9596"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "payment",
+          "ty": {
+            "Record": {
+              "path": [
+                "credits"
+              ],
+              "program": "credits"
+            }
+          },
+          "mode": "None"
+        }
+      ],
+      "outputs": [
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "FactoredInvoice"
+              ],
+              "program": "zk_factor_9596"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "credits"
+              ],
+              "program": "credits"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "credits"
+              ],
+              "program": "credits"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "ty": "Future",
+          "mode": "None"
+        }
+      ]
+    },
+    {
+      "name": "claim_pool_proceeds",
+      "is_async": true,
+      "inputs": [
+        {
+          "name": "share",
+          "ty": {
+            "Record": {
+              "path": [
+                "PoolShare"
+              ],
+              "program": "zk_factor_9596"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "payment",
+          "ty": {
+            "Record": {
+              "path": [
+                "credits"
+              ],
+              "program": "credits"
+            }
+          },
+          "mode": "None"
+        }
+      ],
+      "outputs": [
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "credits"
+              ],
+              "program": "credits"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "credits"
+              ],
+              "program": "credits"
+            }
+          },
+          "mode": "None"
+        },
         {
           "ty": "Future",
           "mode": "None"

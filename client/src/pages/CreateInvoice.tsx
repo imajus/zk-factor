@@ -3,8 +3,6 @@ import { useNavigate, Link } from "react-router-dom";
 import {
   ArrowLeft,
   CalendarIcon,
-  Plus,
-  Trash2,
   Sparkles,
   FileText,
   Info,
@@ -74,13 +72,6 @@ async function computeInvoiceHash(
   return `${value % ALEO_FIELD_MODULUS}field`;
 }
 
-interface InvoiceItem {
-  id: string;
-  description: string;
-  quantity: number;
-  unitPrice: number;
-}
-
 export default function CreateInvoice() {
   const navigate = useNavigate();
   const { isConnected } = useWallet();
@@ -94,7 +85,6 @@ export default function CreateInvoice() {
   const [debtorAddress, setDebtorAddress] = useState("");
   const [amount, setAmount] = useState("");
   const [dueDate, setDueDate] = useState<Date>();
-  const [items, setItems] = useState<InvoiceItem[]>([]);
   const [makeDebtorPublic, setMakeDebtorPublic] = useState(false);
   const [internalNotes, setInternalNotes] = useState("");
   const [showPreview, setShowPreview] = useState(false);
@@ -104,7 +94,6 @@ export default function CreateInvoice() {
     currency: PaymentCurrency;
   } | null>(null);
 
-  // IPFS document attachment state
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [ipfsResult, setIpfsResult] = useState<IPFSUploadResult | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -113,36 +102,6 @@ export default function CreateInvoice() {
     const timestamp = Date.now().toString(36).toUpperCase();
     setInvoiceNumber(`INV-${new Date().getFullYear()}-${timestamp}`);
   };
-
-  const addItem = () => {
-    setItems([
-      ...items,
-      { id: crypto.randomUUID(), description: "", quantity: 1, unitPrice: 0 },
-    ]);
-  };
-
-  const updateItem = (
-    id: string,
-    field: keyof InvoiceItem,
-    value: string | number,
-  ) => {
-    setItems(
-      items.map((item) =>
-        item.id === id ? { ...item, [field]: value } : item,
-      ),
-    );
-  };
-
-  const removeItem = (id: string) => {
-    setItems(items.filter((item) => item.id !== id));
-  };
-
-  const itemsTotal = items.reduce(
-    (sum, item) => sum + item.quantity * item.unitPrice,
-    0,
-  );
-
-  // ── IPFS handlers ──────────────────────────────────────────────────────────
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -180,11 +139,11 @@ export default function CreateInvoice() {
   // ── Transaction status ─────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (status === "submitting")
+    if (status === "submitting") {
       toast.loading("Generating proof...", { id: "create-invoice" });
-    else if (status === "pending")
+    } else if (status === "pending") {
       toast.loading("Broadcasting...", { id: "create-invoice" });
-    else if (status === "accepted") {
+    } else if (status === "accepted") {
       if (pendingInvoiceRef.current) {
         persistInvoiceCurrency(
           pendingInvoiceRef.current.hash,
@@ -202,8 +161,6 @@ export default function CreateInvoice() {
     }
   }, [status, txError, navigate]);
 
-  // ── Submit ─────────────────────────────────────────────────────────────────
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isConnected || !dueDate) return;
@@ -218,7 +175,6 @@ export default function CreateInvoice() {
         Math.round(parseFloat(amount) * 1_000_000),
       );
       const dueDateUnix = BigInt(Math.floor(dueDate.getTime() / 1000));
-      // await because computeInvoiceHash is now async (uses crypto.subtle)
       const invoiceHash = await computeInvoiceHash(
         invoiceNumber,
         debtorAddress,
@@ -264,7 +220,6 @@ export default function CreateInvoice() {
 
   return (
     <div className="container py-6 max-w-4xl">
-      {/* Header */}
       <div className="flex items-center gap-4 mb-6">
         <Button variant="ghost" size="icon" asChild>
           <Link to="/dashboard">
@@ -281,9 +236,7 @@ export default function CreateInvoice() {
 
       <form onSubmit={handleSubmit}>
         <div className="grid gap-6 lg:grid-cols-3">
-          {/* Main Form */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Invoice Details */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -292,7 +245,6 @@ export default function CreateInvoice() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {/* Invoice Number */}
                 <div className="space-y-2">
                   <Label htmlFor="invoiceNumber">Invoice Number *</Label>
                   <div className="flex gap-2">
@@ -317,7 +269,6 @@ export default function CreateInvoice() {
                   </p>
                 </div>
 
-                {/* Description */}
                 <div className="space-y-2">
                   <Label htmlFor="description">Description *</Label>
                   <Textarea
@@ -334,7 +285,6 @@ export default function CreateInvoice() {
                   </p>
                 </div>
 
-                {/* Debtor Address */}
                 <div className="space-y-2">
                   <Label htmlFor="debtorAddress">Debtor Address *</Label>
                   <Input
@@ -355,7 +305,6 @@ export default function CreateInvoice() {
                   </p>
                 </div>
 
-                {/* Currency */}
                 <div className="space-y-2">
                   <Label>Payment Currency</Label>
                   <div className="flex gap-2">
@@ -378,7 +327,6 @@ export default function CreateInvoice() {
                   </p>
                 </div>
 
-                {/* Amount */}
                 <div className="space-y-2">
                   <Label htmlFor="amount">Invoice Amount * ({currency})</Label>
                   <Input
@@ -399,7 +347,6 @@ export default function CreateInvoice() {
                   )}
                 </div>
 
-                {/* Due Date */}
                 <div className="space-y-2">
                   <Label>Due Date *</Label>
                   <div className="flex flex-wrap gap-2">
@@ -455,103 +402,6 @@ export default function CreateInvoice() {
               </CardContent>
             </Card>
 
-            {/* Invoice Items */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Invoice Items (Optional)</CardTitle>
-                <CardDescription>
-                  Add line items for detailed invoicing
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {items.length > 0 && (
-                  <div className="space-y-3">
-                    {items.map((item) => (
-                      <div key={item.id} className="flex gap-2 items-start">
-                        <div className="flex-1 space-y-2">
-                          <Input
-                            placeholder="Item description"
-                            value={item.description}
-                            onChange={(e) =>
-                              updateItem(item.id, "description", e.target.value)
-                            }
-                          />
-                        </div>
-                        <Input
-                          type="number"
-                          placeholder="Qty"
-                          value={item.quantity || ""}
-                          onChange={(e) =>
-                            updateItem(
-                              item.id,
-                              "quantity",
-                              parseFloat(e.target.value) || 0,
-                            )
-                          }
-                          className="w-20"
-                          min="1"
-                        />
-                        <Input
-                          type="number"
-                          placeholder="Price"
-                          value={item.unitPrice || ""}
-                          onChange={(e) =>
-                            updateItem(
-                              item.id,
-                              "unitPrice",
-                              parseFloat(e.target.value) || 0,
-                            )
-                          }
-                          className="w-28"
-                          min="0"
-                          step="0.01"
-                        />
-                        <div className="w-28 text-right font-mono text-sm py-2">
-                          {(item.quantity * item.unitPrice).toLocaleString()}{" "}
-                          {currency}
-                        </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeItem(item.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ))}
-                    <Separator />
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm font-medium">Total</span>
-                      <span className="font-mono font-semibold">
-                        {itemsTotal.toLocaleString()} {currency}
-                      </span>
-                    </div>
-                    {itemsTotal > 0 && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setAmount(itemsTotal.toString())}
-                      >
-                        Use as Invoice Amount
-                      </Button>
-                    )}
-                  </div>
-                )}
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={addItem}
-                  className="w-full"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Item
-                </Button>
-              </CardContent>
-            </Card>
-
-            {/* Document Attachment */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -658,7 +508,6 @@ export default function CreateInvoice() {
               </CardContent>
             </Card>
 
-            {/* Privacy & Metadata */}
             <Card>
               <CardHeader>
                 <CardTitle>Privacy & Metadata</CardTitle>
@@ -701,9 +550,7 @@ export default function CreateInvoice() {
             </Card>
           </div>
 
-          {/* Sidebar */}
           <div className="space-y-6">
-            {/* Preview Panel */}
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg">Invoice Preview</CardTitle>
@@ -773,7 +620,6 @@ export default function CreateInvoice() {
               </CardContent>
             </Card>
 
-            {/* Actions */}
             <Card>
               <CardContent className="pt-6 space-y-3">
                 <Button

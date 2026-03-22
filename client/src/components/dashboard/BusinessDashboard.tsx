@@ -13,6 +13,7 @@ import {
   CheckCircle,
   FileCheck,
   AlertCircle,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -51,6 +52,7 @@ export function BusinessDashboard() {
   const { execute, status, error: txError, reset } = useTransaction();
   const [settlingId, setSettlingId] = useState<string | null>(null);
   const [settledHashes, setSettledHashes] = useState<Set<string>>(new Set());
+  const [settlingRecourseId, setSettlingRecourseId] = useState<string | null>(null);
 
   const {
     data: records,
@@ -72,6 +74,10 @@ export function BusinessDashboard() {
   );
   const offerRecords = ((records as AleoRecord[]) ?? []).filter(
     (r) => r.recordName === "FactoringOffer" && !r.spent,
+  );
+  // RecourseNotice records sent to the business (they are the original_creditor)
+  const recourseNoticeRecords = ((records as AleoRecord[]) ?? []).filter(
+    (r) => r.recordName === "RecourseNotice" && !r.spent,
   );
 
   const getInvoiceCurrency = (record: AleoRecord): "ALEO" | "USDCx" => {
@@ -125,6 +131,7 @@ export function BusinessDashboard() {
       toast.success("Transaction confirmed!", { id: "tx-op" });
       queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
       setSettlingId(null);
+      setSettlingRecourseId(null);
       reset();
     } else if (status === "failed") {
       const msg = txError || "Transaction failed";
@@ -133,6 +140,7 @@ export function BusinessDashboard() {
         { id: "tx-op" },
       );
       setSettlingId(null);
+      setSettlingRecourseId(null);
       reset();
     }
   }, [status, txError, queryClient, reset]);
@@ -225,6 +233,58 @@ export function BusinessDashboard() {
       fee: 100_000,
       privateFee: false,
     });
+  };
+
+  // Business settles a recourse claim by repaying the factor's advance
+  const handleSettleRecourse = async (notice: AleoRecord) => {
+    const invoiceHash = getField(notice.recordPlaintext, "invoice_hash");
+    const advanceAmountRaw = getField(notice.recordPlaintext, "advance_amount");
+    const advanceAmount = parseInt(advanceAmountRaw.replace(/u64$/, ""), 10);
+    const recordId = notice.commitment ?? invoiceHash;
+    setSettlingRecourseId(recordId);
+
+    let creditsRecord: AleoRecord | undefined;
+    try {
+      const creditsRecords = (await requestRecords(
+        "credits.aleo",
+        true,
+      )) as AleoRecord[];
+      creditsRecord = creditsRecords
+        .filter((r) => !r.spent)
+        .find(
+          (r) =>
+            parseInt(
+              getField(r.recordPlaintext, "microcredits").replace(/u64$/, ""),
+              10,
+            ) >= advanceAmount,
+        );
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to fetch credits",
+      );
+      setSettlingRecourseId(null);
+      return;
+    }
+    if (!creditsRecord) {
+      toast.error("Insufficient credits to repay the advance amount");
+      setSettlingRecourseId(null);
+      return;
+    }
+    try {
+      await execute({
+        program: PROGRAM_ID,
+        function: "settle_recourse",
+        inputs: [notice.recordPlaintext, creditsRecord.recordPlaintext],
+        fee: 100_000,
+        privateFee: false,
+      });
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Recourse settlement failed",
+        { id: "tx-op" },
+      );
+      setSettlingRecourseId(null);
+    }
   };
 
   const dynamicStats = [
@@ -625,6 +685,92 @@ export function BusinessDashboard() {
     );
   };
 
+  const renderRecourseNoticeCards = () => {
+    if (isLoading) {
+      return (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <Card key={i}>
+              <CardContent className="pt-4 space-y-2">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-9 w-full" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      );
+    }
+    if (recourseNoticeRecords.length === 0) {
+      return (
+        <Card className="py-16 text-center">
+          <CardContent>
+            <p className="font-medium">No recourse notices</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              If a factor claims recourse on an overdue invoice, it will appear here
+            </p>
+          </CardContent>
+        </Card>
+      );
+    }
+    return (
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {recourseNoticeRecords.map((notice, idx) => {
+          const invoiceHash = getField(notice.recordPlaintext, "invoice_hash");
+          const factor = getField(notice.recordPlaintext, "factor");
+          const advanceAmount = microToAleo(
+            getField(notice.recordPlaintext, "advance_amount") || "0u64",
+          );
+          const recordId = notice.commitment ?? invoiceHash;
+          const isSettlingThis = settlingRecourseId === recordId;
+          return (
+            <Card
+              key={invoiceHash || idx}
+              className="border-orange-300/50 hover:border-orange-400/60 transition-colors"
+            >
+              <CardContent className="pt-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-orange-500 shrink-0" />
+                  <span className="font-mono text-sm text-muted-foreground">
+                    {invoiceHash.slice(0, 12)}…
+                  </span>
+                </div>
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Factor</span>
+                    <AddressDisplay address={factor} chars={4} showExplorer />
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Amount Owed</span>
+                    <span className="font-mono font-medium text-orange-600">
+                      {advanceAmount.toLocaleString(undefined, {
+                        maximumFractionDigits: 6,
+                      })}{" "}
+                      ALEO
+                    </span>
+                  </div>
+                </div>
+                <Badge variant="outline" className="text-xs text-orange-600 border-orange-300">
+                  Recourse Active
+                </Badge>
+                <Button
+                  size="sm"
+                  className="w-full gap-1.5"
+                  variant="destructive"
+                  onClick={() => handleSettleRecourse(notice)}
+                  disabled={isSettlingThis}
+                >
+                  <CheckCircle className="h-4 w-4" />
+                  {isSettlingThis ? "Repaying…" : "Settle Recourse"}
+                </Button>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+    );
+  };
+
   return (
     <div className="container py-6 space-y-6">
       {/* Page Header */}
@@ -655,6 +801,20 @@ export function BusinessDashboard() {
           <StatCard key={stat.title} {...stat} />
         ))}
       </div>
+
+      {/* Recourse alert banner */}
+      {recourseNoticeRecords.length > 0 && (
+        <Card className="border-orange-300/50 bg-orange-50/50 dark:bg-orange-950/20">
+          <CardContent className="pt-4 flex items-center gap-3">
+            <AlertTriangle className="h-5 w-5 text-orange-500 shrink-0" />
+            <p className="text-sm text-orange-700 dark:text-orange-400">
+              {recourseNoticeRecords.length} recourse notice
+              {recourseNoticeRecords.length !== 1 ? "s" : ""} require your
+              attention. Open the <strong>Recourse</strong> tab to repay.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Error state */}
       {isError && !records && (
@@ -696,6 +856,14 @@ export function BusinessDashboard() {
               </span>
             )}
           </TabsTrigger>
+          <TabsTrigger value="recourse">
+            Recourse
+            {!isLoading && recourseNoticeRecords.length > 0 && (
+              <span className="ml-1.5 text-xs opacity-70 text-orange-500">
+                ({recourseNoticeRecords.length})
+              </span>
+            )}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="invoices" className="mt-4">
@@ -708,6 +876,10 @@ export function BusinessDashboard() {
 
         <TabsContent value="offers" className="mt-4">
           {renderOfferCards()}
+        </TabsContent>
+
+        <TabsContent value="recourse" className="mt-4">
+          {renderRecourseNoticeCards()}
         </TabsContent>
       </Tabs>
     </div>
