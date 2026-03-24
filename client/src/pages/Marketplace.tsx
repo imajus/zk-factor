@@ -7,6 +7,7 @@ import {
   RefreshCw,
   ArrowRight,
   Plus,
+  Info,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -214,20 +215,20 @@ export default function Marketplace() {
       function: functionName,
       inputs: usePartial
         ? [
-            invoice.recordPlaintext,
-            selectedFactor.address,
-            `${partialAmountMicro}u64`,
-            `${advanceRateBps}u16`,
-            useToken ? "true" : "false",
-            "false",
-          ]
+          invoice.recordPlaintext,
+          selectedFactor.address,
+          `${partialAmountMicro}u64`,
+          `${advanceRateBps}u16`,
+          useToken ? "true" : "false",
+          "false",
+        ]
         : [
-            invoice.recordPlaintext,
-            selectedFactor.address,
-            `${advanceRateBps}u16`,
-            useToken ? "true" : "false",
-            "false",
-          ],
+          invoice.recordPlaintext,
+          selectedFactor.address,
+          `${advanceRateBps}u16`,
+          useToken ? "true" : "false",
+          "false",
+        ],
       fee: 100_000,
       privateFee: false,
     });
@@ -280,10 +281,13 @@ export default function Marketplace() {
         <h1 className="text-2xl font-bold">
           {isFactor ? "Invoice Marketplace" : "Browse Factors"}
         </h1>
-        <p className="text-muted-foreground">
+        <p className="text-muted-foreground flex flex-wrap items-center gap-2">
           {isFactor
             ? "View registered factors and available factoring opportunities"
             : "Find the best factoring terms for your invoices"}
+          <a href="/docs/factor/marketplace" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+            <Info className="h-3 w-3" /> Learn more
+          </a>
         </p>
       </div>
 
