@@ -73,29 +73,47 @@ client/
 │   ├── components/
 │   │   ├── ui/              # shadcn/ui components (60+ components)
 │   │   ├── dashboard/       # BusinessDashboard, FactorDashboard
-│   │   ├── layout/          # AppLayout, Header
+│   │   ├── icons/           # Custom SVG icon components
+│   │   ├── layout/          # AppLayout, PublicLayout, Header
 │   │   ├── wallet/          # WalletConnect
+│   │   ├── FeatureIcons.tsx # Landing page feature icons
+│   │   ├── RoleIcons.tsx    # Role selection icons
 │   │   └── NavLink.tsx      # Navigation component
 │   ├── contexts/
-│   │   └── WalletContext.tsx    # Wallet state management
+│   │   └── WalletContext.tsx    # Wallet + Privy state management
 │   ├── hooks/
 │   │   ├── use-mobile.tsx       # Mobile detection
-│   │   └── use-toast.ts         # Toast notifications
+│   │   ├── use-toast.ts         # Toast notifications
+│   │   └── use-transaction.ts   # Aleo transaction execution + status
 │   ├── lib/
-│   │   ├── utils.ts            # Utility functions (cn, etc.)
-│   │   └── mock-data.ts        # Mock data for development
+│   │   ├── aleo-factors.ts     # Factor registry, pool, recourse helpers
+│   │   ├── aleo-records.ts     # Record parsing, metadata encoding
+│   │   ├── config.ts           # App config (program IDs, endpoints, keys)
+│   │   ├── format.ts           # Display formatting utilities
+│   │   ├── ipfs.ts             # IPFS upload via Pinata + cidToField
+│   │   ├── mock-data.ts        # Mock data for development
+│   │   ├── notifications.ts    # Email notifications via Resend
+│   │   └── utils.ts            # Utility functions (cn, etc.)
 │   ├── pages/
-│   │   ├── Dashboard.tsx       # Main dashboard (role-based)
-│   │   ├── Invoices.tsx        # Invoice list
+│   │   ├── About.tsx           # About page
 │   │   ├── CreateInvoice.tsx   # Invoice creation form
+│   │   ├── Landing.tsx         # Public landing page
 │   │   ├── Marketplace.tsx     # Factor marketplace
-│   │   ├── Transactions.tsx    # Transaction history
+│   │   ├── NotFound.tsx        # 404 page
+│   │   ├── Pay.tsx             # Debtor payment page
+│   │   ├── Pools.tsx           # Factor pool management
+│   │   ├── Privacy.tsx         # Privacy policy
+│   │   ├── RegisterFactor.tsx  # Factor registration form
+│   │   ├── Roadmap.tsx         # Product roadmap
+│   │   ├── SelectRole.tsx      # Post-connect role selection
 │   │   ├── Settings.tsx        # User settings
-│   │   └── NotFound.tsx        # 404 page
+│   │   ├── Terms.tsx           # Terms of service
+│   │   └── Transactions.tsx    # Transaction history
 │   ├── test/
 │   │   ├── setup.ts            # Vitest setup
 │   │   └── example.test.ts     # Example test
-│   ├── App.tsx                 # Root component with routing
+│   ├── App.tsx                 # Root component with public routing
+│   ├── WalletApp.tsx           # Authenticated routing (RequireAuth wrapper)
 │   ├── main.tsx                # Entry point
 │   ├── index.css               # Global styles + Tailwind
 │   └── vite-env.d.ts           # Vite type definitions
@@ -124,31 +142,13 @@ Configured in vite.config.ts and tsconfig.json:
 
 Manages wallet connection state and user roles:
 
-```typescript
-// src/contexts/WalletContext.tsx
-type UserRole = 'business' | 'factor' | 'observer';
+**Key exports from `useWallet()`:**
+- `isConnected`, `address`, `connect`, `disconnect` — Shield wallet
+- `activeRole` — `'business' | 'factor' | 'observer'`
+- `requestRecords(programId, filterSpent)` — fetch records from Shield
+- `email`, `privyReady`, `loginWithPrivy`, `logoutPrivy` — Privy email login
 
-interface WalletState {
-  isConnected: boolean;
-  address: string | null;
-  balance: number;
-  roles: UserRole[];
-  activeRole: UserRole | null;
-  lastSyncTime: Date | null;
-  isSyncing: boolean;
-  syncProgress: number;
-  network: 'mainnet' | 'testnet';
-}
-```
-
-**Usage:**
-```typescript
-import { useWallet } from '@/contexts/WalletContext';
-
-const { isConnected, address, connect, disconnect, activeRole } = useWallet();
-```
-
-**Current State**: Mock implementation. Needs integration with Aleo wallets (Leo Wallet, Puzzle Wallet).
+**Current State**: Integrated with Shield wallet + Privy for account abstraction.
 
 ### Role-Based Dashboards
 
@@ -169,16 +169,31 @@ Components use Radix UI primitives with custom Tailwind styling.
 
 ## Routing
 
-Defined in `src/App.tsx`:
+Public routes in `src/App.tsx`, authenticated routes in `src/WalletApp.tsx`:
+
+**Public (PublicLayout):**
 
 | Route | Component | Description |
 |---|---|---|
-| `/` | Dashboard | Role-based dashboard |
-| `/invoices` | Invoices | Invoice list |
+| `/` | Landing | Public landing page |
+| `/about` | About | About page |
+| `/terms` | Terms | Terms of service |
+| `/privacy` | Privacy | Privacy policy |
+| `/roadmap` | Roadmap | Product roadmap |
+| `/connect` | WalletConnect | Wallet connection + Privy login |
+| `/pay` | Pay | Debtor payment page |
+
+**Authenticated (RequireAuth + AppLayout):**
+
+| Route | Component | Description |
+|---|---|---|
+| `/select-role` | SelectRole | Post-connect role selection |
+| `/register-factor` | RegisterFactor | Factor registration form |
+| `/dashboard` | Dashboard | Role-based dashboard |
 | `/invoices/create` | CreateInvoice | Create new invoice |
 | `/marketplace` | Marketplace | Browse factors |
+| `/pools` | Pools | Factor pool management |
 | `/transactions` | Transactions | Transaction history |
-| `/portfolio` | Dashboard | Factor portfolio (same as /) |
 | `/settings` | Settings | User settings |
 | `*` | NotFound | 404 page |
 
@@ -215,7 +230,7 @@ import { cn } from "@/lib/utils";
 
 ### Wallet Connection
 
-**Current**: Integrated with Shield wallet via `@provablehq/aleo-wallet-adaptor-shield`.
+**Current**: Shield wallet via `@provablehq/aleo-wallet-adaptor-shield` + Privy for email login / account abstraction.
 
 ### Shield Wallet Record Shape (`requestRecords` return)
 
@@ -260,10 +275,16 @@ Pass `record.recordPlaintext` directly as inputs to `executeTransaction`.
 
 ### Transaction Execution
 
-**Required for Phase 1**:
-- `mint_invoice()`: Create Invoice record
-- `factor_invoice()`: Execute factoring transaction
-- `settle_invoice()`: Mark invoice as settled
+Use the `useTransaction()` hook from `@/hooks/use-transaction.ts` for all on-chain calls. It manages proof generation status and error handling.
+
+**Core transitions:**
+- `mint_invoice()` — Create Invoice record (includes `document_cid` for IPFS attachment)
+- `authorize_factoring()` — Business commits invoice to a factor
+- `execute_factoring()` / `execute_factoring_token()` — Factor accepts (credits / USDCx)
+- `settle_invoice()` — Factor finalizes after debtor payment
+- `pay_invoice()` — Debtor pays invoice
+- `initiate_recourse()` / `settle_recourse()` — Recourse flow for defaulted invoices
+- `create_pool()` / `contribute_to_pool()` / `execute_pool_factoring()` — Pool syndication
 
 **Implementation Notes**:
 - Proving times: 30-60 seconds (show progress indicator)
