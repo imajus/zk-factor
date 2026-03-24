@@ -2,15 +2,12 @@ import { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Zap, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useWallet } from "@/contexts/WalletContext";
 
 interface PublicLayoutProps {
   children: ReactNode;
 }
 
 export function PublicLayout({ children }: PublicLayoutProps) {
-  const { isConnected } = useWallet();
-
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -25,19 +22,12 @@ export function PublicLayout({ children }: PublicLayoutProps) {
             <Button variant="ghost" size="sm" asChild>
               <Link to="/pay">Pay an Invoice</Link>
             </Button>
-            {!isConnected && (
-              <Button asChild className="gap-2">
-                <Link to="/connect">
-                  <Wallet className="h-4 w-4" />
-                  Connect or Login
-                </Link>
-              </Button>
-            )}
-            {isConnected && (
-              <Button asChild>
-                <Link to="/dashboard">Go to App</Link>
-              </Button>
-            )}
+            <Button asChild className="gap-2">
+              <Link to="/connect">
+                <Wallet className="h-4 w-4" />
+                Connect or Login
+              </Link>
+            </Button>
           </div>
         </div>
       </header>

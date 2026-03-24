@@ -1,13 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { Shield, Zap, Ban, ArrowRight, ExternalLink, CheckCircle, TrendingUp, Lock } from 'lucide-react';
-import { Link, Navigate } from 'react-router-dom';
+import { Shield, Zap, Ban, ArrowRight, CheckCircle, TrendingUp, Lock } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { useWallet } from '@/contexts/WalletContext';
 import { platformStats, recentActivity } from '@/lib/mock-data';
-
-const SHIELD_WALLET_URL = 'https://www.shield.app/';
 
 const features = [
   {
@@ -120,7 +117,6 @@ function useRevealContainer(): React.RefObject<HTMLElement> {
 }
 
 export default function Landing() {
-  const { isConnected, wallets } = useWallet();
   const [statsRef, statsVisible] = useInView(0.3);
   const featuresRef = useRevealContainer();
   const stepsRef = useRevealContainer();
@@ -129,10 +125,6 @@ export default function Landing() {
   const countInvoices = useCountUp(platformStats.totalInvoicesFactored, 1600, statsVisible);
   const countVolume = useCountUp(platformStats.totalVolume / 1_000_000, 1800, statsVisible);
   const countFactors = useCountUp(platformStats.activeFactors, 1200, statsVisible);
-
-  if (isConnected) {
-    return <Navigate to="/dashboard" replace />;
-  }
 
   return (
     <div className="flex flex-col">
@@ -174,22 +166,12 @@ export default function Landing() {
           </p>
 
           <div className="stagger-in stagger-in-4 flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
-            {wallets.length === 0 ? (
-              <Button size="lg" className="gap-2 glow-primary" asChild>
-                <a href={SHIELD_WALLET_URL} target="_blank" rel="noopener noreferrer">
-                  <ExternalLink className="h-4 w-4" />
-                  Install Shield Wallet
-                  <ArrowRight className="h-4 w-4" />
-                </a>
-              </Button>
-            ) : (
-              <Button size="lg" className="gap-2 glow-primary" asChild>
-                <Link to="/dashboard">
-                  Get Started
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-              </Button>
-            )}
+            <Button size="lg" className="gap-2 glow-primary" asChild>
+              <Link to="/connect">
+                Get Started
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
             <Button size="lg" variant="outline" className="gap-2 backdrop-blur-sm" asChild>
               <Link to="/about">Learn More</Link>
             </Button>
@@ -347,22 +329,12 @@ export default function Landing() {
             Join the network of businesses and factors using cryptographic guarantees instead of trust.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-            {wallets.length === 0 ? (
-              <Button size="lg" className="gap-2 glow-primary" asChild>
-                <a href={SHIELD_WALLET_URL} target="_blank" rel="noopener noreferrer">
-                  <ExternalLink className="h-4 w-4" />
-                  Install Shield Wallet
-                  <ArrowRight className="h-4 w-4" />
-                </a>
-              </Button>
-            ) : (
-              <Button size="lg" className="gap-2 glow-primary" asChild>
-                <Link to="/dashboard">
-                  Launch App
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-              </Button>
-            )}
+            <Button size="lg" className="gap-2 glow-primary" asChild>
+              <Link to="/connect">
+                Launch App
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
             <Button size="lg" variant="outline" asChild>
               <Link to="/roadmap">View Roadmap</Link>
             </Button>
