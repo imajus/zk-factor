@@ -53,12 +53,12 @@ export default function Privacy() {
           <Card className="border-blue-500/20">
             <CardHeader className="pb-2">
               <Server className="h-5 w-5 text-blue-500 mb-1" />
-              <CardTitle className="text-sm">Not Collected</CardTitle>
+              <CardTitle className="text-sm">Minimal Collection</CardTitle>
             </CardHeader>
             <CardContent className="text-xs text-muted-foreground space-y-1">
-              <p>No server-side accounts</p>
+              <p>Email only if you opt in (Privy)</p>
               <p>No cookies or tracking</p>
-              <p>No IP logging</p>
+              <p>No IP logging by us</p>
               <p>No analytics</p>
             </CardContent>
           </Card>
@@ -102,18 +102,14 @@ export default function Privacy() {
 
         <Section title="3. Client-Side Architecture">
           <p>
-            ZK Factor is a fully client-side application. There is no ZK Factor backend server.
-            This means:
+            ZK Factor's core functionality is fully client-side. Zero-knowledge proofs are generated
+            in your browser and wallet interactions go directly to the Aleo network. We cannot access
+            your wallet private keys — ever.
           </p>
-          <ul className="list-disc list-inside space-y-1 ml-2">
-            <li>We do not have servers that receive or store your data</li>
-            <li>Zero-knowledge proofs are generated locally in your browser</li>
-            <li>Wallet interactions occur directly between your browser and the Aleo network</li>
-            <li>We cannot access your wallet private keys — ever</li>
-          </ul>
           <p>
-            The application communicates with the Aleo network API to submit transactions and
-            read public mapping data. These requests are made directly from your browser.
+            Optional features use third-party services described in Section 5. If you choose not to
+            use email login or document attachments, no personal data leaves your browser beyond
+            standard blockchain interactions.
           </p>
         </Section>
 
@@ -134,9 +130,14 @@ export default function Privacy() {
 
         <Section title="5. Third-Party Services">
           <p>
-            The application makes requests to the Aleo network API endpoint for blockchain data.
-            That service is operated by Provable Inc. and subject to their own privacy policy.
+            The Platform integrates with the following third-party services:
           </p>
+          <ul className="list-disc list-inside space-y-1 ml-2">
+            <li><strong>Aleo Network API</strong> (Provable Inc.) — blockchain data and transaction submission</li>
+            <li><strong>Privy</strong> — optional email-based login and account abstraction. If you sign in with email, Privy receives and stores your email address under their privacy policy</li>
+            <li><strong>Pinata / IPFS</strong> — optional document attachment. Uploaded files are stored on IPFS via Pinata and may be permanently available on the public IPFS network</li>
+            <li><strong>Resend</strong> — transactional email delivery. If you opt in to email notifications, your email address is shared with Resend solely for delivery</li>
+          </ul>
           <p>
             We do not use advertising networks, analytics providers, or social media trackers.
           </p>

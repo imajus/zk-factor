@@ -92,7 +92,38 @@ export default function Terms() {
           </p>
         </Section>
 
-        <Section title="6. User Responsibilities">
+        <Section title="6. Third-Party Services">
+          <p>
+            The Platform integrates with third-party services that have their own terms and privacy
+            policies:
+          </p>
+          <ul className="list-disc list-inside space-y-1 ml-2">
+            <li><strong>Privy</strong> — account abstraction and email-based login</li>
+            <li><strong>Pinata / IPFS</strong> — document storage for invoice attachments</li>
+            <li><strong>Resend</strong> — transactional email notifications</li>
+          </ul>
+          <p>
+            We are not responsible for the availability, security, or practices of these services.
+            Documents uploaded to IPFS are content-addressed and may be permanently available on the
+            public IPFS network. Do not upload confidential documents unless you understand the
+            implications.
+          </p>
+        </Section>
+
+        <Section title="7. Privacy & Data">
+          <p>
+            If you sign in with an email address (via Privy), we may use it to send transactional
+            notifications such as invoice creation confirmations, factoring updates, and settlement
+            receipts. We do not sell or share your email with unrelated third parties.
+          </p>
+          <p>
+            On-chain data is governed by the Aleo blockchain's privacy model. Private record
+            contents are encrypted and visible only to record owners. Public mappings and serial
+            numbers are visible to all network participants.
+          </p>
+        </Section>
+
+        <Section title="8. User Responsibilities">
           <p>You are responsible for:</p>
           <ul className="list-disc list-inside space-y-1 ml-2">
             <li>Securing your wallet private keys — we have no access to them</li>
@@ -103,7 +134,7 @@ export default function Terms() {
           </ul>
         </Section>
 
-        <Section title="7. Intellectual Property">
+        <Section title="9. Intellectual Property">
           <p>
             The ZK Factor platform is open-source software. Smart contract code is available for
             review on the Aleo blockchain. Frontend source code may be made available under an
@@ -114,7 +145,7 @@ export default function Terms() {
           </p>
         </Section>
 
-        <Section title="8. Changes to Terms">
+        <Section title="10. Changes to Terms">
           <p>
             We may update these terms at any time. Continued use of the Platform after changes
             constitutes acceptance of the new terms. During the testnet phase, terms may change
@@ -122,7 +153,7 @@ export default function Terms() {
           </p>
         </Section>
 
-        <Section title="9. Contact">
+        <Section title="11. Contact">
           <p>
             For questions about these terms, please open an issue on the project's GitHub
             repository.

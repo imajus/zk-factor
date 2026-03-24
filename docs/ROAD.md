@@ -23,7 +23,10 @@ Core platform functionality:
 
 ## Phase 2: Enhanced Features
 
-- [ ] USDCx stablecoin payments integration
+- [x] USDCx stablecoin payments integration
+- [x] IPFS document attachment (invoice supporting docs stored on IPFS, CID on-chain)
+- [x] Account abstraction / email login (Privy)
+- [x] Email notifications (Resend API — invoice created, factored, settled)
 - [ ] Partial factoring (sell portion of invoice, retain the rest)
 - [ ] Recourse tracking (handle debtor non-payment and return to business)
 - [ ] Multi-factor syndication (large invoices split across multiple factors)

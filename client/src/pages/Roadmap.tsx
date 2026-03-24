@@ -35,7 +35,10 @@ const phases: Phase[] = [
     number: 2,
     title: 'Enhanced Features',
     items: [
-      { label: 'USDCx stablecoin payments integration', done: false },
+      { label: 'USDCx stablecoin payments integration', done: true },
+      { label: 'IPFS document attachment (CID stored on-chain)', done: true },
+      { label: 'Account abstraction / email login (Privy)', done: true },
+      { label: 'Email notifications (invoice created, factored, settled)', done: true },
       { label: 'Partial factoring (sell portion of invoice, retain the rest)', done: false },
       { label: 'Recourse tracking (handle debtor non-payment)', done: false },
       { label: 'Multi-factor syndication (large invoices split across factors)', done: false },
