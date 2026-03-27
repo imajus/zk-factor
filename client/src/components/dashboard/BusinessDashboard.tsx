@@ -337,9 +337,9 @@ export function BusinessDashboard() {
       icon: <CheckCircle2 className="h-5 w-5 text-primary" />,
     },
     {
-      title: "Pending Offers",
-      value: isLoading ? "…" : String(offerRecords.length),
-      icon: <Clock className="h-5 w-5 text-primary" />,
+      title: "Recourse Notices",
+      value: isLoading ? "…" : String(recourseNoticeRecords.length),
+      icon: <AlertTriangle className="h-5 w-5 text-primary" />,
     },
   ];
 
@@ -897,14 +897,6 @@ export function BusinessDashboard() {
               </span>
             )}
           </TabsTrigger>
-          <TabsTrigger value="offers">
-            Pending Offers
-            {!isLoading && offerRecords.length > 0 && (
-              <span className="ml-1.5 text-xs opacity-70">
-                ({offerRecords.length})
-              </span>
-            )}
-          </TabsTrigger>
           <TabsTrigger value="recourse">
             Recourse
             {!isLoading && recourseNoticeRecords.length > 0 && (
@@ -921,10 +913,6 @@ export function BusinessDashboard() {
 
         <TabsContent value="factored" className="mt-4">
           {renderFactoredCards()}
-        </TabsContent>
-
-        <TabsContent value="offers" className="mt-4">
-          {renderOfferCards()}
         </TabsContent>
 
         <TabsContent value="recourse" className="mt-4">

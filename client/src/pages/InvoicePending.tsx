@@ -67,10 +67,22 @@ export default function InvoicePending() {
                 <Loader2 className="h-5 w-5 animate-spin mt-0.5 text-amber-600" />
               )}
               <div className="space-y-1">
-                <p className="font-medium">
+                <p
+                  className={
+                    settled
+                      ? "font-medium text-emerald-900"
+                      : "font-medium text-amber-900"
+                  }
+                >
                   {settled ? "Invoice settled" : "Waiting for record sync"}
                 </p>
-                <p className="text-sm text-muted-foreground">
+                <p
+                  className={
+                    settled
+                      ? "text-sm text-emerald-800"
+                      : "text-sm text-amber-800"
+                  }
+                >
                   {settled
                     ? "Your invoice has settled and is now visible. Redirecting to your invoice dashboard..."
                     : "Your transaction is accepted. We are waiting for the new invoice record to appear in your wallet."}
