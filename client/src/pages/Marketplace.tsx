@@ -46,12 +46,6 @@ import {
 import { type FactorInfo, fetchActiveFactors } from "@/lib/aleo-factors";
 import { buildCreatePoolInputs } from "@/lib/aleo-factors";
 import {
-  getFactorEmail,
-  uniqueEmails,
-  upsertInvoiceContacts,
-} from "@/lib/notification-directory";
-import { notifyFactorChosen } from "@/lib/notifications";
-import {
   listPoolDirectory,
   type PoolDirectoryEntry,
   upsertPoolCreation,
@@ -80,16 +74,6 @@ export default function Marketplace() {
     invoiceHash: string;
     owner: string;
     targetAmountMicro: number;
-  } | null>(null);
-  const pendingFactorRequestRef = useRef<{
-    invoiceHash: string;
-    factorAddress: string;
-    factorEmail: string | null;
-    creditorAddress: string;
-    creditorEmail: string | null;
-    debtorAddress: string;
-    debtorEmail?: string;
-    advanceRateBps: number;
   } | null>(null);
 
   const {
@@ -149,24 +133,7 @@ export default function Marketplace() {
       toast.loading("Generating proof…", { id: opId });
     else if (status === "pending") toast.loading("Broadcasting…", { id: opId });
     else if (status === "accepted") {
-      if (pendingAction === "factor" && pendingFactorRequestRef.current) {
-        const pending = pendingFactorRequestRef.current;
-        upsertInvoiceContacts({
-          invoiceHash: pending.invoiceHash,
-          creditorAddress: pending.creditorAddress,
-          creditorEmail: pending.creditorEmail ?? undefined,
-          debtorAddress: pending.debtorAddress,
-          debtorEmail: pending.debtorEmail,
-          factorAddress: pending.factorAddress,
-          factorEmail: pending.factorEmail ?? undefined,
-        });
-
-        void notifyFactorChosen(uniqueEmails([pending.factorEmail]), {
-          invoiceHash: pending.invoiceHash,
-          creditorAddress: pending.creditorAddress,
-          advanceRateBps: pending.advanceRateBps,
-        });
-        pendingFactorRequestRef.current = null;
+      if (pendingAction === "factor") {
         toast.success("Invoice factored successfully!", { id: opId });
         setDialogOpen(false);
       }
@@ -184,7 +151,6 @@ export default function Marketplace() {
       queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
       reset();
     } else if (status === "failed") {
-      pendingFactorRequestRef.current = null;
       pendingPoolCreateRef.current = null;
 
       const defaultMessage =
@@ -207,18 +173,6 @@ export default function Marketplace() {
     if (!invoice) return;
     const currency = getInvoiceCurrency(invoice);
     const useToken = currency === "USDCx";
-    const invoiceHash = getField(invoice.recordPlaintext, "invoice_hash");
-    const debtorAddress = getField(invoice.recordPlaintext, "debtor");
-
-    pendingFactorRequestRef.current = {
-      invoiceHash,
-      factorAddress: selectedFactor.address,
-      factorEmail: getFactorEmail(selectedFactor.address),
-      creditorAddress: address ?? "",
-      creditorEmail: email,
-      debtorAddress,
-      advanceRateBps,
-    };
     pendingActionRef.current = "factor";
 
     await execute({
