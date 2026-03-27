@@ -203,6 +203,41 @@ finalize authorize_factoring:
     get active_factors[r0] into r2;
     assert.eq r2.is_active true;
 
+function authorize_partial_factoring:
+    input r0 as Invoice.record;
+    input r1 as address.private;
+    input r2 as u64.private;
+    input r3 as u16.private;
+    input r4 as boolean.private;
+    input r5 as boolean.private;
+    is.eq r0.owner self.caller into r6;
+    assert.eq r6 true;
+    gt r2 0u64 into r7;
+    assert.eq r7 true;
+    lt r2 r0.amount into r8;
+    assert.eq r8 true;
+    gte r3 5000u16 into r9;
+    lte r3 9900u16 into r10;
+    and r9 r10 into r11;
+    assert.eq r11 true;
+    sub r0.amount r2 into r12;
+    cast r2 into r13 as field;
+    add r0.invoice_hash r13 into r14;
+    hash.psd2 r14 into r15 as field;
+    hash.psd2 r15 into r16 as field;
+    cast r1 self.caller r0.debtor r2 r0.due_date r3 r0.invoice_hash r0.nonce r0.metadata r4 r5 into r17 as FactoringOffer.record;
+    cast self.caller r0.debtor r12 r0.due_date r15 r16 r0.metadata r0.document_cid into r18 as Invoice.record;
+    async authorize_partial_factoring r1 r0.invoice_hash into r19;
+    output r17 as FactoringOffer.record;
+    output r18 as Invoice.record;
+    output r19 as zk_factor_9596.aleo/authorize_partial_factoring.future;
+
+finalize authorize_partial_factoring:
+    input r0 as address.public;
+    input r1 as field.public;
+    get active_factors[r0] into r2;
+    assert.eq r2.is_active true;
+
 function execute_factoring:
     input r0 as FactoringOffer.record;
     input r1 as credits.aleo/credits.record;

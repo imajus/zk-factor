@@ -5,12 +5,14 @@ This file provides guidance for working with the React frontend in this director
 ## Tech Stack
 
 **Core:**
+
 - **Build Tool**: Vite 5.4.19 with React SWC plugin (fast compilation)
 - **Framework**: React 18.3.1 with TypeScript 5.8.3
 - **Routing**: React Router DOM 6.30.1
 - **Package Manager**: npm (package-lock.json present) or Bun (bun.lockb present)
 
 **UI & Styling:**
+
 - **Component Library**: shadcn/ui (Radix UI primitives with Tailwind CSS)
 - **Styling**: Tailwind CSS 3.4.17 with @tailwindcss/typography
 - **Animations**: tailwindcss-animate
@@ -18,12 +20,14 @@ This file provides guidance for working with the React frontend in this director
 - **Icons**: Lucide React
 
 **State & Data:**
+
 - **Server State**: TanStack React Query 5.83.0
 - **Forms**: React Hook Form 7.61.1 with Zod 3.25.76 validation
 - **Notifications**: Sonner 1.7.4 (toast notifications)
 - **Charts**: Recharts 2.15.4
 
 **Testing:**
+
 - **Test Runner**: Vitest 3.2.4
 - **Testing Library**: @testing-library/react 16.0.0 with jsdom
 
@@ -32,6 +36,7 @@ This file provides guidance for working with the React frontend in this director
 All commands should be run from the `client/` directory.
 
 **Install dependencies:**
+
 ```bash
 npm install
 # or
@@ -39,27 +44,32 @@ bun install
 ```
 
 **Start dev server:**
+
 ```bash
 npm run dev      # Starts on http://[::]:8080
 ```
 
 **Build:**
+
 ```bash
 npm run build           # Production build
 npm run build:dev       # Development build
 ```
 
 **Preview production build:**
+
 ```bash
 npm run preview
 ```
 
 **Linting:**
+
 ```bash
 npm run lint
 ```
 
 **Testing:**
+
 ```bash
 npm run test           # Run tests once
 npm run test:watch     # Watch mode
@@ -143,6 +153,7 @@ Configured in vite.config.ts and tsconfig.json:
 Manages wallet connection state and user roles:
 
 **Key exports from `useWallet()`:**
+
 - `isConnected`, `address`, `connect`, `disconnect` — Shield wallet
 - `activeRole` — `'business' | 'factor' | 'observer'`
 - `requestRecords(programId, filterSpent)` — fetch records from Shield
@@ -173,38 +184,40 @@ Public routes in `src/App.tsx`, authenticated routes in `src/WalletApp.tsx`:
 
 **Public (PublicLayout):**
 
-| Route | Component | Description |
-|---|---|---|
-| `/` | Landing | Public landing page |
-| `/about` | About | About page |
-| `/terms` | Terms | Terms of service |
-| `/privacy` | Privacy | Privacy policy |
-| `/roadmap` | Roadmap | Product roadmap |
+| Route      | Component     | Description                     |
+| ---------- | ------------- | ------------------------------- |
+| `/`        | Landing       | Public landing page             |
+| `/about`   | About         | About page                      |
+| `/terms`   | Terms         | Terms of service                |
+| `/privacy` | Privacy       | Privacy policy                  |
+| `/roadmap` | Roadmap       | Product roadmap                 |
 | `/connect` | WalletConnect | Wallet connection + Privy login |
-| `/pay` | Pay | Debtor payment page |
+| `/pay`     | Pay           | Debtor payment page             |
 
 **Authenticated (RequireAuth + AppLayout):**
 
-| Route | Component | Description |
-|---|---|---|
-| `/select-role` | SelectRole | Post-connect role selection |
-| `/register-factor` | RegisterFactor | Factor registration form |
-| `/dashboard` | Dashboard | Role-based dashboard |
-| `/invoices/create` | CreateInvoice | Create new invoice |
-| `/marketplace` | Marketplace | Browse factors |
-| `/pools` | Pools | Factor pool management |
-| `/transactions` | Transactions | Transaction history |
-| `/settings` | Settings | User settings |
-| `*` | NotFound | 404 page |
+| Route              | Component      | Description                 |
+| ------------------ | -------------- | --------------------------- |
+| `/select-role`     | SelectRole     | Post-connect role selection |
+| `/register-factor` | RegisterFactor | Factor registration form    |
+| `/dashboard`       | Dashboard      | Role-based dashboard        |
+| `/invoices/create` | CreateInvoice  | Create new invoice          |
+| `/marketplace`     | Marketplace    | Browse factors              |
+| `/pools`           | Pools          | Factor pool management      |
+| `/transactions`    | Transactions   | Transaction history         |
+| `/settings`        | Settings       | User settings               |
+| `*`                | NotFound       | 404 page                    |
 
 ## Styling Conventions
 
 **Tailwind Classes:**
+
 - Use `cn()` utility from `@/lib/utils` to merge classes
 - Prefer utility classes over custom CSS
 - Use CSS variables for theme colors (defined in index.css)
 
 **Component Variants:**
+
 ```typescript
 import { cn } from "@/lib/utils";
 
@@ -212,6 +225,7 @@ import { cn } from "@/lib/utils";
 ```
 
 **Responsive Design:**
+
 - Mobile-first approach
 - Use Tailwind breakpoints: `sm:`, `md:`, `lg:`, `xl:`, `2xl:`
 - `use-mobile` hook for JS-based mobile detection
@@ -238,12 +252,12 @@ import { cn } from "@/lib/utils";
 
 ```typescript
 interface AleoRecord {
-  recordName: string;       // e.g. "Invoice" — NOT "type"
-  recordPlaintext: string;  // full Leo plaintext — NOT "plaintext" or nested "data"
-  spent: boolean;           // always filter !r.spent for active records
-  commitment: string;       // unique record ID — NOT "id"
-  owner: string;            // field-element encoded (not an aleo1... address)
-  sender: string;           // the aleo1... address that submitted the tx
+  recordName: string; // e.g. "Invoice" — NOT "type"
+  recordPlaintext: string; // full Leo plaintext — NOT "plaintext" or nested "data"
+  spent: boolean; // always filter !r.spent for active records
+  commitment: string; // unique record ID — NOT "id"
+  owner: string; // field-element encoded (not an aleo1... address)
+  sender: string; // the aleo1... address that submitted the tx
   programName: string;
   blockHeight?: number;
   transactionId?: string;
@@ -255,13 +269,13 @@ Parse individual fields from `recordPlaintext` (format: `field: value.private,`)
 
 ```typescript
 function getField(plaintext: string, field: string): string {
-  for (const line of plaintext.split('\n')) {
+  for (const line of plaintext.split("\n")) {
     const trimmed = line.trimStart();
     if (!trimmed.startsWith(`${field}:`)) continue;
     const m = trimmed.match(/^[^:]+:\s*(.+?)\.(?:private|public)/);
     if (m) return m[1].trim();
   }
-  return '';
+  return "";
 }
 ```
 
@@ -269,6 +283,7 @@ Values retain Leo type suffixes: `1000000u64`, `9500u16`, `97440...field`, `aleo
 Pass `record.recordPlaintext` directly as inputs to `executeTransaction`.
 
 **Required for wallet connection**:
+
 - Handle wallet connection/disconnection
 - Implement record discovery (scan blockchain for user records)
 - Show sync progress during initial wallet sync
@@ -278,6 +293,7 @@ Pass `record.recordPlaintext` directly as inputs to `executeTransaction`.
 Use the `useTransaction()` hook from `@/hooks/use-transaction.ts` for all on-chain calls. It manages proof generation status and error handling.
 
 **Core transitions:**
+
 - `mint_invoice()` — Create Invoice record (includes `document_cid` for IPFS attachment)
 - `authorize_factoring()` — Business commits invoice to a factor
 - `execute_factoring()` / `execute_factoring_token()` — Factor accepts (credits / USDCx)
@@ -287,6 +303,7 @@ Use the `useTransaction()` hook from `@/hooks/use-transaction.ts` for all on-cha
 - `create_pool()` / `contribute_to_pool()` / `execute_pool_factoring()` — Pool syndication
 
 **Implementation Notes**:
+
 - Proving times: 30-60 seconds (show progress indicator)
 - First-time synthesis: 5-7 minutes (warn users)
 - Async record availability (poll/subscribe for new records)
@@ -294,17 +311,20 @@ Use the `useTransaction()` hook from `@/hooks/use-transaction.ts` for all on-cha
 ### Privacy Requirements
 
 **Never expose in UI**:
+
 - Full invoice amounts (unless user owns the record)
 - Debtor identity (unless user is party to transaction)
 - Business-debtor relationships
 
 **Show encrypted/hashed only**:
+
 - Invoice hashes
 - Serial numbers (for double-spend verification)
 
 ## Mock Data
 
 Located in `src/lib/mock-data.ts`. Used for:
+
 - Invoice lists
 - Transaction history
 - Factor marketplace data
@@ -316,12 +336,14 @@ Located in `src/lib/mock-data.ts`. Used for:
 **Test Files**: `src/test/*.test.ts` or co-located with components
 
 **Run Tests**:
+
 ```bash
 npm run test          # Once
 npm run test:watch    # Watch mode
 ```
 
 **Example Test**:
+
 ```typescript
 import { render, screen } from '@testing-library/react';
 import { expect, test } from 'vitest';
@@ -338,7 +360,7 @@ Create `.env` file in `client/` directory:
 
 ```bash
 VITE_ALEO_NETWORK=testnet          # or mainnet
-VITE_ALEO_PROGRAM_ID=zk_factor.aleo
+VITE_ALEO_PROGRAM_ID=zk_factor_11765.aleo
 VITE_API_ENDPOINT=https://api.explorer.aleo.org/v1
 VITE_ALEO_EXPLORER=https://testnet.explorer.provable.com
 VITE_USDCX_PROGRAM_ID=test_usdcx_stablecoin.aleo
@@ -350,6 +372,7 @@ VITE_NOTIFY_FROM=               # Optional: sender address (default: ZK-Factor <
 ```
 
 Access in code:
+
 ```typescript
 const network = import.meta.env.VITE_ALEO_NETWORK;
 ```
@@ -357,11 +380,13 @@ const network = import.meta.env.VITE_ALEO_NETWORK;
 ## Performance Considerations
 
 **Bundle Size**:
+
 - Vite with React SWC for fast builds
 - Tree-shaking enabled
 - Lazy load routes: `React.lazy()` if needed
 
 **Aleo-Specific**:
+
 - Show loading states during proof generation
 - Cache record data to minimize blockchain scans
 - Debounce wallet sync operations
@@ -370,12 +395,14 @@ const network = import.meta.env.VITE_ALEO_NETWORK;
 ## Known Limitations
 
 **Aleo Platform Constraints**:
+
 - Record discovery requires blockchain scan (async, takes time)
 - No read-only record access (must consume & recreate)
 - Proving times not suitable for real-time UX
 - Function names visible on-chain (privacy limitation)
 
 **UI Implications**:
+
 - Always show sync progress indicators
 - Warn users about first-time proving delays
 - Handle async record availability gracefully
@@ -386,12 +413,14 @@ const network = import.meta.env.VITE_ALEO_NETWORK;
 Use the **Better Icons** skill (`better-icons`) for sourcing SVGs from 200+ Iconify libraries.
 
 **Gotchas:**
+
 - `search_icons` requires **single-keyword** queries — multi-word queries return 0 results
 - `recommend_icons` MCP tool returns empty results — use `search_icons` instead
 - `get_icon <prefix:name>` returns SVG with `fill="currentColor"` on path elements — set `fill="none"` on the wrapper `<g>` to get clean outlines
 - Preferred collection for outline icons: `tabler:` prefix
 
 **Icon component pattern** (`client/src/components/icons/`):
+
 - Props: `{ className?: string; size?: number }`
 - Use `currentColor` for stroke, `viewBox` sized to icon, `width={size} height={size}`
 - Composite icons: use SVG `<g transform="translate(...) scale(...)">` to layer multiple icons

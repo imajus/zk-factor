@@ -795,6 +795,101 @@
       ]
     },
     {
+      "name": "authorize_partial_factoring",
+      "is_async": true,
+      "inputs": [
+        {
+          "name": "invoice",
+          "ty": {
+            "Record": {
+              "path": [
+                "Invoice"
+              ],
+              "program": "zk_factor_9596"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "factor",
+          "ty": {
+            "Plaintext": {
+              "Primitive": "Address"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "factoring_amount",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "advance_rate",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U16"
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "use_token",
+          "ty": {
+            "Plaintext": {
+              "Primitive": "Boolean"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "recourse",
+          "ty": {
+            "Plaintext": {
+              "Primitive": "Boolean"
+            }
+          },
+          "mode": "None"
+        }
+      ],
+      "outputs": [
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "FactoringOffer"
+              ],
+              "program": "zk_factor_9596"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "Invoice"
+              ],
+              "program": "zk_factor_9596"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "ty": "Future",
+          "mode": "None"
+        }
+      ]
+    },
+    {
       "name": "execute_factoring",
       "is_async": true,
       "inputs": [

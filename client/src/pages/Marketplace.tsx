@@ -53,14 +53,14 @@ import {
 
 export default function Marketplace() {
   const queryClient = useQueryClient();
-  const { isConnected, requestRecords, activeRole, address, email } =
-    useWallet();
+  const { isConnected, requestRecords, activeRole, address } = useWallet();
   const { execute, status, error: txError, reset } = useTransaction();
   const isFactoring = status !== "idle";
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFactor, setSelectedFactor] = useState<FactorInfo | null>(null);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string>("");
   const [advanceRateInput, setAdvanceRateInput] = useState<string>("");
+  const [partialAmountInput, setPartialAmountInput] = useState<string>("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [poolDialogOpen, setPoolDialogOpen] = useState(false);
   const [createPoolDialogOpen, setCreatePoolDialogOpen] = useState(false);
@@ -109,8 +109,30 @@ export default function Marketplace() {
     return f.address.toLowerCase().includes(searchQuery.toLowerCase());
   });
 
+  const parseInvoiceAmountMicro = (record: AleoRecord): number => {
+    return parseInt(
+      getField(record.recordPlaintext, "amount").replace(/u64$/, ""),
+      10,
+    );
+  };
+
   const advanceRateBps = advanceRateInput ? parseInt(advanceRateInput, 10) : 0;
   const advanceRateValid = advanceRateBps >= 5000 && advanceRateBps <= 9900;
+  const selectedInvoiceRecord = invoiceRecords.find(
+    (r) => getInvoiceSelectionId(r) === selectedInvoiceId,
+  );
+  const selectedInvoiceAmountMicro = selectedInvoiceRecord
+    ? parseInvoiceAmountMicro(selectedInvoiceRecord)
+    : 0;
+  const partialAmountMicro = partialAmountInput
+    ? Math.round(parseFloat(partialAmountInput) * 1_000_000)
+    : 0;
+  const wantsPartial = partialAmountInput.trim().length > 0;
+  const partialAmountValid =
+    !wantsPartial ||
+    (Number.isFinite(partialAmountMicro) &&
+      partialAmountMicro > 0 &&
+      partialAmountMicro < selectedInvoiceAmountMicro);
   const poolEntries = listPoolDirectory();
   const openPoolEntries = poolEntries.filter((p) => !p.isClosed);
 
@@ -165,7 +187,13 @@ export default function Marketplace() {
   }, [status, txError, queryClient, reset]);
 
   const handleFactorInvoice = async () => {
-    if (!selectedFactor || !selectedInvoiceId || !advanceRateValid) return;
+    if (
+      !selectedFactor ||
+      !selectedInvoiceId ||
+      !advanceRateValid ||
+      !partialAmountValid
+    )
+      return;
 
     const invoice = invoiceRecords.find(
       (r) => getInvoiceSelectionId(r) === selectedInvoiceId,
@@ -173,18 +201,33 @@ export default function Marketplace() {
     if (!invoice) return;
     const currency = getInvoiceCurrency(invoice);
     const useToken = currency === "USDCx";
+    const invoiceAmountMicro = parseInvoiceAmountMicro(invoice);
+    const usePartial = wantsPartial && partialAmountMicro < invoiceAmountMicro;
+    const functionName = usePartial
+      ? "authorize_partial_factoring"
+      : "authorize_factoring";
+
     pendingActionRef.current = "factor";
 
     await execute({
       program: PROGRAM_ID,
-      function: "authorize_factoring",
-      inputs: [
-        invoice.recordPlaintext, // their Invoice record
-        selectedFactor.address, // who they're offering to
-        `${advanceRateBps}u16`, // agreed rate
-        useToken ? "true" : "false",
-        "false", // default to non-recourse unless explicitly enabled in UI
-      ],
+      function: functionName,
+      inputs: usePartial
+        ? [
+            invoice.recordPlaintext,
+            selectedFactor.address,
+            `${partialAmountMicro}u64`,
+            `${advanceRateBps}u16`,
+            useToken ? "true" : "false",
+            "false",
+          ]
+        : [
+            invoice.recordPlaintext,
+            selectedFactor.address,
+            `${advanceRateBps}u16`,
+            useToken ? "true" : "false",
+            "false",
+          ],
       fee: 100_000,
       privateFee: false,
     });
@@ -556,6 +599,7 @@ export default function Marketplace() {
                             setSelectedFactor(factor);
                             setSelectedInvoiceId("");
                             setAdvanceRateInput("");
+                            setPartialAmountInput("");
                           }
                         }}
                       >
@@ -629,6 +673,36 @@ export default function Marketplace() {
                               </Select>
                             </div>
                             <div className="space-y-2">
+                              <Label htmlFor="partial-amount">
+                                Optional Partial Amount (ALEO/USDCx)
+                              </Label>
+                              <Input
+                                id="partial-amount"
+                                type="number"
+                                min="0"
+                                step="0.000001"
+                                placeholder="Leave empty to factor full invoice"
+                                value={partialAmountInput}
+                                onChange={(e) =>
+                                  setPartialAmountInput(e.target.value)
+                                }
+                              />
+                              {wantsPartial && (
+                                <p
+                                  className={cn(
+                                    "text-xs",
+                                    partialAmountValid
+                                      ? "text-muted-foreground"
+                                      : "text-destructive",
+                                  )}
+                                >
+                                  {partialAmountValid
+                                    ? "Remainder stays with the creditor as a new invoice record."
+                                    : "Partial amount must be greater than 0 and less than invoice amount."}
+                                </p>
+                              )}
+                            </div>
+                            <div className="space-y-2">
                               <Label htmlFor="advance-rate">
                                 Advance Rate (basis points,{" "}
                                 {selectedFactor?.min_advance_rate || 5000}–
@@ -673,6 +747,7 @@ export default function Marketplace() {
                               disabled={
                                 !selectedInvoiceId ||
                                 !advanceRateValid ||
+                                !partialAmountValid ||
                                 isFactoring ||
                                 selectedInvoiceId === "_none"
                               }

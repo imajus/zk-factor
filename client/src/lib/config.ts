@@ -7,7 +7,7 @@ function resolveNetwork(value: string | undefined): Network {
 }
 
 export const PROGRAM_ID: string =
-  import.meta.env.VITE_ALEO_PROGRAM_ID ?? "zk_factor.aleo";
+  import.meta.env.VITE_ALEO_PROGRAM_ID ?? "zk_factor_9596.aleo";
 
 export const NETWORK: Network = resolveNetwork(
   import.meta.env.VITE_ALEO_NETWORK ?? "testnet",
@@ -27,15 +27,13 @@ export const USDCX_PROGRAM_ID: string =
 // Privy app ID for account abstraction / email login
 // Get this from https://privy.io → Dashboard → Settings → App ID
 // Set VITE_PRIVY_APP_ID in your .env
-export const PRIVY_APP_ID: string =
-  import.meta.env.VITE_PRIVY_APP_ID ?? "";
+export const PRIVY_APP_ID: string = import.meta.env.VITE_PRIVY_APP_ID ?? "";
 
 // Resend API key for email notifications
 // Set VITE_RESEND_API_KEY in your .env
 // NOTE: in production, proxy Resend calls through a backend/edge function
 // to avoid exposing the API key in the browser bundle.
-export const RESEND_API_KEY: string =
-  import.meta.env.VITE_RESEND_API_KEY ?? "";
+export const RESEND_API_KEY: string = import.meta.env.VITE_RESEND_API_KEY ?? "";
 
 export type PaymentCurrency = "ALEO" | "USDCx";
 
