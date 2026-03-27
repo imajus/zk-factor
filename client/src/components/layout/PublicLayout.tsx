@@ -48,6 +48,12 @@ export function PublicLayout({ children }: PublicLayoutProps) {
             >
               Roadmap
             </Link>
+            <a
+              href="/docs/"
+              className="hover:text-foreground transition-colors"
+            >
+              Guide
+            </a>
             <Link
               to="/terms"
               className="hover:text-foreground transition-colors"

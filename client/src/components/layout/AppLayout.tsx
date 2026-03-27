@@ -19,6 +19,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           <div className="flex items-center gap-4">
             <Link to="/about" className="hover:text-foreground transition-colors">About</Link>
             <Link to="/roadmap" className="hover:text-foreground transition-colors">Roadmap</Link>
+            <a href="/docs/" className="hover:text-foreground transition-colors">User Guide</a>
             <Link to="/terms" className="hover:text-foreground transition-colors">Terms</Link>
             <Link to="/privacy" className="hover:text-foreground transition-colors">Privacy</Link>
           </div>
