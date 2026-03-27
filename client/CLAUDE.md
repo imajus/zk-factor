@@ -90,7 +90,7 @@ client/
 │   │   ├── aleo-records.ts     # Record parsing, metadata encoding
 │   │   ├── config.ts           # App config (program IDs, endpoints, keys)
 │   │   ├── format.ts           # Display formatting utilities
-│   │   ├── ipfs.ts             # IPFS upload via Pinata + cidToField
+│   │   ├── ipfs.ts             # IPFS upload via Pinata presigned URLs + cidToField
 │   │   ├── mock-data.ts        # Mock data for development
 │   │   ├── notifications.ts    # Email notifications via Resend
 │   │   └── utils.ts            # Utility functions (cn, etc.)
@@ -343,7 +343,7 @@ VITE_API_ENDPOINT=https://api.explorer.aleo.org/v1
 VITE_ALEO_EXPLORER=https://testnet.explorer.provable.com
 VITE_USDCX_PROGRAM_ID=test_usdcx_stablecoin.aleo
 VITE_PRIVY_APP_ID=              # Privy app ID for account abstraction / email login
-VITE_PINATA_JWT=                # Pinata API JWT for IPFS document uploads
+VITE_WORKER_URL=                # URL of the deployed Cloudflare Worker (presigned URL proxy)
 VITE_RESEND_API_KEY=            # Resend API key for email notifications
 VITE_RESEND_PROXY_URL=          # Optional: custom Resend proxy endpoint
 VITE_NOTIFY_FROM=               # Optional: sender address (default: ZK-Factor <notify@zkfactor.app>)
