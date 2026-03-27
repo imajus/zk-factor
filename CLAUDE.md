@@ -17,6 +17,7 @@ aleo/              Leo smart contract (program: zk_factor.aleo)
 └── CLAUDE.md      Aleo-specific development guide
 client/            React frontend with Vite + TypeScript + shadcn/ui
 └── CLAUDE.md      Frontend development guide
+worker/            Cloudflare Worker — Pinata presigned URL proxy
 docs/              Context-specific documentation
 └── PRD.md         Full product requirements and specifications
 ```
@@ -26,3 +27,5 @@ docs/              Context-specific documentation
 **When working in `aleo/`:** Refer to @aleo/CLAUDE.md for smart contract architecture, development commands, and Aleo platform constraints.
 
 **When working in `client/`:** Refer to @client/CLAUDE.md for frontend tech stack, component structure, routing, and Aleo wallet integration.
+
+**When working in `worker/`:** A Cloudflare Worker that generates short-lived Pinata presigned upload URLs so the Pinata JWT never reaches the browser. Exposes `GET /presigned-url` returning `{ url, gateway }`. Configured via `PINATA_JWT` and `PINATA_GATEWAY` secrets (see `worker/.dev.vars.example`).
