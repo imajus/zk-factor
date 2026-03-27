@@ -124,3 +124,7 @@ Thumbs.db
 
 # Client build output
 /client/dist
+
+# Tooling
+.playwright-mcp/
+.firecrawl/
