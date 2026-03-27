@@ -1,8 +1,5 @@
-// IPFS upload via Pinata (free tier — https://pinata.cloud)
-// Set VITE_PINATA_JWT in your .env / Cloudflare Pages env vars
-// Get your JWT from: https://app.pinata.cloud/developers/api-keys
-
-const PINATA_UPLOAD_URL = 'https://uploads.pinata.cloud/v3/files';
+// IPFS upload via Pinata presigned URLs (JWT stays server-side in the CF worker)
+// Set VITE_WORKER_URL in your .env to point at the deployed worker
 
 export interface IPFSUploadResult {
   cid: string;
@@ -27,25 +24,29 @@ export function cidToField(cid: string): string {
 }
 
 /**
- * Upload a file to IPFS via Pinata.
+ * Upload a file to IPFS via a Pinata presigned URL obtained from the CF worker.
  * Returns the CID, a public gateway URL, and the field-encoded CID.
  */
 export async function uploadToIPFS(file: File): Promise<IPFSUploadResult> {
-  const jwt = import.meta.env.VITE_PINATA_JWT;
-  if (!jwt) {
-    throw new Error('VITE_PINATA_JWT is not set. Get a free API key at https://app.pinata.cloud/developers/api-keys');
+  const workerUrl = import.meta.env.VITE_WORKER_URL;
+  if (!workerUrl) {
+    throw new Error('VITE_WORKER_URL is not set.');
   }
 
+  // 1. Get a short-lived presigned upload URL from the worker
+  const urlRes = await fetch(`${workerUrl}/presigned-url`);
+  if (!urlRes.ok) {
+    throw new Error(`Failed to get presigned URL: ${urlRes.statusText}`);
+  }
+  const { url: presignedUrl } = await urlRes.json() as { url: string };
+
+  // 2. Upload directly to Pinata using the presigned URL
   const formData = new FormData();
   formData.append('file', file);
-  // Use invoice filename as the pin name for easy identification in Pinata dashboard
   formData.append('name', file.name);
 
-  const response = await fetch(PINATA_UPLOAD_URL, {
+  const response = await fetch(presignedUrl, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${jwt}`,
-    },
     body: formData,
   });
 
