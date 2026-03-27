@@ -1,16 +1,18 @@
 {
-  "name": "zk-factor-root",
+  "name": "zk-factor",
   "private": true,
+  "workspaces": [
+    "client",
+    "guide",
+    "worker"
+  ],
   "scripts": {
-    "guide:dev": "npm start --prefix guide",
-    "guide:build": "npm run build --prefix guide",
-    "client:dev": "npm run dev --prefix client",
-    "client:build": "npm run build --prefix client",
+    "guide:dev": "npm run start -w guide",
+    "guide:build": "npm run build -w guide",
+    "client:dev": "npm run dev -w client",
+    "client:build": "npm run build -w client",
+    "worker:dev": "npm run dev -w worker",
+    "worker:deploy": "npm run deploy -w worker",
     "build": "npm run client:build && npm run guide:build && mkdir -p client/dist/docs && cp -r guide/build/* client/dist/docs/"
-  },
-  "devDependencies": {
-    "autoprefixer": "^10.4.27",
-    "postcss": "^8.5.8",
-    "tailwindcss": "^4.2.2"
   }
 }
