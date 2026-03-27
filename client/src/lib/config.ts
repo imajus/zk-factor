@@ -24,11 +24,6 @@ export const ALEO_EXPLORER =
 export const USDCX_PROGRAM_ID: string =
   import.meta.env.VITE_USDCX_PROGRAM_ID ?? "test_usdcx_stablecoin.aleo";
 
-// Privy app ID for account abstraction / email login
-// Get this from https://privy.io → Dashboard → Settings → App ID
-// Set VITE_PRIVY_APP_ID in your .env
-export const PRIVY_APP_ID: string = import.meta.env.VITE_PRIVY_APP_ID ?? "";
-
 // Resend API key for email notifications
 // Set VITE_RESEND_API_KEY in your .env
 // NOTE: in production, proxy Resend calls through a backend/edge function

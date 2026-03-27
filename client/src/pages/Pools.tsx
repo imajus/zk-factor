@@ -30,7 +30,11 @@ import {
   buildContributeToPoolInputs,
   buildClaimPoolProceedsInputs,
 } from "@/lib/aleo-factors";
-import { updatePoolClosed, upsertPoolContribution } from "@/lib/pool-directory";
+import {
+  listPoolDirectory,
+  updatePoolClosed,
+  upsertPoolContribution,
+} from "@/lib/pool-directory";
 
 interface PoolMeta {
   invoiceHash: string;
@@ -76,6 +80,14 @@ export default function Pools() {
   const poolRecords = ((records as AleoRecord[]) ?? []).filter(
     (r) => r.recordName === "FactorPool" && !r.spent,
   );
+  const localPoolEntries = listPoolDirectory();
+  const onChainPoolHashes = new Set(
+    poolRecords.map((r) => getField(r.recordPlaintext, "invoice_hash")),
+  );
+  const directoryOnlyPools = localPoolEntries.filter(
+    (p) => !onChainPoolHashes.has(p.invoiceHash),
+  );
+  const totalVisiblePools = poolRecords.length + directoryOnlyPools.length;
   const poolShareRecords = ((records as AleoRecord[]) ?? []).filter(
     (r) => r.recordName === "PoolShare" && !r.spent,
   );
@@ -237,7 +249,7 @@ export default function Pools() {
         </div>
       );
     }
-    if (poolRecords.length === 0) {
+    if (poolRecords.length === 0 && directoryOnlyPools.length === 0) {
       return (
         <Card className="py-16 text-center">
           <CardContent className="space-y-4">
@@ -348,6 +360,107 @@ export default function Pools() {
                       setContributePoolOwner(
                         getField(record.recordPlaintext, "owner"),
                       );
+                    }}
+                  >
+                    <TrendingUp className="h-3.5 w-3.5" />
+                    Contribute
+                    <ChevronRight className="h-3.5 w-3.5 ml-auto" />
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })}
+
+        {directoryOnlyPools.map((pool) => {
+          const targetAleo = (
+            pool.targetAmountMicro / 1_000_000
+          ).toLocaleString(undefined, {
+            maximumFractionDigits: 2,
+          });
+          const contributedMicro = pool.participants.reduce(
+            (sum, participant) => sum + participant.contributedMicro,
+            0,
+          );
+          const contributedAleo = (contributedMicro / 1_000_000).toLocaleString(
+            undefined,
+            {
+              maximumFractionDigits: 2,
+            },
+          );
+          const fillPct =
+            pool.targetAmountMicro > 0
+              ? Math.min(
+                  100,
+                  Math.round((contributedMicro * 100) / pool.targetAmountMicro),
+                )
+              : null;
+
+          return (
+            <Card
+              key={`directory-${pool.invoiceHash}`}
+              className="hover:border-primary/50 transition-colors"
+            >
+              <CardContent className="pt-4 space-y-3">
+                <div className="flex items-start justify-between">
+                  <span className="font-mono text-sm text-muted-foreground">
+                    {pool.invoiceHash.slice(0, 14)}…
+                  </span>
+                  <Badge
+                    variant="outline"
+                    className={
+                      pool.isClosed
+                        ? "text-green-600 border-green-300 text-xs"
+                        : "text-blue-600 border-blue-300 text-xs"
+                    }
+                  >
+                    {pool.isClosed ? (
+                      <>
+                        <Lock className="h-3 w-3 mr-1" />
+                        Closed
+                      </>
+                    ) : (
+                      <>
+                        <Unlock className="h-3 w-3 mr-1" />
+                        Open
+                      </>
+                    )}
+                  </Badge>
+                </div>
+
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Target</span>
+                    <span className="font-mono font-medium">
+                      {targetAleo} ALEO
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Raised</span>
+                    <span className="font-mono font-medium">
+                      {contributedAleo} ALEO
+                    </span>
+                  </div>
+                </div>
+
+                {fillPct !== null && (
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Fill</span>
+                      <span>{fillPct}%</span>
+                    </div>
+                    <Progress value={fillPct} className="h-1.5" />
+                  </div>
+                )}
+
+                {!pool.isClosed && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full gap-1.5"
+                    onClick={() => {
+                      setContributeInvoiceHash(pool.invoiceHash);
+                      setContributePoolOwner(pool.owner);
                     }}
                   >
                     <TrendingUp className="h-3.5 w-3.5" />
@@ -487,9 +600,9 @@ export default function Pools() {
         <TabsList>
           <TabsTrigger value="my-pools">
             Pools
-            {!isLoading && poolRecords.length > 0 && (
+            {!isLoading && totalVisiblePools > 0 && (
               <span className="ml-1.5 text-xs opacity-70">
-                ({poolRecords.length})
+                ({totalVisiblePools})
               </span>
             )}
           </TabsTrigger>

@@ -14,6 +14,8 @@ import {
   FileCheck,
   AlertCircle,
   AlertTriangle,
+  Copy,
+  Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -22,6 +24,12 @@ import { Badge } from "@/components/ui/badge";
 import { AddressDisplay } from "@/components/ui/address-display";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -52,7 +60,18 @@ export function BusinessDashboard() {
   const { execute, status, error: txError, reset } = useTransaction();
   const [settlingId, setSettlingId] = useState<string | null>(null);
   const [settledHashes, setSettledHashes] = useState<Set<string>>(new Set());
-  const [settlingRecourseId, setSettlingRecourseId] = useState<string | null>(null);
+  const [settlingRecourseId, setSettlingRecourseId] = useState<string | null>(
+    null,
+  );
+  const [selectedInvoice, setSelectedInvoice] = useState<{
+    invoiceHash: string;
+    debtor: string;
+    amount: string;
+    currency: string;
+    dueDate: Date;
+    transactionId?: string;
+  } | null>(null);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
 
   const {
     data: records,
@@ -86,6 +105,17 @@ export function BusinessDashboard() {
     const fromMetadata = decodeInvoiceCurrencyFromMetadata(metadata);
     const cached = getPersistedInvoiceCurrency(invoiceHash);
     return cached ?? fromMetadata;
+  };
+
+  const copyToClipboard = async (text: string, fieldName: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedField(fieldName);
+      setTimeout(() => setCopiedField(null), 2000);
+      toast.success(`${fieldName} copied!`);
+    } catch {
+      toast.error("Failed to copy");
+    }
   };
 
   const totalValue = invoiceRecords.reduce((sum, r) => {
@@ -367,7 +397,19 @@ export function BusinessDashboard() {
           return (
             <Card
               key={invoiceHash || idx}
-              className="hover:border-primary/50 transition-colors"
+              className="hover:border-primary/50 transition-colors cursor-pointer hover:shadow-lg"
+              onClick={() =>
+                setSelectedInvoice({
+                  invoiceHash,
+                  debtor,
+                  amount: aleoAmount.toLocaleString(undefined, {
+                    maximumFractionDigits: 6,
+                  }),
+                  currency,
+                  dueDate,
+                  transactionId: invoice.transactionId,
+                })
+              }
             >
               <CardContent className="pt-4 space-y-3">
                 <div className="flex items-start justify-between">
@@ -375,7 +417,10 @@ export function BusinessDashboard() {
                     {invoiceHash.slice(0, 12)}…
                   </span>
                   <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
+                    <DropdownMenuTrigger
+                      asChild
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <Button
                         variant="ghost"
                         size="icon"
@@ -707,7 +752,8 @@ export function BusinessDashboard() {
           <CardContent>
             <p className="font-medium">No recourse notices</p>
             <p className="text-sm text-muted-foreground mt-1">
-              If a factor claims recourse on an overdue invoice, it will appear here
+              If a factor claims recourse on an overdue invoice, it will appear
+              here
             </p>
           </CardContent>
         </Card>
@@ -750,7 +796,10 @@ export function BusinessDashboard() {
                     </span>
                   </div>
                 </div>
-                <Badge variant="outline" className="text-xs text-orange-600 border-orange-300">
+                <Badge
+                  variant="outline"
+                  className="text-xs text-orange-600 border-orange-300"
+                >
                   Recourse Active
                 </Badge>
                 <Button
@@ -882,6 +931,153 @@ export function BusinessDashboard() {
           {renderRecourseNoticeCards()}
         </TabsContent>
       </Tabs>
+
+      {/* Invoice Detail Dialog */}
+      <Dialog
+        open={!!selectedInvoice}
+        onOpenChange={(open) => !open && setSelectedInvoice(null)}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <div className="flex justify-center mb-4">
+              <div className="rounded-full bg-primary/10 p-3">
+                <FileText className="h-6 w-6 text-primary" />
+              </div>
+            </div>
+            <DialogTitle className="text-center">Invoice Details</DialogTitle>
+          </DialogHeader>
+
+          {selectedInvoice && (
+            <div className="space-y-4">
+              {/* Invoice Hash */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-muted-foreground">
+                  Invoice Hash
+                </label>
+                <div className="flex items-center justify-between gap-2 p-3 rounded-md bg-muted/50 border border-border">
+                  <span className="font-mono text-xs break-all">
+                    {selectedInvoice.invoiceHash}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() =>
+                      copyToClipboard(
+                        selectedInvoice.invoiceHash,
+                        "Invoice Hash",
+                      )
+                    }
+                  >
+                    {copiedField === "Invoice Hash" ? (
+                      <Check className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              {/* Debtor */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-muted-foreground">
+                  Debtor
+                </label>
+                <div className="flex items-center justify-between gap-2 p-3 rounded-md bg-muted/50 border border-border">
+                  <span className="font-mono text-xs break-all">
+                    {selectedInvoice.debtor}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() =>
+                      copyToClipboard(selectedInvoice.debtor, "Debtor Address")
+                    }
+                  >
+                    {copiedField === "Debtor Address" ? (
+                      <Check className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              {/* Amount */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-muted-foreground">
+                  Amount
+                </label>
+                <div className="flex items-center justify-between gap-2 p-3 rounded-md bg-muted/50 border border-border">
+                  <span className="font-mono font-semibold text-sm">
+                    {selectedInvoice.amount} {selectedInvoice.currency}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() =>
+                      copyToClipboard(
+                        `${selectedInvoice.amount} ${selectedInvoice.currency}`,
+                        "Amount",
+                      )
+                    }
+                  >
+                    {copiedField === "Amount" ? (
+                      <Check className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              {/* Due Date */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-muted-foreground">
+                  Due Date
+                </label>
+                <div className="flex items-center justify-between gap-2 p-3 rounded-md bg-muted/50 border border-border">
+                  <span className="text-sm">
+                    {formatDate(selectedInvoice.dueDate)}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() =>
+                      copyToClipboard(
+                        formatDate(selectedInvoice.dueDate),
+                        "Due Date",
+                      )
+                    }
+                  >
+                    {copiedField === "Due Date" ? (
+                      <Check className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              {/* View on Explorer */}
+              {selectedInvoice.transactionId && (
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() =>
+                    window.open(
+                      `${import.meta.env.VITE_ALEO_EXPLORER}/transaction/${selectedInvoice.transactionId}`,
+                      "_blank",
+                    )
+                  }
+                >
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  View on Explorer
+                </Button>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
