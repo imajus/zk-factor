@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import {
   Users,
-  Plus,
   RefreshCw,
   AlertCircle,
   TrendingUp,
@@ -20,23 +19,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AleoNetworkClient } from "@provablehq/sdk";
 import { useWallet } from "@/contexts/WalletContext";
 import { useTransaction } from "@/hooks/use-transaction";
 import { toast } from "sonner";
-import { PROGRAM_ID, API_ENDPOINT } from "@/lib/config";
-import {
-  type AleoRecord,
-  getField,
-  microToAleo,
-} from "@/lib/aleo-records";
+import { PROGRAM_ID } from "@/lib/config";
+import { type AleoRecord, getField, microToAleo } from "@/lib/aleo-records";
 import {
   fetchPoolContributions,
   fetchPoolClosed,
-  buildCreatePoolInputs,
   buildContributeToPoolInputs,
   buildClaimPoolProceedsInputs,
 } from "@/lib/aleo-factors";
+import { updatePoolClosed, upsertPoolContribution } from "@/lib/pool-directory";
 
 interface PoolMeta {
   invoiceHash: string;
@@ -51,11 +45,6 @@ export default function Pools() {
   const { isConnected, requestRecords, address } = useWallet();
   const { execute, status, error: txError, reset } = useTransaction();
 
-  // Create pool form state
-  const [createInvoiceHash, setCreateInvoiceHash] = useState("");
-  const [createTargetAleo, setCreateTargetAleo] = useState("");
-  const [isCreating, setIsCreating] = useState(false);
-
   // Contribute form state
   const [contributeInvoiceHash, setContributeInvoiceHash] = useState("");
   const [contributePoolOwner, setContributePoolOwner] = useState("");
@@ -64,6 +53,13 @@ export default function Pools() {
 
   // Per-pool live metadata (contributions + closed status)
   const [poolMetas, setPoolMetas] = useState<Record<string, PoolMeta>>({});
+  const [pendingPoolContribution, setPendingPoolContribution] = useState<{
+    invoiceHash: string;
+    owner: string;
+    contributor: string;
+    contributedMicro: number;
+    targetAmountMicro?: number;
+  } | null>(null);
 
   const {
     data: records,
@@ -100,61 +96,58 @@ export default function Pools() {
 
       setPoolMetas((prev) => ({
         ...prev,
-        [invoiceHash]: { invoiceHash, owner, targetAmount, contributed, isClosed },
+        [invoiceHash]: {
+          invoiceHash,
+          owner,
+          targetAmount,
+          contributed,
+          isClosed,
+        },
       }));
+
+      updatePoolClosed(invoiceHash, isClosed);
     });
   }, [poolRecords.length]);
 
   // Toast feedback
   useEffect(() => {
-    if (status === "submitting") toast.loading("Generating proof…", { id: "pool-op" });
-    else if (status === "pending") toast.loading("Broadcasting…", { id: "pool-op" });
+    if (status === "submitting")
+      toast.loading("Generating proof…", { id: "pool-op" });
+    else if (status === "pending")
+      toast.loading("Broadcasting…", { id: "pool-op" });
     else if (status === "accepted") {
+      if (pendingPoolContribution) {
+        upsertPoolContribution(pendingPoolContribution);
+        setPendingPoolContribution(null);
+      }
+
       toast.success("Transaction confirmed!", { id: "pool-op" });
       queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
-      setIsCreating(false);
       setIsContributing(false);
-      setCreateInvoiceHash("");
-      setCreateTargetAleo("");
       setContributeInvoiceHash("");
       setContributePoolOwner("");
       setContributeAmountAleo("");
       reset();
     } else if (status === "failed") {
+      setPendingPoolContribution(null);
       toast.error(txError || "Transaction failed", { id: "pool-op" });
-      setIsCreating(false);
       setIsContributing(false);
       reset();
     }
   }, [status, txError, queryClient, reset]);
 
-  const handleCreatePool = async () => {
-    if (!createInvoiceHash.trim() || !createTargetAleo.trim()) {
-      toast.error("Fill in all fields");
-      return;
-    }
-    const targetMicro = BigInt(Math.round(parseFloat(createTargetAleo) * 1_000_000));
-    if (targetMicro <= 0n) {
-      toast.error("Target must be > 0");
-      return;
-    }
-    setIsCreating(true);
-    const inputs = buildCreatePoolInputs(createInvoiceHash.trim(), targetMicro);
-    await execute({
-      program: PROGRAM_ID,
-      function: "create_pool",
-      inputs,
-      fee: 80_000,
-      privateFee: false,
-    });
-  };
-
   const handleContribute = async () => {
-    if (!contributeInvoiceHash.trim() || !contributePoolOwner.trim() || !contributeAmountAleo.trim()) {
+    if (
+      !contributeInvoiceHash.trim() ||
+      !contributePoolOwner.trim() ||
+      !contributeAmountAleo.trim()
+    ) {
       toast.error("Fill in all fields");
       return;
     }
-    const contributionMicro = BigInt(Math.round(parseFloat(contributeAmountAleo) * 1_000_000));
+    const contributionMicro = BigInt(
+      Math.round(parseFloat(contributeAmountAleo) * 1_000_000),
+    );
     if (contributionMicro <= 0n) {
       toast.error("Amount must be > 0");
       return;
@@ -174,11 +167,14 @@ export default function Pools() {
         .filter((r) => !r.spent)
         .find(
           (r) =>
-            BigInt(getField(r.recordPlaintext, "microcredits").replace(/u64$/, "")) >=
-            contributionMicro,
+            BigInt(
+              getField(r.recordPlaintext, "microcredits").replace(/u64$/, ""),
+            ) >= contributionMicro,
         );
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to fetch credits");
+      toast.error(
+        err instanceof Error ? err.message : "Failed to fetch credits",
+      );
       setIsContributing(false);
       return;
     }
@@ -195,6 +191,16 @@ export default function Pools() {
       creditsRecord.recordPlaintext,
       contributionMicro,
     );
+
+    const meta = poolMetas[contributeInvoiceHash.trim()];
+    setPendingPoolContribution({
+      invoiceHash: contributeInvoiceHash.trim(),
+      owner: contributePoolOwner.trim(),
+      contributor: address ?? "",
+      contributedMicro: Number(contributionMicro),
+      targetAmountMicro: meta ? Number(meta.targetAmount) : undefined,
+    });
+
     await execute({
       program: PROGRAM_ID,
       function: "contribute_to_pool",
@@ -239,7 +245,8 @@ export default function Pools() {
             <div>
               <p className="font-medium">No pools yet</p>
               <p className="text-sm text-muted-foreground mt-1">
-                Create a pool to syndicate factoring across multiple contributors
+                Create a pool to syndicate factoring across multiple
+                contributors
               </p>
             </div>
           </CardContent>
@@ -299,16 +306,22 @@ export default function Pools() {
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Target</span>
                     <span className="font-mono font-medium">
-                      {targetAleo.toLocaleString(undefined, { maximumFractionDigits: 2 })} ALEO
+                      {targetAleo.toLocaleString(undefined, {
+                        maximumFractionDigits: 2,
+                      })}{" "}
+                      ALEO
                     </span>
                   </div>
                   {contributed !== null && (
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Raised</span>
                       <span className="font-mono font-medium">
-                        {microToAleo(`${contributed}u64`).toLocaleString(undefined, {
-                          maximumFractionDigits: 2,
-                        })}{" "}
+                        {microToAleo(`${contributed}u64`).toLocaleString(
+                          undefined,
+                          {
+                            maximumFractionDigits: 2,
+                          },
+                        )}{" "}
                         ALEO
                       </span>
                     </div>
@@ -332,7 +345,9 @@ export default function Pools() {
                     className="w-full gap-1.5"
                     onClick={() => {
                       setContributeInvoiceHash(invoiceHash);
-                      setContributePoolOwner(getField(record.recordPlaintext, "owner"));
+                      setContributePoolOwner(
+                        getField(record.recordPlaintext, "owner"),
+                      );
                     }}
                   >
                     <TrendingUp className="h-3.5 w-3.5" />
@@ -380,11 +395,15 @@ export default function Pools() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {poolShareRecords.map((record, idx) => {
           const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
-          const contributedRaw = getField(record.recordPlaintext, "contributed");
+          const contributedRaw = getField(
+            record.recordPlaintext,
+            "contributed",
+          );
           const totalPoolRaw = getField(record.recordPlaintext, "total_pool");
           const contributed = BigInt(contributedRaw.replace(/u64$/, ""));
           const totalPool = BigInt(totalPoolRaw.replace(/u64$/, ""));
-          const shareBps = totalPool > 0n ? (contributed * 10000n) / totalPool : 0n;
+          const shareBps =
+            totalPool > 0n ? (contributed * 10000n) / totalPool : 0n;
 
           return (
             <Card
@@ -467,77 +486,39 @@ export default function Pools() {
       <Tabs defaultValue="my-pools">
         <TabsList>
           <TabsTrigger value="my-pools">
-            My Pools
+            Pools
             {!isLoading && poolRecords.length > 0 && (
-              <span className="ml-1.5 text-xs opacity-70">({poolRecords.length})</span>
+              <span className="ml-1.5 text-xs opacity-70">
+                ({poolRecords.length})
+              </span>
             )}
           </TabsTrigger>
           <TabsTrigger value="my-shares">
             My Shares
             {!isLoading && poolShareRecords.length > 0 && (
-              <span className="ml-1.5 text-xs opacity-70">({poolShareRecords.length})</span>
+              <span className="ml-1.5 text-xs opacity-70">
+                ({poolShareRecords.length})
+              </span>
             )}
           </TabsTrigger>
-          <TabsTrigger value="create">Create Pool</TabsTrigger>
           <TabsTrigger value="contribute">Contribute</TabsTrigger>
         </TabsList>
 
         {/* My Pools tab */}
         <TabsContent value="my-pools" className="mt-4">
           {renderPoolCards()}
+          <p className="mt-3 text-xs text-muted-foreground">
+            Any active factor can create a pool and any active factor can
+            contribute.
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Use Marketplace to create new pools.
+          </p>
         </TabsContent>
 
         {/* My Shares tab */}
         <TabsContent value="my-shares" className="mt-4">
           {renderShareCards()}
-        </TabsContent>
-
-        {/* Create Pool tab */}
-        <TabsContent value="create" className="mt-4">
-          <Card className="max-w-lg">
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <Plus className="h-4 w-4" />
-                Create a New Pool
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                You must already hold the <code className="text-xs bg-muted px-1 py-0.5 rounded">FactoringOffer</code> for
-                this invoice. The pool lets other factors co-fund the advance.
-              </p>
-              <div className="space-y-2">
-                <Label htmlFor="create-hash">Invoice Hash</Label>
-                <Input
-                  id="create-hash"
-                  placeholder="invoice_hash field value"
-                  value={createInvoiceHash}
-                  onChange={(e) => setCreateInvoiceHash(e.target.value)}
-                  className="font-mono text-sm"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="create-target">Target Amount (ALEO)</Label>
-                <Input
-                  id="create-target"
-                  type="number"
-                  placeholder="e.g. 1000"
-                  value={createTargetAleo}
-                  onChange={(e) => setCreateTargetAleo(e.target.value)}
-                  min="0"
-                  step="0.000001"
-                />
-              </div>
-              <Button
-                className="w-full gap-2"
-                onClick={handleCreatePool}
-                disabled={isCreating || !createInvoiceHash || !createTargetAleo}
-              >
-                <Users className="h-4 w-4" />
-                {isCreating ? "Creating…" : "Create Pool"}
-              </Button>
-            </CardContent>
-          </Card>
         </TabsContent>
 
         {/* Contribute tab */}
@@ -551,9 +532,9 @@ export default function Pools() {
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Enter the pool's invoice hash and the pool owner address. You'll
-                receive a <code className="text-xs bg-muted px-1 py-0.5 rounded">PoolShare</code> record proportional
-                to your contribution.
+                Enter the pool invoice hash and pool owner address. Any active
+                factor can join, and each contributor receives a PoolShare
+                record.
               </p>
               <div className="space-y-2">
                 <Label htmlFor="contrib-hash">Invoice Hash</Label>
@@ -576,7 +557,9 @@ export default function Pools() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="contrib-amount">Contribution Amount (ALEO)</Label>
+                <Label htmlFor="contrib-amount">
+                  Contribution Amount (ALEO)
+                </Label>
                 <Input
                   id="contrib-amount"
                   type="number"

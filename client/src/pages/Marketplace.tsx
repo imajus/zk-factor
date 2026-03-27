@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import {
   Search,
@@ -6,6 +6,7 @@ import {
   AlertCircle,
   RefreshCw,
   ArrowRight,
+  Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,10 +44,23 @@ import {
   getPersistedInvoiceCurrency,
 } from "@/lib/aleo-records";
 import { type FactorInfo, fetchActiveFactors } from "@/lib/aleo-factors";
+import { buildCreatePoolInputs } from "@/lib/aleo-factors";
+import {
+  getFactorEmail,
+  uniqueEmails,
+  upsertInvoiceContacts,
+} from "@/lib/notification-directory";
+import { notifyFactorChosen } from "@/lib/notifications";
+import {
+  listPoolDirectory,
+  type PoolDirectoryEntry,
+  upsertPoolCreation,
+} from "@/lib/pool-directory";
 
 export default function Marketplace() {
   const queryClient = useQueryClient();
-  const { isConnected, requestRecords, activeRole } = useWallet();
+  const { isConnected, requestRecords, activeRole, address, email } =
+    useWallet();
   const { execute, status, error: txError, reset } = useTransaction();
   const isFactoring = status !== "idle";
   const [searchQuery, setSearchQuery] = useState("");
@@ -54,6 +68,29 @@ export default function Marketplace() {
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string>("");
   const [advanceRateInput, setAdvanceRateInput] = useState<string>("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [poolDialogOpen, setPoolDialogOpen] = useState(false);
+  const [createPoolDialogOpen, setCreatePoolDialogOpen] = useState(false);
+  const [poolInvoiceHash, setPoolInvoiceHash] = useState("");
+  const [poolTargetAleo, setPoolTargetAleo] = useState("");
+  const [selectedPool, setSelectedPool] = useState<PoolDirectoryEntry | null>(
+    null,
+  );
+  const pendingActionRef = useRef<"factor" | "create-pool" | null>(null);
+  const pendingPoolCreateRef = useRef<{
+    invoiceHash: string;
+    owner: string;
+    targetAmountMicro: number;
+  } | null>(null);
+  const pendingFactorRequestRef = useRef<{
+    invoiceHash: string;
+    factorAddress: string;
+    factorEmail: string | null;
+    creditorAddress: string;
+    creditorEmail: string | null;
+    debtorAddress: string;
+    debtorEmail?: string;
+    advanceRateBps: number;
+  } | null>(null);
 
   const {
     data: factors,
@@ -78,6 +115,11 @@ export default function Marketplace() {
     (r) => r.recordName === "Invoice" && !r.spent,
   );
 
+  const getInvoiceSelectionId = (record: AleoRecord): string => {
+    const hash = getField(record.recordPlaintext, "invoice_hash");
+    return record.commitment ?? hash;
+  };
+
   const filteredFactors = (factors ?? []).filter((f) => {
     if (!searchQuery) return true;
     return f.address.toLowerCase().includes(searchQuery.toLowerCase());
@@ -85,6 +127,10 @@ export default function Marketplace() {
 
   const advanceRateBps = advanceRateInput ? parseInt(advanceRateInput, 10) : 0;
   const advanceRateValid = advanceRateBps >= 5000 && advanceRateBps <= 9900;
+  const poolEntries = listPoolDirectory();
+  const openPoolEntries = poolEntries.filter((p) => !p.isClosed);
+
+  const factorByAddress = new Map((factors ?? []).map((f) => [f.address, f]));
 
   const getInvoiceCurrency = (record: AleoRecord): "ALEO" | "USDCx" => {
     const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
@@ -96,17 +142,58 @@ export default function Marketplace() {
   };
 
   useEffect(() => {
+    const opId = "marketplace-op";
+    const pendingAction = pendingActionRef.current;
+
     if (status === "submitting")
-      toast.loading("Generating proof…", { id: "factor-invoice" });
-    else if (status === "pending")
-      toast.loading("Broadcasting…", { id: "factor-invoice" });
+      toast.loading("Generating proof…", { id: opId });
+    else if (status === "pending") toast.loading("Broadcasting…", { id: opId });
     else if (status === "accepted") {
-      toast.success("Invoice factored successfully!", { id: "factor-invoice" });
+      if (pendingAction === "factor" && pendingFactorRequestRef.current) {
+        const pending = pendingFactorRequestRef.current;
+        upsertInvoiceContacts({
+          invoiceHash: pending.invoiceHash,
+          creditorAddress: pending.creditorAddress,
+          creditorEmail: pending.creditorEmail ?? undefined,
+          debtorAddress: pending.debtorAddress,
+          debtorEmail: pending.debtorEmail,
+          factorAddress: pending.factorAddress,
+          factorEmail: pending.factorEmail ?? undefined,
+        });
+
+        void notifyFactorChosen(uniqueEmails([pending.factorEmail]), {
+          invoiceHash: pending.invoiceHash,
+          creditorAddress: pending.creditorAddress,
+          advanceRateBps: pending.advanceRateBps,
+        });
+        pendingFactorRequestRef.current = null;
+        toast.success("Invoice factored successfully!", { id: opId });
+        setDialogOpen(false);
+      }
+
+      if (pendingAction === "create-pool" && pendingPoolCreateRef.current) {
+        upsertPoolCreation(pendingPoolCreateRef.current);
+        pendingPoolCreateRef.current = null;
+        toast.success("Pool created successfully!", { id: opId });
+        setCreatePoolDialogOpen(false);
+        setPoolInvoiceHash("");
+        setPoolTargetAleo("");
+      }
+
+      pendingActionRef.current = null;
       queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
-      setDialogOpen(false);
       reset();
     } else if (status === "failed") {
-      toast.error(txError || "Factoring failed", { id: "factor-invoice" });
+      pendingFactorRequestRef.current = null;
+      pendingPoolCreateRef.current = null;
+
+      const defaultMessage =
+        pendingActionRef.current === "create-pool"
+          ? "Pool creation failed"
+          : "Factoring failed";
+      toast.error(txError || defaultMessage, { id: opId });
+
+      pendingActionRef.current = null;
       reset();
     }
   }, [status, txError, queryClient, reset]);
@@ -115,11 +202,24 @@ export default function Marketplace() {
     if (!selectedFactor || !selectedInvoiceId || !advanceRateValid) return;
 
     const invoice = invoiceRecords.find(
-      (r) => r.commitment === selectedInvoiceId,
+      (r) => getInvoiceSelectionId(r) === selectedInvoiceId,
     );
     if (!invoice) return;
     const currency = getInvoiceCurrency(invoice);
     const useToken = currency === "USDCx";
+    const invoiceHash = getField(invoice.recordPlaintext, "invoice_hash");
+    const debtorAddress = getField(invoice.recordPlaintext, "debtor");
+
+    pendingFactorRequestRef.current = {
+      invoiceHash,
+      factorAddress: selectedFactor.address,
+      factorEmail: getFactorEmail(selectedFactor.address),
+      creditorAddress: address ?? "",
+      creditorEmail: email,
+      debtorAddress,
+      advanceRateBps,
+    };
+    pendingActionRef.current = "factor";
 
     await execute({
       program: PROGRAM_ID,
@@ -129,13 +229,52 @@ export default function Marketplace() {
         selectedFactor.address, // who they're offering to
         `${advanceRateBps}u16`, // agreed rate
         useToken ? "true" : "false",
+        "false", // default to non-recourse unless explicitly enabled in UI
       ],
       fee: 100_000,
       privateFee: false,
     });
   };
 
+  const handleCreatePool = async () => {
+    if (!isFactor) return;
+    if (!address) {
+      toast.error("Connect your wallet first.");
+      return;
+    }
+
+    const invoiceHash = poolInvoiceHash.trim();
+    const targetAleo = parseFloat(poolTargetAleo);
+
+    if (!invoiceHash || Number.isNaN(targetAleo) || targetAleo <= 0) {
+      toast.error("Provide valid invoice hash and target amount.");
+      return;
+    }
+
+    const targetMicro = Math.round(targetAleo * 1_000_000);
+    pendingActionRef.current = "create-pool";
+    pendingPoolCreateRef.current = {
+      invoiceHash,
+      owner: address,
+      targetAmountMicro: targetMicro,
+    };
+
+    await execute({
+      program: PROGRAM_ID,
+      function: "create_pool",
+      inputs: buildCreatePoolInputs(invoiceHash, BigInt(targetMicro)),
+      fee: 80_000,
+      privateFee: false,
+    });
+  };
+
   const isFactor = activeRole === "factor";
+
+  const formatMicroToAleo = (micro: number): string => {
+    return (micro / 1_000_000).toLocaleString(undefined, {
+      maximumFractionDigits: 6,
+    });
+  };
 
   return (
     <div className="container py-6">
@@ -206,11 +345,158 @@ export default function Marketplace() {
           )}
 
           {/* Results Count */}
-          <p className="text-sm text-muted-foreground">
-            {factorsLoading
-              ? "Loading factors…"
-              : `${filteredFactors.length} active factor${filteredFactors.length !== 1 ? "s" : ""}`}
-          </p>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">
+              {factorsLoading
+                ? "Loading factors…"
+                : `${filteredFactors.length} active factor${filteredFactors.length !== 1 ? "s" : ""}`}
+            </p>
+
+            {isFactor && (
+              <Dialog
+                open={createPoolDialogOpen}
+                onOpenChange={setCreatePoolDialogOpen}
+              >
+                <DialogTrigger asChild>
+                  <Button size="sm" className="gap-2">
+                    <Plus className="h-4 w-4" />
+                    Create Pool
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>Create Pool</DialogTitle>
+                    <DialogDescription>
+                      Create a pool deal in marketplace so other factors can
+                      join.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4 py-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="pool-invoice-hash">Invoice Hash</Label>
+                      <Input
+                        id="pool-invoice-hash"
+                        value={poolInvoiceHash}
+                        onChange={(e) => setPoolInvoiceHash(e.target.value)}
+                        placeholder="12345field"
+                        className="font-mono"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="pool-target">Target Amount (ALEO)</Label>
+                      <Input
+                        id="pool-target"
+                        type="number"
+                        min="0"
+                        step="0.000001"
+                        value={poolTargetAleo}
+                        onChange={(e) => setPoolTargetAleo(e.target.value)}
+                        placeholder="100.0"
+                      />
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button
+                      variant="outline"
+                      onClick={() => setCreatePoolDialogOpen(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={handleCreatePool}
+                      disabled={
+                        isFactoring || !poolInvoiceHash || !poolTargetAleo
+                      }
+                    >
+                      {isFactoring ? "Processing…" : "Create"}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            )}
+          </div>
+
+          {openPoolEntries.length > 0 && (
+            <>
+              <p className="text-sm font-medium">Open Pool Opportunities</p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {openPoolEntries.map((pool) => {
+                  const owner = factorByAddress.get(pool.owner);
+                  return (
+                    <Card
+                      key={`pool-${pool.invoiceHash}`}
+                      className="border-blue-300/60 bg-blue-50/40 dark:bg-blue-950/20"
+                    >
+                      <CardHeader className="pb-2">
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="text-base">
+                            Invoice Pool
+                          </CardTitle>
+                          <Badge
+                            variant="outline"
+                            className="text-xs text-blue-700 border-blue-400"
+                          >
+                            Pool
+                          </Badge>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div className="text-sm space-y-1">
+                          <div className="flex justify-between gap-3">
+                            <span className="text-muted-foreground">
+                              Invoice Hash
+                            </span>
+                            <span className="font-mono text-xs">
+                              {pool.invoiceHash.slice(0, 14)}…
+                            </span>
+                          </div>
+                          <div className="flex justify-between gap-3">
+                            <span className="text-muted-foreground">
+                              Pool Owner
+                            </span>
+                            <AddressDisplay address={pool.owner} chars={4} />
+                          </div>
+                          <div className="flex justify-between gap-3">
+                            <span className="text-muted-foreground">
+                              Target
+                            </span>
+                            <span className="font-medium">
+                              {formatMicroToAleo(pool.targetAmountMicro)} ALEO
+                            </span>
+                          </div>
+                          <div className="flex justify-between gap-3">
+                            <span className="text-muted-foreground">
+                              Contributors
+                            </span>
+                            <span>{pool.participants.length}</span>
+                          </div>
+                        </div>
+
+                        {owner && (
+                          <p className="text-xs text-muted-foreground">
+                            Owner rates:{" "}
+                            {(owner.min_advance_rate / 100).toFixed(2)}% -{" "}
+                            {(owner.max_advance_rate / 100).toFixed(2)}%
+                          </p>
+                        )}
+
+                        <Button
+                          variant="outline"
+                          className="w-full"
+                          onClick={() => {
+                            setSelectedPool(pool);
+                            setPoolDialogOpen(true);
+                          }}
+                        >
+                          View Pool Details
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            </>
+          )}
 
           {/* Factor Grid */}
           <div className="grid gap-4 sm:grid-cols-2">
@@ -362,6 +648,8 @@ export default function Marketplace() {
                                         r.recordPlaintext,
                                         "invoice_hash",
                                       );
+                                      const selectionId =
+                                        getInvoiceSelectionId(r);
                                       const currency = getInvoiceCurrency(r);
                                       const amount = (
                                         parseInt(
@@ -374,8 +662,8 @@ export default function Marketplace() {
                                       ).toFixed(6);
                                       return (
                                         <SelectItem
-                                          key={r.commitment}
-                                          value={r.commitment}
+                                          key={selectionId}
+                                          value={selectionId}
                                         >
                                           {hash.slice(0, 12)}… - {amount}{" "}
                                           {currency}
@@ -446,6 +734,113 @@ export default function Marketplace() {
               ))
             )}
           </div>
+
+          <Dialog open={poolDialogOpen} onOpenChange={setPoolDialogOpen}>
+            <DialogContent className="max-w-xl">
+              <DialogHeader>
+                <DialogTitle>Pool Details</DialogTitle>
+                <DialogDescription>
+                  Pool participation is open to all active factors.
+                </DialogDescription>
+              </DialogHeader>
+
+              {selectedPool && (
+                <div className="space-y-4 text-sm">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-muted-foreground">Invoice Hash</p>
+                      <p className="font-mono text-xs break-all">
+                        {selectedPool.invoiceHash}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Target Amount</p>
+                      <p>
+                        {formatMicroToAleo(selectedPool.targetAmountMicro)} ALEO
+                      </p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-muted-foreground mb-1">Pool Owner</p>
+                    <AddressDisplay
+                      address={selectedPool.owner}
+                      chars={6}
+                      showExplorer
+                    />
+                    {factorByAddress.get(selectedPool.owner) && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Factored:{" "}
+                        {factorByAddress
+                          .get(selectedPool.owner)
+                          ?.total_factored.toLocaleString()}{" "}
+                        | Rate range:{" "}
+                        {(
+                          factorByAddress.get(selectedPool.owner)!
+                            .min_advance_rate / 100
+                        ).toFixed(2)}
+                        % -{" "}
+                        {(
+                          factorByAddress.get(selectedPool.owner)!
+                            .max_advance_rate / 100
+                        ).toFixed(2)}
+                        %
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <p className="text-muted-foreground mb-2">
+                      Contributing Factors
+                    </p>
+                    {selectedPool.participants.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        No contributions recorded yet.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {selectedPool.participants.map((participant) => {
+                          const factor = factorByAddress.get(
+                            participant.address,
+                          );
+                          return (
+                            <div
+                              key={`${selectedPool.invoiceHash}-${participant.address}`}
+                              className="rounded-md border p-2"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <AddressDisplay
+                                  address={participant.address}
+                                  chars={5}
+                                  showExplorer
+                                />
+                                <span className="font-medium">
+                                  {formatMicroToAleo(
+                                    participant.contributedMicro,
+                                  )}{" "}
+                                  ALEO
+                                </span>
+                              </div>
+                              {factor && (
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Active factor | Factored:{" "}
+                                  {factor.total_factored.toLocaleString()} |
+                                  Range:{" "}
+                                  {(factor.min_advance_rate / 100).toFixed(2)}%
+                                  - {(factor.max_advance_rate / 100).toFixed(2)}
+                                  %
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
     </div>
