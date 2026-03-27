@@ -262,6 +262,64 @@ program zk_factor_9596.aleo {
         return (offer, finalize_authorize_factoring(factor, invoice.invoice_hash));
     }
 
+    // Called by: Business
+    // Inputs:    Invoice (owned by business), factor, partial amount, agreed rate, currency, recourse flag
+    // Outputs:   FactoringOffer (owned by factor), remaining Invoice (owned by business)
+    //
+    // This enables partial factoring in a single transaction:
+    // - factored portion is converted into a FactoringOffer for the factor
+    // - unfactored remainder is returned to the creditor as a new Invoice record
+    async transition authorize_partial_factoring(
+        invoice: Invoice,
+        factor: address,
+        factoring_amount: u64,
+        advance_rate: u16,
+        use_token: bool,
+        recourse: bool,
+    ) -> (FactoringOffer, Invoice, Future) {
+
+        assert(invoice.owner == self.caller);
+        assert(factoring_amount > 0u64);
+        assert(factoring_amount < invoice.amount);
+        assert(advance_rate >= 5000u16 && advance_rate <= 9900u16);
+
+        let remaining_amount: u64 = invoice.amount - factoring_amount;
+
+        // Derive a deterministic child hash/nonce so the retained remainder can be
+        // independently managed and settled without colliding with the sold portion.
+        let remaining_invoice_hash: field = Poseidon2::hash_to_field(
+            invoice.invoice_hash + (factoring_amount as field)
+        );
+        let remaining_nonce: field = Poseidon2::hash_to_field(remaining_invoice_hash);
+
+        let offer: FactoringOffer = FactoringOffer {
+            owner: factor,
+            original_creditor: self.caller,
+            debtor: invoice.debtor,
+            amount: factoring_amount,
+            due_date: invoice.due_date,
+            advance_rate: advance_rate,
+            invoice_hash: invoice.invoice_hash,
+            nonce: invoice.nonce,
+            metadata: invoice.metadata,
+            use_token: use_token,
+            recourse: recourse,
+        };
+
+        let remaining: Invoice = Invoice {
+            owner: self.caller,
+            debtor: invoice.debtor,
+            amount: remaining_amount,
+            due_date: invoice.due_date,
+            invoice_hash: remaining_invoice_hash,
+            nonce: remaining_nonce,
+            metadata: invoice.metadata,
+            document_cid: invoice.document_cid,
+        };
+
+        return (offer, remaining, finalize_authorize_factoring(factor, invoice.invoice_hash));
+    }
+
     async function finalize_authorize_factoring(factor: address, invoice_hash: field) {
         // Verify the chosen factor is registered and active in the protocol.
         // Mapping::get panics if the key doesn't exist — unregistered factors
