@@ -1,5 +1,6 @@
 interface Env {
   PINATA_JWT: string;
+  PINATA_GATEWAY: string; // e.g. aquamarine-casual-tarantula-177.mypinata.cloud
 }
 
 export default {
@@ -34,7 +35,8 @@ export default {
         });
       }
 
-      return new Response(JSON.stringify({ url: body.data }), {
+      const gateway = env.PINATA_GATEWAY || "gateway.pinata.cloud";
+      return new Response(JSON.stringify({ url: body.data, gateway }), {
         status: 200,
         headers: { "Content-Type": "application/json", ...corsHeaders },
       });

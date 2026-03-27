@@ -38,7 +38,7 @@ export async function uploadToIPFS(file: File): Promise<IPFSUploadResult> {
   if (!urlRes.ok) {
     throw new Error(`Failed to get presigned URL: ${urlRes.statusText}`);
   }
-  const { url: presignedUrl } = await urlRes.json() as { url: string };
+  const { url: presignedUrl, gateway } = await urlRes.json() as { url: string; gateway: string };
 
   // 2. Upload directly to Pinata using the presigned URL
   const formData = new FormData();
@@ -64,7 +64,7 @@ export async function uploadToIPFS(file: File): Promise<IPFSUploadResult> {
 
   return {
     cid,
-    url: `https://gateway.pinata.cloud/ipfs/${cid}`,
+    url: `https://${gateway}/ipfs/${cid}`,
     cidField: cidToField(cid),
   };
 }
