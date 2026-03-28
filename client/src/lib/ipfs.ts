@@ -1,5 +1,4 @@
-// IPFS upload via Pinata presigned URLs (JWT stays server-side in the CF worker)
-// Set VITE_WORKER_URL in your .env to point at the deployed worker
+import { PinataSDK } from "pinata";
 
 export interface IPFSUploadResult {
   cid: string;
@@ -30,7 +29,7 @@ export function cidToField(cid: string): string {
 export async function uploadToIPFS(file: File): Promise<IPFSUploadResult> {
   const workerUrl = import.meta.env.VITE_WORKER_URL;
   if (!workerUrl) {
-    throw new Error('VITE_WORKER_URL is not set.');
+    throw new Error("VITE_WORKER_URL is not set.");
   }
 
   // 1. Get a short-lived presigned upload URL from the worker
@@ -38,33 +37,29 @@ export async function uploadToIPFS(file: File): Promise<IPFSUploadResult> {
   if (!urlRes.ok) {
     throw new Error(`Failed to get presigned URL: ${urlRes.statusText}`);
   }
-  const { url: presignedUrl, gateway } = await urlRes.json() as { url: string; gateway: string };
+  const { url: presignedUrl, gateway } = (await urlRes.json()) as {
+    url: string;
+    gateway: string;
+  };
 
-  // 2. Upload directly to Pinata using the presigned URL
-  const formData = new FormData();
-  formData.append('file', file);
-  formData.append('name', file.name);
-
-  const response = await fetch(presignedUrl, {
-    method: 'POST',
-    body: formData,
+  // 2. Initialize Pinata SDK (JWT stays server-side when using signed URLs)
+  const resolvedGateway = gateway || "gateway.pinata.cloud";
+  const pinata = new PinataSDK({
+    pinataJwt: "",
+    pinataGateway: resolvedGateway,
   });
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`IPFS upload failed: ${error}`);
-  }
-
-  const data = await response.json();
-  const cid: string = data.data?.cid ?? data.IpfsHash;
+  // 3. Upload using the signed URL via Pinata SDK
+  const upload = await pinata.upload.public.file(file).url(presignedUrl);
+  const cid = upload.cid;
 
   if (!cid) {
-    throw new Error('No CID returned from Pinata');
+    throw new Error("No CID returned from Pinata");
   }
 
   return {
     cid,
-    url: `https://${gateway}/ipfs/${cid}`,
+    url: `https://${resolvedGateway}/ipfs/${cid}`,
     cidField: cidToField(cid),
   };
 }

@@ -8,6 +8,7 @@ import {
   RefreshCw,
   ChevronDown,
   ChevronUp,
+  Info,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -135,8 +136,11 @@ export default function Pay() {
       <div className="container py-6 max-w-lg mx-auto space-y-6">
         <div>
           <h1 className="text-2xl font-bold">My Invoices</h1>
-          <p className="text-muted-foreground">
+          <p className="text-muted-foreground flex flex-wrap justify-center sm:justify-start items-center gap-2">
             Connect your wallet to view invoices addressed to you.
+            <a href="/docs/debtor/pay-invoice" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+               <Info className="h-3 w-3" /> Learn more
+            </a>
           </p>
         </div>
         <Card>
@@ -157,8 +161,11 @@ export default function Pay() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">My Invoices</h1>
-          <p className="text-muted-foreground">
+          <p className="text-muted-foreground flex flex-wrap items-center gap-2">
             Invoices addressed to your wallet that are pending payment.
+            <a href="/docs/debtor/pay-invoice" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+               <Info className="h-3 w-3" /> Learn more
+            </a>
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={() => refetch()}>

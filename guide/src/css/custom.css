@@ -1,0 +1,119 @@
+@import url("https://api.fontshare.com/v2/css?f[]=satoshi@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ZK Factor Design System - Dark Fintech Theme mirrored */
+
+:root {
+  --background: 220 20% 97%;
+  --foreground: 220 20% 10%;
+
+  --card: 0 0% 100%;
+  --card-foreground: 220 20% 10%;
+
+  --popover: 0 0% 100%;
+  --popover-foreground: 220 20% 10%;
+
+  --primary: 158 64% 40%;
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 220 15% 93%;
+  --secondary-foreground: 220 20% 20%;
+
+  --muted: 220 15% 93%;
+  --muted-foreground: 220 10% 45%;
+
+  --accent: 158 40% 92%;
+  --accent-foreground: 158 64% 30%;
+
+  --destructive: 0 72% 50%;
+  --destructive-foreground: 0 0% 100%;
+
+  --border: 220 15% 88%;
+  --input: 220 15% 88%;
+  --ring: 158 64% 40%;
+
+  --radius: 0.625rem;
+
+  /* Map Docusaurus Infima to our tokens */
+  --ifm-color-primary: hsl(158 64% 40%);
+  --ifm-color-primary-dark: hsl(158 64% 35%);
+  --ifm-color-primary-darker: hsl(158 64% 30%);
+  --ifm-color-primary-darkest: hsl(158 64% 20%);
+  --ifm-color-primary-light: hsl(158 64% 45%);
+  --ifm-color-primary-lighter: hsl(158 64% 50%);
+  --ifm-color-primary-lightest: hsl(158 64% 60%);
+
+  /* Docusaurus custom styling */
+  --ifm-background-color: hsl(var(--background));
+  --ifm-navbar-background-color: hsl(var(--card));
+  --ifm-menu-color: hsl(var(--foreground));
+  --ifm-menu-color-hover: hsl(var(--primary));
+  --ifm-menu-color-active: hsl(var(--primary));
+  --ifm-font-family-base: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --ifm-heading-font-family: 'Satoshi', ui-sans-serif, system-ui, sans-serif;
+}
+
+[data-theme='dark'] {
+  --background: 225 25% 6%;
+  --foreground: 210 20% 95%;
+
+  --card: 225 20% 9%;
+  --card-foreground: 210 20% 95%;
+
+  --popover: 225 20% 12%;
+  --popover-foreground: 210 20% 95%;
+
+  --primary: 158 64% 52%;
+  --primary-foreground: 225 25% 6%;
+
+  --secondary: 225 15% 16%;
+  --secondary-foreground: 210 20% 85%;
+
+  --muted: 225 15% 18%;
+  --muted-foreground: 210 10% 55%;
+
+  --accent: 158 40% 12%;
+  --accent-foreground: 158 64% 60%;
+
+  --destructive: 0 72% 55%;
+  --destructive-foreground: 0 0% 100%;
+
+  --border: 225 15% 18%;
+  --input: 225 15% 18%;
+  --ring: 158 64% 52%;
+
+  --ifm-color-primary: hsl(158 64% 52%);
+  --ifm-color-primary-dark: hsl(158 64% 47%);
+  --ifm-color-primary-darker: hsl(158 64% 42%);
+  --ifm-color-primary-darkest: hsl(158 64% 32%);
+  --ifm-color-primary-light: hsl(158 64% 57%);
+  --ifm-color-primary-lighter: hsl(158 64% 62%);
+  --ifm-color-primary-lightest: hsl(158 64% 72%);
+
+  --ifm-background-color: hsl(var(--background));
+  --ifm-navbar-background-color: hsl(var(--card));
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3 {
+  font-family: 'Satoshi', sans-serif;
+  font-weight: 600;
+}
+
+.navbar {
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+.menu__link--active {
+  background-color: hsl(var(--primary) / 0.1) !important;
+}
+
+/* Fix for dark mode flicker / inconsistencies if any occur */
+html[data-theme='dark'] .navbar {
+  background-color: hsl(var(--card));
+}

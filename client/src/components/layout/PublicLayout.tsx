@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { Zap, Wallet } from "lucide-react";
+import { Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface PublicLayoutProps {
@@ -13,9 +13,7 @@ export function PublicLayout({ children }: PublicLayoutProps) {
       <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container flex h-16 items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-              <Zap className="h-5 w-5 text-primary-foreground" />
-            </div>
+            <img src="/logo-navbar.png" alt="ZK Factor" className="h-8 w-auto" />
             <span className="text-xl font-bold">ZK Factor</span>
           </Link>
           <div className="flex items-center gap-2">
@@ -48,6 +46,12 @@ export function PublicLayout({ children }: PublicLayoutProps) {
             >
               Roadmap
             </Link>
+            <a
+              href="/docs/"
+              className="hover:text-foreground transition-colors"
+            >
+              User Guide
+            </a>
             <Link
               to="/terms"
               className="hover:text-foreground transition-colors"

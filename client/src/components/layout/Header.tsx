@@ -6,7 +6,6 @@ import {
   LogOut,
   Menu,
   X,
-  Zap,
   Wallet,
   Building2,
   Briefcase,
@@ -33,6 +32,7 @@ const navItems = [
   { label: "Dashboard", href: "/dashboard" },
   { label: "Marketplace", href: "/marketplace" },
   { label: "Transactions", href: "/transactions" },
+  { label: "Guide", href: "/docs/", external: true },
   { label: "Settings", href: "/settings" },
 ];
 
@@ -89,29 +89,42 @@ export function Header() {
       <div className="container flex h-16 items-center justify-between">
         {/* Logo */}
         <Link to="/" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-            <Zap className="h-5 w-5 text-primary-foreground" />
-          </div>
+          <img src="/logo-navbar.png" alt="ZK Factor" className="h-8 w-auto" />
           <span className="text-xl font-bold">ZK Factor</span>
         </Link>
 
         {/* Desktop Navigation */}
         <nav className="hidden md:flex items-center gap-1">
           {isConnected &&
-            navItems.map((item) => (
-              <Link
-                key={item.href}
-                to={item.href}
-                className={cn(
-                  "px-3 py-2 text-sm font-medium rounded-md transition-colors",
-                  location.pathname === item.href
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted",
-                )}
-              >
-                {item.label}
-              </Link>
-            ))}
+            navItems.map((item) => {
+              if (item.external) {
+                return (
+                  <a
+                    key={item.href}
+                    href={item.href}
+                    className={cn(
+                      "px-3 py-2 text-sm font-medium rounded-md transition-colors text-muted-foreground hover:text-foreground hover:bg-muted",
+                    )}
+                  >
+                    {item.label}
+                  </a>
+                );
+              }
+              return (
+                <Link
+                  key={item.href}
+                  to={item.href}
+                  className={cn(
+                    "px-3 py-2 text-sm font-medium rounded-md transition-colors",
+                    location.pathname === item.href
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted",
+                  )}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
         </nav>
 
         {/* Right Side Actions */}
@@ -238,21 +251,36 @@ export function Header() {
       {mobileMenuOpen && isConnected && (
         <div className="md:hidden border-t border-border">
           <nav className="container py-4 flex flex-col gap-1">
-            {navItems.map((item) => (
-              <Link
-                key={item.href}
-                to={item.href}
-                onClick={() => setMobileMenuOpen(false)}
-                className={cn(
-                  "px-3 py-2 text-sm font-medium rounded-md transition-colors",
-                  location.pathname === item.href
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted",
-                )}
-              >
-                {item.label}
-              </Link>
-            ))}
+            {navItems.map((item) => {
+              if (item.external) {
+                return (
+                  <a
+                    key={item.href}
+                    href={item.href}
+                    className={cn(
+                      "px-3 py-2 text-sm font-medium rounded-md transition-colors text-muted-foreground hover:text-foreground hover:bg-muted",
+                    )}
+                  >
+                    {item.label}
+                  </a>
+                );
+              }
+              return (
+                <Link
+                  key={item.href}
+                  to={item.href}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={cn(
+                    "px-3 py-2 text-sm font-medium rounded-md transition-colors",
+                    location.pathname === item.href
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted",
+                  )}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
             {/* Mobile role switcher */}
             {roleLabel && (
               <>

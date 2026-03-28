@@ -9,6 +9,7 @@ import {
   Unlock,
   ChevronRight,
   Layers,
+  Info,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -135,7 +136,7 @@ export default function Pools() {
 
       updatePoolClosed(invoiceHash, isClosed);
     });
-  }, [poolRecords.length]);
+  }, [poolRecords]);
 
   // Toast feedback
   useEffect(() => {
@@ -168,7 +169,7 @@ export default function Pools() {
       setRecoveringPoolHash(null);
       reset();
     }
-  }, [status, txError, queryClient, reset]);
+  }, [status, txError, queryClient, reset, pendingPoolContribution]);
 
   const handleContribute = async () => {
     if (
@@ -840,8 +841,16 @@ export default function Pools() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Factor Pools</h1>
-          <p className="text-muted-foreground">
+          <p className="text-muted-foreground flex flex-wrap items-center gap-2">
             Syndicate invoice factoring with other contributors
+            <a
+              href="/docs/factor/pools"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              <Info className="h-3 w-3" /> Learn more
+            </a>
           </p>
         </div>
         <div className="flex gap-2">

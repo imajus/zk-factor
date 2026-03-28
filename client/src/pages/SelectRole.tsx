@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, Zap } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -37,9 +37,7 @@ export default function SelectRole() {
     <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4">
       {/* Logo */}
       <div className="flex items-center gap-2 mb-10">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
-          <Zap className="h-6 w-6 text-primary-foreground" />
-        </div>
+        <img src="/logo-navbar.png" alt="ZK Factor" className="h-10 w-auto" />
         <span className="text-2xl font-bold">ZK Factor</span>
       </div>
 

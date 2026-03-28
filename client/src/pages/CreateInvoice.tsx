@@ -236,8 +236,11 @@ export default function CreateInvoice() {
         </Button>
         <div>
           <h1 className="text-2xl font-bold">Create Invoice</h1>
-          <p className="text-muted-foreground">
+          <p className="text-muted-foreground flex flex-wrap items-center gap-2">
             Mint a new invoice record on-chain
+            <a href="/docs/business/create-invoice" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+               <Info className="h-3 w-3" /> Learn more
+            </a>
           </p>
         </div>
       </div>

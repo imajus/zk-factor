@@ -19,10 +19,9 @@ const phases: Phase[] = [
   {
     number: 1,
     title: "MVP Launch (Testnet)",
-    current: true,
     items: [
       { label: "Invoice creation (mint_invoice)", done: true },
-      { label: "Fraud prevention via UTXO consumption model", done: false },
+      { label: "Fraud prevention via UTXO consumption model", done: true },
       {
         label: "Two-step factoring (authorize_factoring → execute_factoring)",
         done: true,
@@ -43,22 +42,23 @@ const phases: Phase[] = [
   {
     number: 2,
     title: "Enhanced Features",
+    current: true,
     items: [
       { label: "USDCx stablecoin payments integration", done: true },
       { label: "IPFS document attachment (CID stored on-chain)", done: true },
-
+      { label: "Account abstraction / email login", done: true },
       {
         label: "Email notifications (invoice created, factored, settled)",
         done: true,
       },
       {
         label: "Partial factoring (sell portion of invoice, retain the rest)",
-        done: false,
+        done: true,
       },
-      { label: "Recourse tracking (handle debtor non-payment)", done: false },
+      { label: "Recourse tracking (handle debtor non-payment)", done: true },
       {
         label: "Multi-factor syndication (large invoices split across factors)",
-        done: false,
+        done: true,
       },
       { label: "Mobile wallet support", done: false },
       {

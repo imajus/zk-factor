@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Zap } from "lucide-react";
+import { ArrowLeft, Info } from "lucide-react";
 import { FactorIcon } from "@/components/icons/RoleIcons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,7 +48,7 @@ export default function RegisterFactor() {
     } else if (status === "failed") {
       const msg = txError || "Registration failed";
       toast.error(
-        msg.includes("already") || msg.includes("active")
+         msg.includes("already") || msg.includes("active")
           ? "Already registered as factor"
           : msg,
         { id: "register-factor" },
@@ -72,9 +72,7 @@ export default function RegisterFactor() {
     <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4">
       {/* Logo */}
       <div className="flex items-center gap-2 mb-10">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
-          <Zap className="h-6 w-6 text-primary-foreground" />
-        </div>
+        <img src="/logo-navbar.png" alt="ZK Factor" className="h-10 w-auto" />
         <span className="text-2xl font-bold">ZK Factor</span>
       </div>
 
@@ -82,9 +80,12 @@ export default function RegisterFactor() {
         <div className="text-center space-y-2">
           <FactorIcon size={64} className="text-primary mx-auto mb-4" />
           <h1 className="text-3xl font-bold">Register as Factor</h1>
-          <p className="text-muted-foreground">
+          <p className="text-muted-foreground flex flex-wrap justify-center items-center gap-2">
             Set your advance rates to appear in the marketplace. Registration
             requires an on-chain transaction.
+            <a href="/docs/factor/register" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+               <Info className="h-3 w-3" /> Learn more
+            </a>
           </p>
         </div>
 
