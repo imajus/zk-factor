@@ -177,6 +177,13 @@ credits_execute() {
   run_capture_tx "$cmd"
 }
 
+usdcx_execute() {
+  local pk="$1"
+  shift
+  local cmd="snarkos developer execute test_usdcx_stablecoin.aleo $* --private-key '$pk' --query '$ENDPOINT' --network '$NETWORK' --broadcast '$ENDPOINT/$NETWORK/transaction/broadcast'"
+  run_capture_tx "$cmd"
+}
+
 # Resolve addresses/keys
 CREDITOR_ADDRESS="$(account_address "$CREDITOR_PRIVATE_KEY")"
 FACTOR1_ADDRESS="$(account_address "$FACTOR1_PRIVATE_KEY")"
@@ -310,6 +317,15 @@ accept_offer() {
   [[ -z "$offer_record" ]] && die "Missing offer record for invoice #$invoice_idx"
 
   if [[ "$USE_TOKEN_PATH" == "1" ]]; then
+    # Compute advance amount: (invoice_amount * rate_bps) / 10000
+    local invoice_amount=$((100000 * invoice_idx))
+    local advance_amount=$(( (invoice_amount * OFFER_RATE_BPS) / 10000 ))
+
+    log "$factor_label approving USDCx spend for invoice #$invoice_idx (${advance_amount})"
+    tx="$(usdcx_execute "$factor_pk" approve_public "$PROGRAM_ID" "${advance_amount}u128")" || \
+      die "$factor_label failed approve_public for invoice #$invoice_idx"
+    wait_for_tx "$tx" "$factor_label approve_public #$invoice_idx"
+
     log "$factor_label accepting invoice #$invoice_idx via token path"
     tx="$(leo_execute "$factor_pk" execute_factoring_token "$offer_record")" || \
       die "$factor_label failed execute_factoring_token for invoice #$invoice_idx"

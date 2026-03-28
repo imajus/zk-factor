@@ -293,7 +293,7 @@ function execute_factoring_token:
     cast r5 into r6 as u64;
     cast self.caller r0.original_creditor r0.debtor r0.amount r6 r0.due_date 0u64 r0.advance_rate r0.invoice_hash r0.recourse into r7 as FactoredInvoice.record;
     cast r6 into r8 as u128;
-    call test_usdcx_stablecoin.aleo/transfer_public r0.original_creditor r8 into r9;
+    call test_usdcx_stablecoin.aleo/transfer_from_public self.caller r0.original_creditor r8 into r9;
     async execute_factoring_token self.caller r0.invoice_hash r9 into r10;
     output r7 as FactoredInvoice.record;
     output r10 as zk_factor_9597.aleo/execute_factoring_token.future;
@@ -301,7 +301,7 @@ function execute_factoring_token:
 finalize execute_factoring_token:
     input r0 as address.public;
     input r1 as field.public;
-    input r2 as test_usdcx_stablecoin.aleo/transfer_public.future;
+    input r2 as test_usdcx_stablecoin.aleo/transfer_from_public.future;
     await r2;
     get active_factors[r0] into r3;
     assert.eq r3.is_active true;
