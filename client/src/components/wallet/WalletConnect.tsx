@@ -1,11 +1,4 @@
-import {
-  Wallet,
-  Shield,
-  Zap,
-  ArrowRight,
-  ExternalLink,
-  Mail,
-} from "lucide-react";
+import { Wallet, Shield, Zap, ArrowRight, ExternalLink } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -46,14 +39,9 @@ export function WalletConnect() {
     wallets,
     connecting,
     connect,
-    disconnect,
     isConnected,
-    address,
-    formatAddress,
-    email,
-    privyReady,
-    loginWithPrivy,
-    logoutPrivy,
+    activeRole,
+    resolvingRole,
   } = useWallet();
 
   const [isConnectPending, setIsConnectPending] = useState(false);
@@ -69,6 +57,17 @@ export function WalletConnect() {
       setIsConnectPending(false);
     }
   }, [isConnected]);
+
+  useEffect(() => {
+    if (!isConnected || resolvingRole) return;
+
+    if (activeRole === "factor" || activeRole === "business") {
+      navigate("/dashboard", { replace: true });
+      return;
+    }
+
+    navigate("/select-role", { replace: true });
+  }, [isConnected, resolvingRole, activeRole, navigate]);
 
   useEffect(() => {
     if (!connecting || isConnected || ignoreAdapterConnecting) {
@@ -117,91 +116,6 @@ export function WalletConnect() {
       setIsConnectPending(false);
     }
   };
-
-  const handleEmailLogin = () => {
-    if (!privyReady) {
-      toast.error("Email login is still initializing. Please try again.");
-      return;
-    }
-    try {
-      // Call with no args — PrivyProvider config already sets loginMethods: ["email"]
-      loginWithPrivy();
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Unable to start email login.";
-      toast.error(message);
-    }
-  };
-
-  const handleContinue = () => {
-    navigate("/select-role");
-  };
-
-  if (isConnected && address) {
-    return (
-      <div className="flex-1 flex items-center justify-center p-4">
-        <div className="max-w-lg w-full">
-          <Card className="border-border/50 shadow-xl">
-            <CardHeader className="text-center pb-2">
-              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
-                <img src="/logo-navbar.png" alt="ZK Factor" className="h-10 w-auto" />
-              </div>
-              <CardTitle className="text-2xl">Wallet Connected</CardTitle>
-              <CardDescription className="font-mono text-sm break-all">
-                {formatAddress(address, 8)}
-              </CardDescription>
-              {email && (
-                <div className="flex justify-center mt-2">
-                  <Badge variant="secondary" className="gap-1.5 text-xs">
-                    <Mail className="h-3 w-3" />
-                    {email}
-                  </Badge>
-                </div>
-              )}
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {privyReady && !email && (
-                <Button
-                  onClick={handleEmailLogin}
-                  variant="outline"
-                  className="w-full gap-2"
-                >
-                  <Mail className="h-4 w-4" />
-                  Link Email for Notifications
-                </Button>
-              )}
-              {email && (
-                <div className="flex justify-center">
-                  <Badge variant="secondary" className="gap-1.5 text-xs">
-                    <Mail className="h-3 w-3" />
-                    {email}
-                  </Badge>
-                </div>
-              )}
-              <Button
-                onClick={handleContinue}
-                className="w-full gap-2"
-                size="lg"
-              >
-                Continue
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-              <div className="pt-2 border-t border-border/50">
-                <Button
-                  onClick={disconnect}
-                  variant="ghost"
-                  size="sm"
-                  className="w-full text-muted-foreground"
-                >
-                  Disconnect Wallet
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="flex-1 flex items-center justify-center p-4">
@@ -272,39 +186,9 @@ export function WalletConnect() {
                 </Button>
               )}
 
-              {privyReady && (
-                <>
-                  <div className="relative">
-                    <div className="absolute inset-0 flex items-center">
-                      <span className="w-full border-t border-border/50" />
-                    </div>
-                    <div className="relative flex justify-center text-xs">
-                      <span className="bg-card px-2 text-muted-foreground">
-                        or
-                      </span>
-                    </div>
-                  </div>
-                  <Button
-                    onClick={handleEmailLogin}
-                    variant="outline"
-                    className="w-full gap-2"
-                    size="lg"
-                  >
-                    <Mail className="h-5 w-5" />
-                    Continue with Email
-                    <ArrowRight className="h-4 w-4" />
-                  </Button>
-                  <p className="text-xs text-center text-muted-foreground">
-                    Email login enables transaction notifications
-                  </p>
-                </>
-              )}
-
-              {!privyReady && (
-                <p className="text-xs text-center text-muted-foreground">
-                  Powered by Shield Wallet on Aleo testnet
-                </p>
-              )}
+              <p className="text-xs text-center text-muted-foreground">
+                Powered by Shield Wallet on Aleo testnet
+              </p>
             </div>
           </CardContent>
         </Card>

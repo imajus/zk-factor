@@ -14,7 +14,9 @@ import { CreditorIcon, FactorIcon } from "@/components/icons/RoleIcons";
 
 export default function SelectRole() {
   const navigate = useNavigate();
-  const { setActiveRole } = useWallet();
+  const { setActiveRole, activeRole } = useWallet();
+
+  const isRegisteredFactor = activeRole === "factor";
 
   const handleCreditor = () => {
     setActiveRole("business");
@@ -22,6 +24,12 @@ export default function SelectRole() {
   };
 
   const handleFactor = () => {
+    if (isRegisteredFactor) {
+      setActiveRole("factor");
+      navigate("/dashboard");
+      return;
+    }
+
     navigate("/register-factor");
   };
 
@@ -74,7 +82,9 @@ export default function SelectRole() {
                 </li>
               </ul>
               <Button className="w-full gap-2" onClick={handleCreditor}>
-                Continue as Creditor
+                {isRegisteredFactor
+                  ? "Continue as Business"
+                  : "Continue as Creditor"}
                 <ArrowRight className="h-4 w-4" />
               </Button>
             </CardContent>
@@ -115,7 +125,9 @@ export default function SelectRole() {
                 className="w-full gap-2"
                 onClick={handleFactor}
               >
-                Register as Factor
+                {isRegisteredFactor
+                  ? "Continue as Factor"
+                  : "Register as Factor"}
                 <ArrowRight className="h-4 w-4" />
               </Button>
             </CardContent>

@@ -144,15 +144,23 @@ export default function CreateInvoice() {
     } else if (status === "pending") {
       toast.loading("Broadcasting...", { id: "create-invoice" });
     } else if (status === "accepted") {
+      let createdInvoiceHash: string | null = null;
       if (pendingInvoiceRef.current) {
         persistInvoiceCurrency(
           pendingInvoiceRef.current.hash,
           pendingInvoiceRef.current.currency,
         );
+        createdInvoiceHash = pendingInvoiceRef.current.hash;
         pendingInvoiceRef.current = null;
       }
       toast.success("Invoice created successfully!", { id: "create-invoice" });
-      navigate("/dashboard");
+      if (createdInvoiceHash) {
+        navigate(
+          `/invoices/pending?hash=${encodeURIComponent(createdInvoiceHash)}`,
+        );
+      } else {
+        navigate("/dashboard");
+      }
     } else if (status === "failed") {
       pendingInvoiceRef.current = null;
       toast.error(txError || "Failed to create invoice", {

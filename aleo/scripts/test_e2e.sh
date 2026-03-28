@@ -5,7 +5,8 @@
 #   1. transfer_public_to_private  — get private credits for business
 #   2. register_factor             — register caller as active factor
 #   3. mint_invoice                — create Invoice record for business
-#   4. factor_invoice              — atomic swap: Invoice → FactoredInvoice + payment
+#   4a. authorize_factoring        — business authorizes factor, gets FactoringOffer
+#   4b. execute_factoring          — factor accepts offer, pays advance to business
 #   5. transfer_public_to_private  — get fresh private credits for settlement
 #   6. settle_invoice              — mark invoice settled, collect payment
 #   7. API check                   — verify settled_invoices mapping on-chain
@@ -167,16 +168,40 @@ log "Decrypting Invoice record..."
 INVOICE_RECORD="$(decrypt_record "$TX3" 0)"
 ok "Invoice record: $INVOICE_RECORD"
 
-# ─── Step 4: Factor invoice (atomic swap) ─────────────────────────────────────
+# ─── Step 4a: Authorize factoring ─────────────────────────────────────────────
 log ""
-log "Step 4: factor_invoice — atomic swap: Invoice + credits → FactoredInvoice + payment"
+log "Step 4a: authorize_factoring — business authorizes factor, gets FactoringOffer"
 ADVANCE_RATE="9000u16"   # 90.00% advance rate
 FACTOR_ADDRESS="$ACCOUNT_ADDRESS"
+USE_TOKEN="false"
+RECOURSE="false"
 
-TX4="$(run leo execute factor_invoice \
+TX4a="$(run leo execute authorize_factoring \
     "$INVOICE_RECORD" \
     "$FACTOR_ADDRESS" \
     "$ADVANCE_RATE" \
+    "$USE_TOKEN" \
+    "$RECOURSE" \
+    --private-key "$PRIVATE_KEY" \
+    --network "$NETWORK" \
+    --endpoint "$ENDPOINT" \
+    --broadcast \
+    2>&1 | tee /dev/stderr | grep -oE 'at1[a-z0-9]+' | head -1)"
+
+[ -z "$TX4a" ] && die "Step 4a failed: no transaction ID captured"
+ok "Step 4a tx: $TX4a"
+wait_for_tx "$TX4a" "authorize_factoring"
+
+log "Decrypting FactoringOffer record (output 0)..."
+FACTORING_OFFER="$(decrypt_record "$TX4a" 0)"
+ok "FactoringOffer: $FACTORING_OFFER"
+
+# ─── Step 4b: Execute factoring ───────────────────────────────────────────────
+log ""
+log "Step 4b: execute_factoring — factor accepts offer, pays advance to business"
+
+TX4b="$(run leo execute execute_factoring \
+    "$FACTORING_OFFER" \
     "$BUSINESS_CREDITS" \
     --private-key "$PRIVATE_KEY" \
     --network "$NETWORK" \
@@ -184,20 +209,20 @@ TX4="$(run leo execute factor_invoice \
     --broadcast \
     2>&1 | tee /dev/stderr | grep -oE 'at1[a-z0-9]+' | head -1)"
 
-[ -z "$TX4" ] && die "Step 4 failed: no transaction ID captured"
-ok "Step 4 tx: $TX4"
-wait_for_tx "$TX4" "factor_invoice"
+[ -z "$TX4b" ] && die "Step 4b failed: no transaction ID captured"
+ok "Step 4b tx: $TX4b"
+wait_for_tx "$TX4b" "execute_factoring"
 
 log "Decrypting FactoredInvoice record (output 0)..."
-FACTORED_INVOICE="$(decrypt_record "$TX4" 0)"
+FACTORED_INVOICE="$(decrypt_record "$TX4b" 0)"
 ok "FactoredInvoice: $FACTORED_INVOICE"
 
 log "Decrypting business payment record (output 1)..."
-BUSINESS_PAYMENT="$(decrypt_record "$TX4" 1)"
+BUSINESS_PAYMENT="$(decrypt_record "$TX4b" 1)"
 ok "Business payment credits: $BUSINESS_PAYMENT"
 
 log "Decrypting change record (output 2)..."
-CHANGE_RECORD="$(decrypt_record "$TX4" 2)"
+CHANGE_RECORD="$(decrypt_record "$TX4b" 2)"
 ok "Change record: $CHANGE_RECORD"
 
 # ─── Check: verify protocol_stats[1] incremented ─────────────────────────────
@@ -207,45 +232,23 @@ ok "protocol_stats[1u8] (total factored): $STATS_FACTORED"
 
 if [ "$SKIP_SETTLE" = "1" ]; then
     warn ""
-    warn "SKIP_SETTLE=1 — stopping after step 4."
+    warn "SKIP_SETTLE=1 — stopping after step 4b."
     warn "Re-run without SKIP_SETTLE=1 to execute settlement steps."
     warn ""
     warn "Summary:"
-    warn "  register_factor tx : $TX2"
-    warn "  mint_invoice tx    : $TX3"
-    warn "  factor_invoice tx  : $TX4"
+    warn "  register_factor tx      : $TX2"
+    warn "  mint_invoice tx         : $TX3"
+    warn "  authorize_factoring tx  : $TX4a"
+    warn "  execute_factoring tx    : $TX4b"
     exit 0
 fi
 
-# ─── Step 5: Get fresh private credits for settlement ─────────────────────────
-log ""
-log "Step 5: transfer_public_to_private — get fresh credits for settlement"
-SETTLE_AMOUNT="1000000"  # Full invoice amount
-
-TX5="$(run snarkos developer execute credits.aleo transfer_public_to_private \
-    "$ACCOUNT_ADDRESS" \
-    "${SETTLE_AMOUNT}u64" \
-    --private-key "$PRIVATE_KEY" \
-    --query "$ENDPOINT" \
-    --network "$NETWORK" \
-    --broadcast "$ENDPOINT/$NETWORK/transaction/broadcast" \
-    2>&1 | tee /dev/stderr | grep -oE 'at1[a-z0-9]+' | head -1)"
-
-[ -z "$TX5" ] && die "Step 5 failed: no transaction ID captured"
-ok "Step 5 tx: $TX5"
-wait_for_tx "$TX5" "transfer_public_to_private (settlement credits)"
-
-log "Decrypting settlement credits record..."
-SETTLE_CREDITS="$(decrypt_record "$TX5" 0)"
-ok "Settlement credits: $SETTLE_CREDITS"
-
 # ─── Step 6: Settle invoice ───────────────────────────────────────────────────
 log ""
-log "Step 6: settle_invoice — mark invoice settled, collect payment"
+log "Step 6: settle_invoice — mark invoice settled, factor receives payment"
 
 TX6="$(run leo execute settle_invoice \
     "$FACTORED_INVOICE" \
-    "$SETTLE_CREDITS" \
     --private-key "$PRIVATE_KEY" \
     --network "$NETWORK" \
     --endpoint "$ENDPOINT" \
@@ -277,13 +280,13 @@ log "━━━━━━━━━━━━━━━━━━━━━━━━━
 log "E2E test complete"
 log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
-echo "  transfer (biz credits) : $TX1"
-echo "  register_factor        : $TX2"
-echo "  mint_invoice           : $TX3"
-echo "  factor_invoice         : $TX4"
-echo "  transfer (settle creds): $TX5"
-echo "  settle_invoice         : $TX6"
+echo "  transfer (biz credits)  : $TX1"
+echo "  register_factor         : $TX2"
+echo "  mint_invoice            : $TX3"
+echo "  authorize_factoring     : $TX4a"
+echo "  execute_factoring       : $TX4b"
+echo "  settle_invoice          : $TX6"
 echo ""
-echo "  protocol_stats[1]      : $STATS_FACTORED  (total factored)"
-echo "  settled_invoices       : $IS_SETTLED  (invoice hash: $INVOICE_HASH)"
+echo "  protocol_stats[1]       : $STATS_FACTORED  (total factored)"
+echo "  settled_invoices        : $IS_SETTLED  (invoice hash: $INVOICE_HASH)"
 echo ""

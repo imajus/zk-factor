@@ -7,8 +7,6 @@ import {
   ReactNode,
 } from "react";
 import { useWallet as useAdapterWallet } from "@provablehq/aleo-wallet-adaptor-react";
-import { usePrivy } from "@privy-io/react-auth";
-import type { LoginModalOptions } from "@privy-io/react-auth";
 import { NETWORK } from "@/lib/config";
 import { fetchFactorStatus } from "@/lib/aleo-factors";
 import type {
@@ -48,11 +46,6 @@ interface AppWalletContextType {
   resolvingRole: boolean;
   setActiveRole: (role: UserRole) => void;
   formatAddress: (address: string, chars?: number) => string;
-  // Privy — null when user connected via Shield Wallet only
-  email: string | null;
-  privyReady: boolean;
-  loginWithPrivy: (options?: LoginModalOptions) => void;
-  logoutPrivy: () => Promise<void>;
 }
 
 const AppWalletContext = createContext<AppWalletContextType | undefined>(
@@ -64,48 +57,34 @@ function WalletContextInner({ children }: { children: ReactNode }) {
   const [resolvingRole, setResolvingRole] = useState(false);
   const adapter = useAdapterWallet();
 
-  let privyReady = false;
-  let privyAuthenticated = false;
-  let privyUser: ReturnType<typeof usePrivy>["user"] | null = null;
-  let loginWithPrivy: (options?: LoginModalOptions) => void = () => {};
-  let logoutPrivy: () => Promise<void> = async () => {};
-
-  // If PrivyProvider is not mounted (or app ID is invalid), keep the app functional.
-  try {
-    const privy = usePrivy();
-    privyReady = privy.ready;
-    privyAuthenticated = privy.authenticated;
-    privyUser = privy.user;
-    loginWithPrivy = privy.login;
-    logoutPrivy = privy.logout;
-  } catch {
-    // Privy integration is optional.
-  }
-
-  // Derive email from Privy session
-  const email: string | null =
-    privyAuthenticated && privyUser?.email?.address
-      ? privyUser.email.address
-      : null;
-
   useEffect(() => {
     if (!adapter.connected || !adapter.address) {
       if (!adapter.connected) setActiveRoleState(null);
       return;
     }
+
     const stored = localStorage.getItem(roleStorageKey(adapter.address));
-    if (stored === "business" || stored === "factor") {
-      setActiveRoleState(stored);
-      return;
-    }
     setResolvingRole(true);
-    fetchFactorStatus(adapter.address).then((status) => {
-      if (status?.is_active) {
-        setActiveRoleState("factor");
-        localStorage.setItem(roleStorageKey(adapter.address!), "factor");
-      }
-      setResolvingRole(false);
-    });
+
+    fetchFactorStatus(adapter.address)
+      .then((status) => {
+        // On-chain factor registration has priority over any locally cached role.
+        if (status?.is_active) {
+          setActiveRoleState("factor");
+          localStorage.setItem(roleStorageKey(adapter.address!), "factor");
+          return;
+        }
+
+        if (stored === "business") {
+          setActiveRoleState("business");
+          return;
+        }
+
+        setActiveRoleState(null);
+      })
+      .finally(() => {
+        setResolvingRole(false);
+      });
   }, [adapter.connected, adapter.address]);
 
   const connect = useCallback(async () => {
@@ -177,10 +156,6 @@ function WalletContextInner({ children }: { children: ReactNode }) {
         resolvingRole,
         setActiveRole,
         formatAddress,
-        email,
-        privyReady,
-        loginWithPrivy,
-        logoutPrivy,
       }}
     >
       {children}

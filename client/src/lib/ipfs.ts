@@ -25,12 +25,11 @@ export function cidToField(cid: string): string {
 /**
  * Upload a file to IPFS via a Pinata presigned URL obtained from the CF worker.
  * Returns the CID, a public gateway URL, and the field-encoded CID.
- * Utilizes the Pinata SDK for better compatibility and abstraction.
  */
 export async function uploadToIPFS(file: File): Promise<IPFSUploadResult> {
   const workerUrl = import.meta.env.VITE_WORKER_URL;
   if (!workerUrl) {
-    throw new Error('VITE_WORKER_URL is not set.');
+    throw new Error("VITE_WORKER_URL is not set.");
   }
 
   // 1. Get a short-lived presigned upload URL from the worker
@@ -38,29 +37,29 @@ export async function uploadToIPFS(file: File): Promise<IPFSUploadResult> {
   if (!urlRes.ok) {
     throw new Error(`Failed to get presigned URL: ${urlRes.statusText}`);
   }
-  const { url: presignedUrl, gateway } = await urlRes.json() as { url: string; gateway: string };
+  const { url: presignedUrl, gateway } = (await urlRes.json()) as {
+    url: string;
+    gateway: string;
+  };
 
-  // 2. Initialize Pinata SDK (JWT is not required client-side when using presigned URLs)
+  // 2. Initialize Pinata SDK (JWT stays server-side when using signed URLs)
+  const resolvedGateway = gateway || "gateway.pinata.cloud";
   const pinata = new PinataSDK({
     pinataJwt: "",
-    pinataGateway: gateway || "gateway.pinata.cloud",
+    pinataGateway: resolvedGateway,
   });
 
-  // 3. Upload directly to Pinata using the presigned URL via the SDK
-  const upload = await pinata.upload.public
-    .file(file)
-    .url(presignedUrl);
-
+  // 3. Upload using the signed URL via Pinata SDK
+  const upload = await pinata.upload.public.file(file).url(presignedUrl);
   const cid = upload.cid;
 
   if (!cid) {
-    throw new Error('No CID returned from Pinata');
+    throw new Error("No CID returned from Pinata");
   }
 
   return {
     cid,
-    url: `https://${gateway}/ipfs/${cid}`,
+    url: `https://${resolvedGateway}/ipfs/${cid}`,
     cidField: cidToField(cid),
   };
 }
-

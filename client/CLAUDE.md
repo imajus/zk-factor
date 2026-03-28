@@ -90,7 +90,7 @@ client/
 │   │   ├── RoleIcons.tsx    # Role selection icons
 │   │   └── NavLink.tsx      # Navigation component
 │   ├── contexts/
-│   │   └── WalletContext.tsx    # Wallet + Privy state management
+│   │   └── WalletContext.tsx    # Wallet state management (Shield wallet only)
 │   ├── hooks/
 │   │   ├── use-mobile.tsx       # Mobile detection
 │   │   ├── use-toast.ts         # Toast notifications
@@ -157,9 +157,8 @@ Manages wallet connection state and user roles:
 - `isConnected`, `address`, `connect`, `disconnect` — Shield wallet
 - `activeRole` — `'business' | 'factor' | 'observer'`
 - `requestRecords(programId, filterSpent)` — fetch records from Shield
-- `email`, `privyReady`, `loginWithPrivy`, `logoutPrivy` — Privy email login
 
-**Current State**: Integrated with Shield wallet + Privy for account abstraction.
+**Current State**: Integrated with Shield wallet only.
 
 ### Role-Based Dashboards
 
@@ -184,15 +183,15 @@ Public routes in `src/App.tsx`, authenticated routes in `src/WalletApp.tsx`:
 
 **Public (PublicLayout):**
 
-| Route      | Component     | Description                     |
-| ---------- | ------------- | ------------------------------- |
-| `/`        | Landing       | Public landing page             |
-| `/about`   | About         | About page                      |
-| `/terms`   | Terms         | Terms of service                |
-| `/privacy` | Privacy       | Privacy policy                  |
-| `/roadmap` | Roadmap       | Product roadmap                 |
-| `/connect` | WalletConnect | Wallet connection + Privy login |
-| `/pay`     | Pay           | Debtor payment page             |
+| Route      | Component     | Description                       |
+| ---------- | ------------- | --------------------------------- |
+| `/`        | Landing       | Public landing page               |
+| `/about`   | About         | About page                        |
+| `/terms`   | Terms         | Terms of service                  |
+| `/privacy` | Privacy       | Privacy policy                    |
+| `/roadmap` | Roadmap       | Product roadmap                   |
+| `/connect` | WalletConnect | Wallet connection (Shield wallet) |
+| `/pay`     | Pay           | Debtor payment page               |
 
 **Authenticated (RequireAuth + AppLayout):**
 
@@ -244,7 +243,7 @@ import { cn } from "@/lib/utils";
 
 ### Wallet Connection
 
-**Current**: Shield wallet via `@provablehq/aleo-wallet-adaptor-shield` + Privy for email login / account abstraction.
+**Current**: Shield wallet via `@provablehq/aleo-wallet-adaptor-shield`.
 
 ### Shield Wallet Record Shape (`requestRecords` return)
 
@@ -364,11 +363,7 @@ VITE_ALEO_PROGRAM_ID=zk_factor_11765.aleo
 VITE_API_ENDPOINT=https://api.explorer.aleo.org/v1
 VITE_ALEO_EXPLORER=https://testnet.explorer.provable.com
 VITE_USDCX_PROGRAM_ID=test_usdcx_stablecoin.aleo
-VITE_PRIVY_APP_ID=              # Privy app ID for account abstraction / email login
 VITE_WORKER_URL=                # URL of the deployed Cloudflare Worker (presigned URL proxy)
-VITE_RESEND_API_KEY=            # Resend API key for email notifications
-VITE_RESEND_PROXY_URL=          # Optional: custom Resend proxy endpoint
-VITE_NOTIFY_FROM=               # Optional: sender address (default: ZK-Factor <notify@zkfactor.app>)
 ```
 
 Access in code:

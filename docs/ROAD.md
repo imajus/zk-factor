@@ -27,9 +27,9 @@ Core platform functionality:
 - [x] IPFS document attachment (invoice supporting docs stored on IPFS, CID on-chain)
 - [x] Partial factoring (sell portion of invoice, retain the rest)
 - [x] Recourse tracking (handle debtor non-payment and return to business)
+- [x] Multi-factor syndication (large invoices split across multiple factors)
 - [ ] Account abstraction / email login
 - [ ] Email notifications (invoice created, factored, settled)
-- [ ] Multi-factor syndication (large invoices split across multiple factors)
 - [ ] Mobile wallet support
 - [ ] API integration for accounting software (QuickBooks, Xero, Sage — matching FundThrough's distribution)
 - [ ] ZK credit scoring based on payment history (prove history without revealing details)

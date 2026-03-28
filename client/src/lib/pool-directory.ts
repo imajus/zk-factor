@@ -97,6 +97,29 @@ export function upsertPoolContribution(input: {
   writeDirectory(existing);
 }
 
+export function removePoolContribution(
+  invoiceHash: string,
+  contributor: string,
+): number {
+  if (!invoiceHash || !contributor) return 0;
+
+  const existing = readDirectory();
+  const prev = existing[invoiceHash];
+  if (!prev) return 0;
+
+  const found = prev.participants.find((p) => p.address === contributor);
+  if (!found) return 0;
+
+  existing[invoiceHash] = {
+    ...prev,
+    participants: prev.participants.filter((p) => p.address !== contributor),
+    updatedAt: Date.now(),
+  };
+
+  writeDirectory(existing);
+  return found.contributedMicro;
+}
+
 export function updatePoolClosed(invoiceHash: string, isClosed: boolean): void {
   if (!invoiceHash) return;
 
