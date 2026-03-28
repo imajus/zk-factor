@@ -29,7 +29,7 @@ If the invoice had **recourse enabled** and the due date has passed:
 
 1. Click **Initiate Recourse** on the overdue invoice
 2. A **Recourse Notice** is sent to the business
-3. The business must [repay your advance](../business/recourse.md)
+3. The business must [repay your advance]() <!-- (../business/recourse.md) -->
 
 If recourse was **not enabled**, the loss is yours. This is the tradeoff — non-recourse deals typically have lower advance rates to compensate for the risk.
 
