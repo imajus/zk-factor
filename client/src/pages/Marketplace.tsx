@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Search,
   Users,
@@ -65,6 +65,7 @@ import {
 } from "@/lib/pool-directory";
 
 export default function Marketplace() {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { isConnected, requestRecords, activeRole, address } = useWallet();
   const { execute, status, error: txError, reset } = useTransaction();
@@ -213,10 +214,13 @@ export default function Marketplace() {
       toast.loading("Generating proof…", { id: opId });
     else if (status === "pending") toast.loading("Broadcasting…", { id: opId });
     else if (status === "accepted") {
+      const shouldRedirectToDashboard = pendingAction === "factor";
+
       if (pendingAction === "factor") {
         toast.success("Invoice factored successfully!", { id: opId });
         setDialogOpen(false);
         pendingFactorModeRef.current = null;
+        navigate("/dashboard", { replace: true });
       }
 
       if (pendingAction === "create-pool" && pendingPoolCreateRef.current) {
@@ -249,6 +253,13 @@ export default function Marketplace() {
 
       pendingActionRef.current = null;
       queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
+
+      if (shouldRedirectToDashboard) {
+        // Drop potentially stale cached records so dashboard renders fresh data.
+        queryClient.removeQueries({ queryKey: ["records", PROGRAM_ID] });
+        navigate("/dashboard?refresh=1", { replace: true });
+      }
+
       reset();
     } else if (status === "failed") {
       pendingPoolCreateRef.current = null;
@@ -278,7 +289,15 @@ export default function Marketplace() {
       setWithdrawingPoolHash(null);
       reset();
     }
-  }, [status, txError, queryClient, reset, address, contributePoolData]);
+  }, [
+    status,
+    txError,
+    queryClient,
+    reset,
+    address,
+    contributePoolData,
+    navigate,
+  ]);
 
   // Auto-fill pool target with invoice amount when invoice hash is entered
   useEffect(() => {
