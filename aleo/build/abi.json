@@ -1482,6 +1482,27 @@
       ]
     },
     {
+      "name": "open_pool_distribution",
+      "is_async": true,
+      "inputs": [
+        {
+          "name": "invoice_hash",
+          "ty": {
+            "Plaintext": {
+              "Primitive": "Field"
+            }
+          },
+          "mode": "None"
+        }
+      ],
+      "outputs": [
+        {
+          "ty": "Future",
+          "mode": "None"
+        }
+      ]
+    },
+    {
       "name": "claim_pool_proceeds",
       "is_async": true,
       "inputs": [

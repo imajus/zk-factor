@@ -88,10 +88,10 @@ export function FactorDashboard() {
     isError,
     refetch,
   } = useQuery({
-    queryKey: ["records", PROGRAM_ID, "factor-dashboard"],
+    queryKey: ["records", PROGRAM_ID],
     queryFn: () => requestRecords(PROGRAM_ID, true),
     enabled: isConnected,
-    staleTime: 60_000,
+    staleTime: 0, // Always refetch after invalidation
     refetchOnMount: "always",
   });
 
