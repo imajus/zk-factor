@@ -27,8 +27,10 @@ import { toast } from "sonner";
 import { PROGRAM_ID } from "@/lib/config";
 import { type AleoRecord, getField, microToAleo } from "@/lib/aleo-records";
 import {
+  computeExpectedPoolPayout,
   fetchPoolContributions,
   fetchPoolClosed,
+  fetchPoolProceeds,
   fetchInvoiceSettled,
   buildContributeToPoolInputs,
   buildClaimPoolProceedsInputs,
@@ -262,10 +264,12 @@ export default function Pools() {
     setClaimingShareId(shareId);
 
     try {
-      const [isClosed, isSettled, creditsRecords] = await Promise.all([
+      const [isClosed, isSettled, totalContributions, poolProceeds] =
+        await Promise.all([
         fetchPoolClosed(invoiceHash),
         fetchInvoiceSettled(invoiceHash),
-        requestRecords("credits.aleo", true) as Promise<AleoRecord[]>,
+        fetchPoolContributions(invoiceHash),
+        fetchPoolProceeds(invoiceHash),
       ]);
 
       if (!isClosed) {
@@ -284,26 +288,38 @@ export default function Pools() {
         return;
       }
 
-      const paymentRecord = creditsRecords
-        .filter((r) => !r.spent)
-        .find(
-          (r) =>
-            BigInt(
-              getField(r.recordPlaintext, "microcredits").replace(/u64$/, ""),
-            ) > 0n,
-        );
-
-      if (!paymentRecord) {
+      if (poolProceeds === null || poolProceeds <= 0n) {
         toast.error(
-          "No spendable credits record found for payout transaction.",
+          "Pool proceeds are not opened yet. Pool owner must open distribution first.",
         );
+        setClaimingShareId(null);
+        return;
+      }
+
+      if (totalContributions === null || totalContributions <= 0n) {
+        toast.error("Pool contribution totals are unavailable for this pool.");
+        setClaimingShareId(null);
+        return;
+      }
+
+      const contributed = BigInt(
+        getField(share.recordPlaintext, "contributed").replace(/u64$/, ""),
+      );
+      const expectedPayout = computeExpectedPoolPayout(
+        contributed,
+        totalContributions,
+        poolProceeds,
+      );
+
+      if (expectedPayout <= 0n) {
+        toast.error("No claimable proceeds available for this share yet.");
         setClaimingShareId(null);
         return;
       }
 
       const inputs = buildClaimPoolProceedsInputs(
         share.recordPlaintext,
-        paymentRecord.recordPlaintext,
+        expectedPayout,
       );
 
       await execute({

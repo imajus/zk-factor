@@ -24,6 +24,12 @@ program zk_factor_9597.aleo {
     mapping pool_owners: field => address;       // who created the pool
     mapping pool_closed: field => bool;          // true after execute_pool_factoring is called
 
+    // Payout accounting — set once after invoice settled, then drained by contributor claims
+    // pool_proceeds[invoice_hash] = settlement.amount (set by open_pool_distribution)
+    // pool_distributed[invoice_hash] = running total of proceeds already paid out
+    mapping pool_proceeds: field => u64;
+    mapping pool_distributed: field => u64;
+
     // Enumerable list of all registered factor addresses (includes deregistered)
     // Compiles to: factor_addresses__ (u32 => address) and factor_addresses__len__ (bool => u32)
     storage factor_addresses: [address];
@@ -105,7 +111,8 @@ program zk_factor_9597.aleo {
 
     // Proof of a factor's contribution to a pool.
     // Consumed when the contributor calls claim_pool_proceeds.
-    // total_pool is a snapshot at contribution time — used for proportional share calc.
+    // total_pool is a snapshot at contribution time — display only, not used for payout math.
+    // Payout uses pool_contributions[invoice_hash] (authoritative on-chain total).
     record PoolShare {
         owner: address,
         pool_id: field,       // = invoice_hash (pool identifier)
@@ -124,10 +131,13 @@ program zk_factor_9597.aleo {
     }
 
     // Settlement tracking information
+    // BREAKING CHANGE: amount field added. Existing entries lack this field
+    // and will read amount as 0u64. Requires fresh deployment or migration.
     struct SettlementInfo {
         is_settled: bool,
         settlement_date: u64,
         factor: address,
+        amount: u64,   // full invoice amount settled (debtor payment or factor settlement)
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -472,21 +482,23 @@ program zk_factor_9597.aleo {
     // SETTLEMENT
     // ─────────────────────────────────────────────────────────────
 
-    // Settle a factored invoice
+    // Called by factor to manually mark invoice settled (e.g. debtor paid off-chain).
+    // Records factored.amount as the settlement amount for downstream payout accounting.
     async transition settle_invoice(
         factored: FactoredInvoice,
     ) -> Future {
         assert(factored.owner == self.caller);
-        return finalize_settle_invoice(factored.invoice_hash, self.caller);
+        return finalize_settle_invoice(factored.invoice_hash, self.caller, factored.amount);
     }
 
-    async function finalize_settle_invoice(invoice_hash: field, factor: address) {
+    async function finalize_settle_invoice(invoice_hash: field, factor: address, amount: u64) {
         let is_settled: bool = Mapping::contains(settled_invoices, invoice_hash);
         assert(!is_settled);
         let settlement: SettlementInfo = SettlementInfo {
             is_settled: true,
             settlement_date: (block.timestamp as u64),
             factor: factor,
+            amount: amount,
         };
         Mapping::set(settled_invoices, invoice_hash, settlement);
         let total_settled: u64 = Mapping::get_or_use(protocol_stats, 2u8, 0u64);
@@ -522,13 +534,19 @@ program zk_factor_9597.aleo {
         return (same, notice);
     }
 
+    // Atomically transfers payment from debtor's public balance to factor AND marks settled.
+    // Uses transfer_public_as_signer so the debit comes from the transaction signer (debtor),
+    // not from the program's own balance. Replaces the prior racy two-tx client pattern.
     async transition pay_invoice(
         notice: PaymentNotice,
         factor: address,
     ) -> Future {
         assert(notice.owner == self.caller);
         assert(notice.factor == factor);
-        return finalize_pay_invoice(notice.invoice_hash, self.caller, notice.amount, factor);
+
+        let f_pay: Future = credits.aleo/transfer_public_as_signer(factor, notice.amount);
+
+        return finalize_pay_invoice(notice.invoice_hash, self.caller, notice.amount, factor, f_pay);
     }
 
     async function finalize_pay_invoice(
@@ -536,6 +554,7 @@ program zk_factor_9597.aleo {
         debtor: address,
         amount: u64,
         factor: address,
+        f_pay: Future,
     ) {
         let is_settled: bool = Mapping::contains(settled_invoices, invoice_hash);
         assert(!is_settled);
@@ -544,11 +563,14 @@ program zk_factor_9597.aleo {
             is_settled: true,
             settlement_date: (block.timestamp as u64),
             factor: factor,
+            amount: amount,
         };
         Mapping::set(settled_invoices, invoice_hash, settlement);
 
         let total_settled: u64 = Mapping::get_or_use(protocol_stats, 2u8, 0u64);
         Mapping::set(protocol_stats, 2u8, total_settled + 1u64);
+
+        f_pay.await();
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -827,35 +849,96 @@ program zk_factor_9597.aleo {
     }
 
     // Called by: Pool owner
-    // Distributes proceeds to a contributor after the invoice is settled.
-    // Pool owner provides payment credits; payout is calculated proportionally
-    // from the contributor's share (basis points: contributed * 10000 / total_pool).
-    // The PoolShare record is consumed (burned), preventing double claims.
-    async transition claim_pool_proceeds(
-        share: PoolShare,
-        payment: credits.aleo/credits,
-    ) -> (credits.aleo/credits, credits.aleo/credits, Future) {
-        assert(share.total_pool > 0u64);
-
-        // Proportional payout: contributor's basis-point share of the payment provided
-        let share_bps: u64 = (share.contributed * 10000u64) / share.total_pool;
-        let payout: u64 = (payment.microcredits * share_bps) / 10000u64;
-        assert(payment.microcredits >= payout);
-
-        // Send proportional payout to contributor; change to caller (pool owner)
-        let (contributor_payment, change): (credits.aleo/credits, credits.aleo/credits) =
-            credits.aleo/transfer_private(payment, share.owner, payout);
-
-        return (contributor_payment, change, finalize_claim_pool_proceeds(share.invoice_hash));
+    // Step 1: transfer settlement.amount credits to PROGRAM_ADDRESS via
+    //   credits.aleo/transfer_public(PROGRAM_ADDRESS, amount)
+    // Step 2: call this transition to register proceeds on-chain.
+    // Can only be called once per pool (idempotency guard).
+    async transition open_pool_distribution(
+        invoice_hash: field,
+    ) -> Future {
+        return finalize_open_pool_distribution(self.caller, invoice_hash);
     }
 
-    async function finalize_claim_pool_proceeds(invoice_hash: field) {
-        // Invoice must be settled before proceeds can be claimed
+    async function finalize_open_pool_distribution(
+        caller: address,
+        invoice_hash: field,
+    ) {
+        // Must be the registered pool owner
+        let registered_owner: address = Mapping::get(pool_owners, invoice_hash);
+        assert(registered_owner == caller);
+
+        // Invoice must be settled and amount recorded
+        let settlement: SettlementInfo = Mapping::get(settled_invoices, invoice_hash);
+        assert(settlement.is_settled);
+        assert(settlement.amount > 0u64);
+
+        // Pool must be closed
+        let is_closed: bool = Mapping::get_or_use(pool_closed, invoice_hash, false);
+        assert(is_closed);
+
+        // Idempotency guard — can only open once
+        assert(!Mapping::contains(pool_proceeds, invoice_hash));
+
+        Mapping::set(pool_proceeds, invoice_hash, settlement.amount);
+        Mapping::set(pool_distributed, invoice_hash, 0u64);
+    }
+
+    // Called by: Contributor (PoolShare owner)
+    // Payout = floor(pool_proceeds * contributed / pool_contributions) — derived and
+    // verified entirely on-chain. Caller supplies expected_payout computed off-chain;
+    // finalize re-derives and asserts equality. No manipulation possible.
+    // Burns the PoolShare record, preventing double-claim.
+    // Pays from the program's public escrow balance (funded by open_pool_distribution).
+    async transition claim_pool_proceeds(
+        share: PoolShare,
+        expected_payout: u64,
+    ) -> (credits.aleo/credits, Future) {
+        assert(expected_payout > 0u64);
+        assert(share.contributed > 0u64);
+
+        // Pay from program's public balance to contributor's private record
+        let (payout_record, f_pay): (credits.aleo/credits, Future) =
+            credits.aleo/transfer_public_to_private(share.owner, expected_payout);
+
+        return (payout_record, finalize_claim_pool_proceeds(
+            share.invoice_hash,
+            share.contributed,
+            expected_payout,
+            f_pay,
+        ));
+    }
+
+    async function finalize_claim_pool_proceeds(
+        invoice_hash: field,
+        contributed: u64,
+        payout: u64,
+        f_pay: Future,
+    ) {
+        // Invoice must be settled
         let settlement: SettlementInfo = Mapping::get(settled_invoices, invoice_hash);
         assert(settlement.is_settled);
 
-        // Pool must be closed (execute_pool_factoring was called)
+        // Pool must be closed
         let is_closed: bool = Mapping::get_or_use(pool_closed, invoice_hash, false);
         assert(is_closed);
+
+        // Distribution must be opened
+        let proceeds: u64 = Mapping::get(pool_proceeds, invoice_hash);
+        assert(proceeds > 0u64);
+
+        // Authoritative total — not the snapshot in the share record
+        let total: u64 = Mapping::get(pool_contributions, invoice_hash);
+        assert(total > 0u64);
+
+        // Re-derive payout on-chain; revert if caller passed a manipulated value
+        let expected: u64 = (((proceeds as u128) * (contributed as u128)) / (total as u128)) as u64;
+        assert(payout == expected);
+
+        // Over-distribution guard
+        let distributed: u64 = Mapping::get_or_use(pool_distributed, invoice_hash, 0u64);
+        assert(distributed + payout <= proceeds);
+        Mapping::set(pool_distributed, invoice_hash, distributed + payout);
+
+        f_pay.await();
     }
 }
