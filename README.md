@@ -1,13 +1,15 @@
 ## What it does
 
-**ZK Factor** is a privacy-preserving invoice factoring platform built on Aleo blockchain. It cryptographically prevents double-factoring fraud while keeping invoice amounts, business relationships, and transaction details completely private. Businesses mint invoice records, factors purchase them through atomic swaps, and the UTXO consumption model makes re-factoring the same invoice mathematically impossible.
+**ZK Factor** is a privacy-preserving invoice factoring platform built on Aleo blockchain. It cryptographically prevents double-factoring fraud while keeping invoice amounts, business relationships, and transaction details completely private. Businesses mint invoice records and authorize factoring in a two-step handshake - the factor executes the swap and pays the advance, then sends a private PaymentNotice record to the debtor. The UTXO consumption model makes re-factoring the same invoice mathematically impossible, with no central registry required.
 
 ## Technologies used
 
 - Aleo blockchain
 - Leo programming language
-- React + TypeScript with @provablehq/sdk
-- Shadow Wallet integration
+- React + TypeScript with Vite, shadcn/ui, Tailwind CSS
+- TanStack React Query, React Hook Form, Zod
+- @provablehq/sdk, Shield Wallet integration
+- Cloudflare Workers (Pinata proxy for IPFS uploads)
 - zkSNARKs, Poseidon hashing
 - Record encryption, zero-knowledge proofs, on-chain commitments
 
@@ -15,15 +17,20 @@
 
 The platform is composed from multiple projects.
 
-Each has it's own documentation:
+Each has its own documentation:
 
 - [Aleo Program](./aleo/README.md)
 - [Frontend](./client/README.md)
+- [Worker](./worker/README.md)
+
+## User Guide
+
+Official [online user documentation](https://zk-factor.pages.dev/docs) provides in-depth step-by-step guides for users of all supported roles: Businesses, Debtors and Factors.
 
 ## Resources
 
-- [Product Requirements](https://github.com/imajus/zk-factor/blob/main/docs/PRD.md)
-- [Technical Specifications](https://github.com/imajus/zk-factor/blob/main/docs/SPEC.md)
-- [Product-Market Fit Analysis](https://github.com/imajus/zk-factor/blob/main/docs/PMF.md)
-- [Go-To-Market Strategy](https://github.com/imajus/zk-factor/blob/main/docs/GTM.md)
-- [Roadmap](https://github.com/imajus/zk-factor/blob/main/docs/ROAD.md)
+- [Product Requirements](./docs/PRD.md)
+- [Technical Specifications](./docs/SPEC.md)
+- [Product-Market Fit Analysis](./docs/PMF.md)
+- [Go-To-Market Strategy](./docs/GTM.md)
+- [Roadmap](./docs/ROAD.md)
