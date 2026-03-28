@@ -50,7 +50,7 @@ export function PublicLayout({ children }: PublicLayoutProps) {
               href="/docs/"
               className="hover:text-foreground transition-colors"
             >
-              Guide
+              User Guide
             </a>
             <Link
               to="/terms"
