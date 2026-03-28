@@ -70,6 +70,14 @@
           "ty": {
             "Primitive": "Address"
           }
+        },
+        {
+          "name": "amount",
+          "ty": {
+            "Primitive": {
+              "UInt": "U64"
+            }
+          }
         }
       ]
     }
@@ -577,6 +585,28 @@
       },
       "value": {
         "Primitive": "Boolean"
+      }
+    },
+    {
+      "name": "pool_proceeds",
+      "key": {
+        "Primitive": "Field"
+      },
+      "value": {
+        "Primitive": {
+          "UInt": "U64"
+        }
+      }
+    },
+    {
+      "name": "pool_distributed",
+      "key": {
+        "Primitive": "Field"
+      },
+      "value": {
+        "Primitive": {
+          "UInt": "U64"
+        }
       }
     }
   ],
@@ -1431,6 +1461,27 @@
       ]
     },
     {
+      "name": "open_pool_distribution",
+      "is_async": true,
+      "inputs": [
+        {
+          "name": "invoice_hash",
+          "ty": {
+            "Plaintext": {
+              "Primitive": "Field"
+            }
+          },
+          "mode": "None"
+        }
+      ],
+      "outputs": [
+        {
+          "ty": "Future",
+          "mode": "None"
+        }
+      ]
+    },
+    {
       "name": "claim_pool_proceeds",
       "is_async": true,
       "inputs": [
@@ -1447,30 +1498,18 @@
           "mode": "None"
         },
         {
-          "name": "payment",
+          "name": "expected_payout",
           "ty": {
-            "Record": {
-              "path": [
-                "credits"
-              ],
-              "program": "credits"
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
             }
           },
           "mode": "None"
         }
       ],
       "outputs": [
-        {
-          "ty": {
-            "Record": {
-              "path": [
-                "credits"
-              ],
-              "program": "credits"
-            }
-          },
-          "mode": "None"
-        },
         {
           "ty": {
             "Record": {
