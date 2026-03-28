@@ -5,6 +5,7 @@ import {
   RefreshCw,
   AlertCircle,
   TrendingUp,
+  Plus,
   Lock,
   Unlock,
   ChevronRight,
@@ -854,6 +855,12 @@ export default function Pools() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button asChild>
+            <Link to="/marketplace">
+              <Plus className="h-4 w-4 mr-2" />
+              Create a Pool
+            </Link>
+          </Button>
           <Button variant="outline" size="sm" onClick={() => refetch()}>
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
@@ -909,7 +916,7 @@ export default function Pools() {
             contribute.
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Use Marketplace to create new pools.
+            Use the Create a Pool button above to start a new pool.
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
             Payout claim requires pool closed + invoice settled + one spendable
