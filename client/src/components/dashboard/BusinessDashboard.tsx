@@ -385,7 +385,7 @@ export function BusinessDashboard() {
             </div>
             <Button asChild>
               <Link to="/invoices/create">
-                <Plus className="h-4 w-4 mr-2" />
+                <Plus className="h-4 w-4" />
                 Create Invoice
               </Link>
             </Button>
@@ -450,7 +450,7 @@ export function BusinessDashboard() {
                           )
                         }
                       >
-                        <ExternalLink className="h-4 w-4 mr-2" />
+                        <ExternalLink className="h-4 w-4" />
                         View on Explorer
                       </DropdownMenuItem>
                     </DropdownMenuContent>
@@ -578,14 +578,14 @@ export function BusinessDashboard() {
                           isSettled || paymentRequestedHashes.has(invoiceHash)
                         }
                       >
-                        <Receipt className="h-4 w-4 mr-2" />
+                        <Receipt className="h-4 w-4" />
                         Request Payment from Debtor
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         onClick={() => handleSettle(record)}
                         disabled={isSettling || isSettled}
                       >
-                        <CheckCircle className="h-4 w-4 mr-2" />
+                        <CheckCircle className="h-4 w-4" />
                         {isSettling ? "Settling…" : "Settle"}
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
@@ -597,7 +597,7 @@ export function BusinessDashboard() {
                           )
                         }
                       >
-                        <ExternalLink className="h-4 w-4 mr-2" />
+                        <ExternalLink className="h-4 w-4" />
                         View on Explorer
                       </DropdownMenuItem>
                     </DropdownMenuContent>
@@ -733,7 +733,7 @@ export function BusinessDashboard() {
                   onClick={() => handleAcceptOffer(record)}
                   disabled={isAccepting}
                 >
-                  <FileCheck className="h-4 w-4 mr-2" />
+                  <FileCheck className="h-4 w-4" />
                   {isAccepting ? "Processing…" : "Accept Offer"}
                 </Button>
               </CardContent>
@@ -846,15 +846,15 @@ export function BusinessDashboard() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => refetch()}>
-            <RefreshCw className="h-4 w-4 mr-2" />
+            <RefreshCw className="h-4 w-4" />
             Refresh
           </Button>
-          <Button variant="outline" asChild>
+          <Button variant="outline" size="sm" asChild>
             <Link to="/marketplace">Choose Factors</Link>
           </Button>
-          <Button asChild>
+          <Button size="sm" asChild>
             <Link to="/invoices/create">
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className="h-4 w-4" />
               Create Invoice
             </Link>
           </Button>
@@ -1081,7 +1081,7 @@ export function BusinessDashboard() {
                     )
                   }
                 >
-                  <ExternalLink className="h-4 w-4 mr-2" />
+                  <ExternalLink className="h-4 w-4" />
                   View on Explorer
                 </Button>
               )}
