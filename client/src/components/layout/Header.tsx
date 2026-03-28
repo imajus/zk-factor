@@ -6,7 +6,6 @@ import {
   LogOut,
   Menu,
   X,
-  Zap,
   Wallet,
   Building2,
   Briefcase,
@@ -90,9 +89,7 @@ export function Header() {
       <div className="container flex h-16 items-center justify-between">
         {/* Logo */}
         <Link to="/" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-            <Zap className="h-5 w-5 text-primary-foreground" />
-          </div>
+          <img src="/logo-navbar.png" alt="ZK Factor" className="h-8 w-auto" />
           <span className="text-xl font-bold">ZK Factor</span>
         </Link>
 

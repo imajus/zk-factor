@@ -61,7 +61,7 @@ const config: Config = {
       title: 'ZK Factor Guide',
       logo: {
         alt: 'ZK Factor Logo',
-        src: 'img/logo.svg',
+        src: 'img/logo.png',
       },
       items: [
         {

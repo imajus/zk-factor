@@ -144,7 +144,7 @@ export function WalletConnect() {
           <Card className="border-border/50 shadow-xl">
             <CardHeader className="text-center pb-2">
               <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
-                <Zap className="h-8 w-8 text-primary" />
+                <img src="/logo-navbar.png" alt="ZK Factor" className="h-10 w-auto" />
               </div>
               <CardTitle className="text-2xl">Wallet Connected</CardTitle>
               <CardDescription className="font-mono text-sm break-all">
@@ -209,7 +209,7 @@ export function WalletConnect() {
         <Card className="border-border/50 shadow-xl">
           <CardHeader className="text-center pb-2">
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 glow-primary">
-              <Zap className="h-8 w-8 text-primary" />
+              <img src="/logo-navbar.png" alt="ZK Factor" className="h-10 w-auto" />
             </div>
             <CardTitle className="text-2xl">Welcome to ZK Factor</CardTitle>
             <CardDescription className="text-base">
