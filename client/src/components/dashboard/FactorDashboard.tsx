@@ -5,7 +5,6 @@ import {
   TrendingUp,
   DollarSign,
   Percent,
-  Search,
   RefreshCw,
   ExternalLink,
   MoreHorizontal,
@@ -435,12 +434,6 @@ export function FactorDashboard() {
                 Browse the marketplace and accept offers to build your portfolio
               </p>
             </div>
-            <Button asChild>
-              <Link to="/marketplace">
-                <Search className="h-4 w-4" />
-                Browse Invoices
-              </Link>
-            </Button>
           </CardContent>
         </Card>
       );
