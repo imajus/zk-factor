@@ -3,6 +3,7 @@ import {
   useContext,
   useState,
   useEffect,
+  useRef,
   useCallback,
   ReactNode,
 } from "react";
@@ -24,9 +25,11 @@ const roleStorageKey = (address: string) => `zk_factor_role_${address}`;
 
 interface AppWalletContextType {
   isConnected: boolean;
+  isInitializing: boolean;
   address: string | null;
   network: Network | null;
   connecting: boolean;
+  reconnecting: boolean;
   wallets: Wallet[];
   selectWallet: (name: WalletName) => void;
   connect: () => Promise<void>;
@@ -62,6 +65,31 @@ function WalletContextInner({ children }: { children: ReactNode }) {
   const [resolvedAddress, setResolvedAddress] = useState<string | null>(null);
   const resolvingRole =
     adapter.connected && !!adapter.address && adapter.address !== resolvedAddress;
+
+  // Guard against redirect-before-autoConnect race. On page refresh the adapter
+  // starts with connecting=false/connected=false, then its autoConnect useEffect
+  // fires and sets connecting=true. We stay "initializing" until we see that
+  // connecting has started and finished (or connected=true), with a 3 s fallback
+  // for when the wallet extension isn't installed and autoConnect never fires.
+  const [isInitializing, setIsInitializing] = useState(true);
+  const connectingStarted = useRef(false);
+  useEffect(() => {
+    if (adapter.connected) {
+      setIsInitializing(false);
+      return;
+    }
+    if (adapter.connecting) {
+      connectingStarted.current = true;
+      return;
+    }
+    if (connectingStarted.current) {
+      setIsInitializing(false);
+    }
+  }, [adapter.connecting, adapter.connected]);
+  useEffect(() => {
+    const timer = setTimeout(() => setIsInitializing(false), 3000);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     if (!adapter.connected || !adapter.address) {
@@ -149,9 +177,11 @@ function WalletContextInner({ children }: { children: ReactNode }) {
     <AppWalletContext.Provider
       value={{
         isConnected: adapter.connected,
+        isInitializing,
         address: adapter.address,
         network: adapter.network,
         connecting: adapter.connecting,
+        reconnecting: adapter.reconnecting,
         wallets: adapter.wallets,
         selectWallet: adapter.selectWallet,
         connect,

@@ -9,8 +9,17 @@ interface RequireAuthProps {
 }
 
 export function RequireAuth({ children }: RequireAuthProps) {
-  const { isConnected, activeRole, resolvingRole } = useWallet();
+  const { isConnected, isInitializing, reconnecting, activeRole, resolvingRole } = useWallet();
   const location = useLocation();
+
+  if (isInitializing || reconnecting) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen gap-3 text-muted-foreground">
+        <div className="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+        <p className="text-sm">Reconnecting wallet…</p>
+      </div>
+    );
+  }
 
   if (!isConnected) {
     return <Navigate to="/" replace />;
