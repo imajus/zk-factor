@@ -23,6 +23,10 @@ Each has its own documentation:
 - [Frontend](./client/README.md)
 - [Worker](./worker/README.md)
 
+## User Guide
+
+Official [online user documentation](https://zk-factor.pages.dev/docs) provides in-depth step-by-step guides for users of all supported roles: Businesses, Debtors and Factors.
+
 ## Resources
 
 - [Product Requirements](./docs/PRD.md)
