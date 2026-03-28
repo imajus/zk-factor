@@ -13,7 +13,7 @@
 Core platform functionality:
 
 - [x] Invoice creation (`mint_invoice`)
-- [ ] Fraud prevention (serial number verification / UTXO consumption model)
+- [x] Fraud prevention (serial number verification / UTXO consumption model)
 - [x] Two-step factoring (`authorize_factoring` → `execute_factoring`)
 - [x] Private debtor payment (`create_payment_request` → `pay_invoice`)
 - [x] Marketplace (factor discovery and browsing)
@@ -21,12 +21,14 @@ Core platform functionality:
 - [x] Basic web UI for business, factor, and debtor roles
 - [x] Shield Wallet integration
 
-## Phase 2: Enhanced Features
+## Phase 2: Enhanced Features (Current Phase)
 
 - [x] USDCx stablecoin payments integration
 - [x] IPFS document attachment (invoice supporting docs stored on IPFS, CID on-chain)
 - [x] Partial factoring (sell portion of invoice, retain the rest)
 - [x] Recourse tracking (handle debtor non-payment and return to business)
+- [ ] Account abstraction / email login
+- [ ] Email notifications (invoice created, factored, settled)
 - [ ] Multi-factor syndication (large invoices split across multiple factors)
 - [ ] Mobile wallet support
 - [ ] API integration for accounting software (QuickBooks, Xero, Sage — matching FundThrough's distribution)
