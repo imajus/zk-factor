@@ -91,6 +91,7 @@ export function BusinessDashboard() {
     queryFn: () => requestRecords(PROGRAM_ID, true),
     enabled: isConnected,
     staleTime: 60_000,
+    refetchOnMount: "always",
   });
 
   const invoiceRecords = ((records as AleoRecord[]) ?? []).filter(
