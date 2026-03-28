@@ -1,4 +1,4 @@
-import type {SidebarsConfig} from '@docusaurus/plugin-content-docs';
+import type { SidebarsConfig } from '@docusaurus/plugin-content-docs';
 
 const sidebars: SidebarsConfig = {
   tutorialSidebar: [
@@ -10,7 +10,7 @@ const sidebars: SidebarsConfig = {
       items: [
         'business/create-invoice',
         'business/factor-invoice',
-        'business/recourse',
+        // 'business/recourse',
       ],
       collapsed: false,
     },
@@ -19,7 +19,7 @@ const sidebars: SidebarsConfig = {
       label: 'For Factors',
       items: [
         'factor/register',
-        'factor/marketplace',
+        'factor/dashboard',
         'factor/pools',
         'factor/settlement',
       ],
@@ -38,7 +38,7 @@ const sidebars: SidebarsConfig = {
       label: 'Platform Features',
       items: [
         'features/documents',
-        'features/notifications',
+        // 'features/notifications',
         'features/usdcx',
       ],
       collapsed: false,

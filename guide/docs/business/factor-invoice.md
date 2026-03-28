@@ -13,28 +13,38 @@ Once you authorize, your invoice is consumed on-chain. It can never be double-fa
 
 ## Steps
 
-### 1. Choose a Factor
+### 1. Browse the Marketplace
 
-From your dashboard, find the invoice you want to factor and click **Factor**. You'll see a list of registered factors with their advance rates.
+Go to the **Marketplace** page to see all registered factors. Here you can compare their available capital, public advance rates, and reputation.
 
-<!-- screenshot: factor-selection.png — list of available factors with rates -->
+![Factor marketplace](/img/factor-invoice/marketplace.png)
 
-### 2. Set Terms
+### 2. Choose a Factor
 
-- **Advance Rate** — the percentage you'll receive upfront (e.g., 95% means you get 95,000 on a 100,000 invoice)
-- **Currency** — ALEO or USDCx
-- **Recourse** — if enabled, the factor can ask for the advance back if the debtor never pays (see [Handle Recourse](recourse.md))
+Once you've found a factor that meets your needs, click the **Factor Invoice** button on their card.
 
-### 3. Authorize
+### 3. Configure the Offer
 
-Click **Authorize Factoring**. This consumes your Invoice record and sends a **Factoring Offer** to the factor. You cannot undo this step.
+In the popup form, select the following:
+- **Choose Invoice**: Pick the invoice you wish to factor from your list of available invoices.
+- **Factor Amount**: You can choose to factor the full amount or a **partial amount** if you only need a portion of the cash.
+- **Advance Rate**: Set your desired rate. This must be within the Factor's public boundaries.
 
-<!-- screenshot: authorize-factoring.png — the authorize confirmation dialog -->
+![Factor invoice form](/img/factor-invoice/factor-invoice-form.png)
 
-### 4. Wait for Execution
+Review the calculated advance payment and fee, then click **Confirm**.
 
-The factor reviews the offer and executes the deal. When they do, the advance payment lands in your wallet automatically.
+### 4. Authorize and Generate Proof
 
-You'll see the status update on your dashboard, and receive an [email notification](../features/notifications.md) if you've linked your email.
+After clicking **Confirm**, you must:
+1. **Approve the transaction** in your Shield Wallet popup.
+2. **Wait for proof generation**. This ensures your factoring request is private and securely recorded on the Aleo blockchain.
 
-<!-- screenshot: factoring-complete.png — dashboard showing completed factoring with advance received -->
+![Factor invoice proof generation](/img/factor-invoice/proof-generating.png)
+
+### 5. Wait for Approval
+
+The selected factor will be notified of your request. Once they review and approve the offer, the advance payment will be sent to your wallet automatically.
+
+You can track the status of your request on your dashboard.
+

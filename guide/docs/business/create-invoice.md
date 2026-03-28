@@ -15,13 +15,16 @@ Minting an invoice creates a private record on the Aleo blockchain. Only you can
 4. Optionally [attach a supporting document](../features/documents.md) (PDF, image, contract)
 5. Review the summary on the right, then click **Create Invoice**
 
-<!-- screenshot: create-invoice-form.png — the invoice creation form filled out -->
+![Invoice creation form](/img/create-invoice/create-invoice-form.png)
 
 ## Proof Generation
 
-After clicking Create, the app generates a zero-knowledge proof. This takes **30-60 seconds** (or up to 5-7 minutes if it's your first transaction ever). A progress indicator shows the status.
+After clicking **Create Invoice**, your Shield Wallet will ask you to approve the transaction. You must sign this request before the proof generation process starts.
 
-<!-- screenshot: proof-generating.png — the proof generation progress bar -->
+Once approved, the app generates a zero-knowledge proof. This takes **30-60 seconds** (or up to 5-7 minutes if it's your first transaction ever). A progress indicator shows the status.
+
+
+![Proof generation](/img/create-invoice/proof-generating.png)
 
 ## What Happens On-Chain
 

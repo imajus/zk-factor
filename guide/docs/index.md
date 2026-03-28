@@ -10,11 +10,12 @@ ZK Factor lets businesses sell unpaid invoices to factors for immediate cash —
 ### For Businesses
 - [Create an Invoice](business/create-invoice.md) — Mint a private invoice on-chain
 - [Factor an Invoice](business/factor-invoice.md) — Sell your invoice to a factor for immediate cash
-- [Handle Recourse](business/recourse.md) — What happens if your debtor doesn't pay
+<!-- - [Handle Recourse](business/recourse.md) — What happens if your debtor doesn't pay -->
+
 
 ### For Factors
 - [Register as a Factor](factor/register.md) — Set up your factoring profile
-- [Browse & Accept Invoices](factor/marketplace.md) — Find and fund invoices
+- [Browse & Accept Invoices](factor/dashboard.md) — Find and fund invoices
 - [Factor Pools](factor/pools.md) — Team up with other factors on large invoices
 - [Settle an Invoice](factor/settlement.md) — Finalize after debtor payment
 
@@ -23,5 +24,6 @@ ZK Factor lets businesses sell unpaid invoices to factors for immediate cash —
 
 ### Features
 - [Attach Documents](features/documents.md) — Upload supporting files via IPFS
-- [Email Notifications](features/notifications.md) — Stay informed about your invoices
+<!-- - [Email Notifications](features/notifications.md) — Stay informed about your invoices -->
+
 - [USDCx Payments](features/usdcx.md) — Pay with stablecoins instead of ALEO

@@ -9,11 +9,12 @@
 
 1. Open ZK Factor and click **Connect Wallet**
 2. The Shield Wallet popup will ask you to approve the connection
-3. Once connected, your address appears in the top bar
 
-<!-- screenshot: wallet-connect.png — the Connect Wallet screen with Shield button -->
+![Wallet connection screen](/img/getting-started/connect-wallet.png)
 
+<!-- 
 ## Sign In with Email (Optional)
+
 
 If you prefer email login instead of a browser extension:
 
@@ -23,10 +24,12 @@ If you prefer email login instead of a browser extension:
 4. Enter the code to complete sign-in
 
 Email login also enables [notifications](features/notifications.md) about your invoices.
+-->
 
 <!-- screenshot: email-login.png — the email login form -->
 
 ## Choose Your Role
+
 
 After connecting, you'll be asked to pick a role:
 
@@ -37,13 +40,13 @@ After connecting, you'll be asked to pick a role:
 
 You can switch roles later from Settings.
 
-<!-- screenshot: select-role.png — the role selection screen -->
+![Role selection screen](/img/getting-started/select-role.png)
+
 
 ## First-Time Sync
 
 When you first connect, the app scans the blockchain for your records. This can take a few minutes. You'll see a progress bar — once it finishes, your dashboard populates with your invoices and transactions.
 
-<!-- screenshot: sync-progress.png — the sync progress indicator -->
 
 ## Next Steps
 

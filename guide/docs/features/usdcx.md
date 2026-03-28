@@ -25,8 +25,3 @@ When authorizing factoring, choose USDCx as the payment currency. The factor wil
 - The factor must have sufficient USDCx balance (public) to fund the advance
 - Transaction fees are still paid in ALEO regardless of invoice currency
 - Both parties must be on the same network (testnet or mainnet)
-
-## Current Limitations
-
-- USDCx pool factoring is not yet supported — pools currently work with ALEO credits only
-- The debtor payment flow uses the same currency as the original factoring deal

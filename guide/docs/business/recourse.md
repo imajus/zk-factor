@@ -1,4 +1,8 @@
+---
+draft: true
+---
 # Handle Recourse
+
 
 Recourse means the factor can ask for their advance back if your debtor doesn't pay.
 

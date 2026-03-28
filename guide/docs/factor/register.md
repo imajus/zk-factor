@@ -6,12 +6,16 @@ Before you can purchase invoices, you need to register as a factor on-chain.
 
 1. After [connecting your wallet](../getting-started.md), choose the **Factor** role
 2. You'll be taken to the registration form
+   ![Factor registration form](/img/factor-register/registration-form.png)
 3. Set your advance rate range:
    - **Minimum Rate** — lowest rate you'll offer (e.g., 85%)
    - **Maximum Rate** — highest rate you'll offer (e.g., 98%)
 4. Click **Register**
+5. **Approve the transaction** in your Shield Wallet popup
+   ![Factor registration wallet approval](/img/factor-register/wallet-approve.png)
+6. **Wait for proof generation**. This process securely adds your factor profile to the Aleo blockchain.
+   ![Factor registration proof generation](/img/factor-register/proof-generating.png)
 
-<!-- screenshot: register-factor.png — the factor registration form -->
 
 ## What Happens On-Chain
 
@@ -25,4 +29,4 @@ You can deregister at any time from Settings. This removes you from the active r
 
 ## Next Step
 
-Browse available invoices in the [Marketplace](marketplace.md).
+Browse available invoices in the [Dashboard](dashboard.md).

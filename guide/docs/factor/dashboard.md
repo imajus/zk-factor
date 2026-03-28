@@ -7,21 +7,21 @@ The marketplace shows factoring offers that businesses have authorized to you.
 When a business authorizes factoring with you, a **Factoring Offer** record appears on your dashboard. It contains:
 
 - Invoice amount
-- Due date
-- Agreed advance rate
-- Whether recourse is enabled
 - Currency (ALEO or USDCx)
+- Due date
+- Proposed advance rate
+- Whether recourse is enabled: Yes/No
 
-<!-- screenshot: factoring-offers.png — list of pending factoring offers on the factor dashboard -->
+![Factor pending offers](/img/factor-dashboard/pending-offers.png)
 
 ## Accepting an Offer
 
 1. Review the offer details
 2. Click **Execute Factoring**
 3. Confirm the advance amount that will be sent to the business
+   ![Factor accepts offer](/img/factor-dashboard/accept-offer.png)
 4. The proof generates (30-60 seconds)
-
-<!-- screenshot: execute-factoring.png — the execute factoring confirmation -->
+   ![Accept offer proof generating](/img/factor-dashboard/proof-generating.png)
 
 ## What Happens
 

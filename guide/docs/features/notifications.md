@@ -1,4 +1,8 @@
+---
+draft: true
+---
 # Email Notifications
+
 
 Link your email to receive updates when things happen with your invoices.
 
