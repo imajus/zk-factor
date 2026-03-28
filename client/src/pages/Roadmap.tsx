@@ -46,11 +46,6 @@ const phases: Phase[] = [
     items: [
       { label: "USDCx stablecoin payments integration", done: true },
       { label: "IPFS document attachment (CID stored on-chain)", done: true },
-      { label: "Account abstraction / email login", done: true },
-      {
-        label: "Email notifications (invoice created, factored, settled)",
-        done: true,
-      },
       {
         label: "Partial factoring (sell portion of invoice, retain the rest)",
         done: true,
@@ -59,6 +54,11 @@ const phases: Phase[] = [
       {
         label: "Multi-factor syndication (large invoices split across factors)",
         done: true,
+      },
+      { label: "Account abstraction / email login", done: false },
+      {
+        label: "Email notifications (invoice created, factored, settled)",
+        done: false,
       },
       { label: "Mobile wallet support", done: false },
       {
