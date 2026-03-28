@@ -1,6 +1,8 @@
+import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Shield, Zap, Lock, Users, TrendingUp, AlertTriangle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Shield, Zap, Lock, Users, TrendingUp, AlertTriangle, BookOpen } from 'lucide-react';
 
 export default function About() {
   return (
@@ -178,6 +180,18 @@ export default function About() {
               </Card>
             ))}
           </div>
+        </section>
+
+        {/* CTA */}
+        <section className="mt-16 text-center rounded-lg border border-border bg-muted/30 py-12 px-6">
+          <BookOpen className="h-10 w-10 text-primary mx-auto mb-4" />
+          <h2 className="text-2xl font-bold mb-2">Ready to get started?</h2>
+          <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+            Read the User Guide to learn how to mint invoices, find factors, and settle payments.
+          </p>
+          <Button asChild size="lg">
+            <Link to="/docs">Open User Guide</Link>
+          </Button>
         </section>
       </div>
   );

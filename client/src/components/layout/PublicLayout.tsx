@@ -23,7 +23,7 @@ export function PublicLayout({ children }: PublicLayoutProps) {
             <Button asChild className="gap-2">
               <Link to="/connect">
                 <Wallet className="h-4 w-4" />
-                Connect or Login
+                Launch App
               </Link>
             </Button>
           </div>
