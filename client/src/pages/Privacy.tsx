@@ -56,7 +56,6 @@ export default function Privacy() {
               <CardTitle className="text-sm">Minimal Collection</CardTitle>
             </CardHeader>
             <CardContent className="text-xs text-muted-foreground space-y-1">
-              <p>Email only if you opt in (Privy)</p>
               <p>No cookies or tracking</p>
               <p>No IP logging by us</p>
               <p>No analytics</p>
@@ -134,9 +133,7 @@ export default function Privacy() {
           </p>
           <ul className="list-disc list-inside space-y-1 ml-2">
             <li><strong>Aleo Network API</strong> (Provable Inc.) — blockchain data and transaction submission</li>
-            <li><strong>Privy</strong> — optional email-based login and account abstraction. If you sign in with email, Privy receives and stores your email address under their privacy policy</li>
             <li><strong>Pinata / IPFS</strong> — optional document attachment. Uploaded files are stored on IPFS via Pinata and may be permanently available on the public IPFS network</li>
-            <li><strong>Resend</strong> — transactional email delivery. If you opt in to email notifications, your email address is shared with Resend solely for delivery</li>
           </ul>
           <p>
             We do not use advertising networks, analytics providers, or social media trackers.

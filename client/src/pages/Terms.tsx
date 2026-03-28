@@ -98,9 +98,7 @@ export default function Terms() {
             policies:
           </p>
           <ul className="list-disc list-inside space-y-1 ml-2">
-            <li><strong>Privy</strong> — account abstraction and email-based login</li>
             <li><strong>Pinata / IPFS</strong> — document storage for invoice attachments</li>
-            <li><strong>Resend</strong> — transactional email notifications</li>
           </ul>
           <p>
             We are not responsible for the availability, security, or practices of these services.
@@ -111,11 +109,6 @@ export default function Terms() {
         </Section>
 
         <Section title="7. Privacy & Data">
-          <p>
-            If you sign in with an email address (via Privy), we may use it to send transactional
-            notifications such as invoice creation confirmations, factoring updates, and settlement
-            receipts. We do not sell or share your email with unrelated third parties.
-          </p>
           <p>
             On-chain data is governed by the Aleo blockchain's privacy model. Private record
             contents are encrypted and visible only to record owners. Public mappings and serial
