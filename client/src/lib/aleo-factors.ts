@@ -422,8 +422,8 @@ export function buildRecoverPoolCloseInputs(pool: string): string[] {
  *     execute({ program: PROGRAM_ID, function: 'open_pool_distribution',
  *               inputs: buildOpenPoolDistributionInputs(invoiceHash) })
  *
- * PROGRAM_ADDRESS is the on-chain address of zk_factor_9597.aleo. Compute with:
- *   snarkos developer compute-program-address --program-id zk_factor_9597.aleo
+ * PROGRAM_ADDRESS is the on-chain address of zk_factor_12250.aleo. Compute with:
+ *   snarkos developer compute-program-address --program-id zk_factor_12250.aleo
  * and set VITE_PROGRAM_ADDRESS in your environment.
  */
 export function buildOpenPoolDistributionInputs(invoiceHash: string): string[] {

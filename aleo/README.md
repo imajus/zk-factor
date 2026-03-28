@@ -2,7 +2,7 @@
 
 Leo smart contract for confidential invoice factoring on Aleo. Prevents double-factoring fraud cryptographically — once an invoice is factored, its serial number is spent on-chain and reuse is impossible.
 
-**Program ID:** `zk_factor_11765.aleo` · **Network:** testnet
+**Program ID:** `zk_factor_12250.aleo` · **Network:** testnet
 
 ## Prerequisites
 
