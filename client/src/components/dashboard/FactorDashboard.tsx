@@ -37,7 +37,7 @@ import { useWallet } from "@/contexts/WalletContext";
 import { useTransaction } from "@/hooks/use-transaction";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { PROGRAM_ID, API_ENDPOINT } from "@/lib/config";
+import { PROGRAM_ID, API_ENDPOINT, USDCX_PROGRAM_ID } from "@/lib/config";
 import {
   type AleoRecord,
   getPersistedInvoiceCurrency,
@@ -192,12 +192,20 @@ export function FactorDashboard() {
     else if (status === "pending")
       toast.loading("Broadcasting…", { id: "tx-op" });
     else if (status === "accepted") {
+      const acceptedHash = pendingAcceptedCurrencyRef.current?.invoiceHash;
       if (pendingAcceptedCurrencyRef.current) {
         persistInvoiceCurrency(
           pendingAcceptedCurrencyRef.current.invoiceHash,
           pendingAcceptedCurrencyRef.current.currency,
         );
         pendingAcceptedCurrencyRef.current = null;
+      }
+      if (acceptedHash) {
+        setExecutingOffers((prev) => {
+          const next = { ...prev };
+          delete next[acceptedHash];
+          return next;
+        });
       }
       toast.success("Transaction confirmed!", { id: "tx-op" });
       queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
@@ -299,6 +307,22 @@ export function FactorDashboard() {
     }));
 
     if (currency === "USDCx") {
+      const advanceRateBps = parseInt(
+        getField(record.recordPlaintext, "advance_rate"),
+        10,
+      );
+      const advanceAmount = Math.floor(
+        (amountMicro * advanceRateBps) / 10000,
+      );
+      toast.loading("Step 1/2: Approving USDCx spend\u2026", { id: "tx-op" });
+      await execute({
+        program: USDCX_PROGRAM_ID,
+        function: "approve_public",
+        inputs: [PROGRAM_ID, `${advanceAmount}u128`],
+        fee: 50_000,
+        privateFee: false,
+      });
+      toast.loading("Step 2/2: Executing factoring\u2026", { id: "tx-op" });
       await execute({
         program: PROGRAM_ID,
         function: "execute_factoring_token",

@@ -406,11 +406,14 @@ program zk_factor_9597.aleo {
     // Inputs:    FactoringOffer (owned by factor)
     // Outputs:   FactoredInvoice (owned by factor)
     //
-    // USDCx uses ARC-20 public balances — no private record is passed in.
-    // The token contract deducts from the factor's public balance and credits
-    // the business's public balance atomically within the same transaction.
+    // PREREQUISITE: Factor must first call test_usdcx_stablecoin.aleo/approve_public
+    //               to approve this program as spender for at least the advance amount.
+    //               This is a separate transaction (approve + execute pattern).
     //
-    // NOTE: test_usdcx_stablecoin.aleo/transfer_public expects (receiver: address, amount: u128).
+    // USDCx uses ARC-20 public balances — no private record is passed in.
+    // The program calls transfer_from_public to move tokens from the factor's
+    // balance to the business's balance, using the pre-approved allowance.
+    //
     // Both credits.aleo microcredits and USDCx use 6 decimal places, so
     // advance_amount in microcredits == advance_amount in USDCx micro-units (1:1 scale).
     // Adjust if the deployed USDCx program uses a different denomination.
@@ -444,7 +447,7 @@ program zk_factor_9597.aleo {
             recourse: offer.recourse,    // Carry through from offer
         };
 
-        let transfer_future: Future = test_usdcx_stablecoin.aleo/transfer_public(offer.original_creditor, advance_amount as u128);
+        let transfer_future: Future = test_usdcx_stablecoin.aleo/transfer_from_public(self.caller, offer.original_creditor, advance_amount as u128);
 
         return (factored, finalize_exec_factoring_token(self.caller, offer.invoice_hash, transfer_future));
     }

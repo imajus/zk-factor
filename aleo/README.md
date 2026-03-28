@@ -34,7 +34,7 @@ All tests are local — no network connection needed, no gas spent.
 ## Deploy
 
 ```bash
-leo deploy --network testnet
+leo deploy --network testnet --broadcast -y
 ```
 
 First deployment takes 5–10 minutes for key synthesis. Costs ~1.9 ALEO.
