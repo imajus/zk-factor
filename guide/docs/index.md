@@ -25,5 +25,4 @@ ZK Factor lets businesses sell unpaid invoices to factors for immediate cash —
 ### Features
 - [Attach Documents](features/documents.md) — Upload supporting files via IPFS
 <!-- - [Email Notifications](features/notifications.md) — Stay informed about your invoices -->
-
 - [USDCx Payments](features/usdcx.md) — Pay with stablecoins instead of ALEO

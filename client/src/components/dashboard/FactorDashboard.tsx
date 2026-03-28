@@ -93,6 +93,7 @@ export function FactorDashboard() {
     queryFn: () => requestRecords(PROGRAM_ID, true),
     enabled: isConnected,
     staleTime: 60_000,
+    refetchOnMount: "always",
   });
 
   const factoredRecords = ((records as AleoRecord[]) ?? []).filter(

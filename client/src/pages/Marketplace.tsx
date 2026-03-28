@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Search,
   Users,
@@ -63,8 +63,13 @@ import {
   upsertPoolCreation,
   upsertPoolContribution,
 } from "@/lib/pool-directory";
+import {
+  removePendingFactoringRequest,
+  upsertPendingFactoringRequest,
+} from "@/lib/pending-factoring";
 
 export default function Marketplace() {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { isConnected, requestRecords, activeRole, address } = useWallet();
   const { execute, status, error: txError, reset } = useTransaction();
@@ -103,6 +108,7 @@ export default function Marketplace() {
     owner: string;
     targetAmountMicro: number;
   } | null>(null);
+  const pendingFactoringHashRef = useRef<string | null>(null);
 
   const {
     data: factors,
@@ -207,10 +213,13 @@ export default function Marketplace() {
       toast.loading("Generating proof…", { id: opId });
     else if (status === "pending") toast.loading("Broadcasting…", { id: opId });
     else if (status === "accepted") {
+      const shouldRedirectToDashboard = pendingAction === "factor";
+
       if (pendingAction === "factor") {
         toast.success("Invoice factored successfully!", { id: opId });
         setDialogOpen(false);
         pendingFactorModeRef.current = null;
+        pendingFactoringHashRef.current = null;
       }
 
       if (pendingAction === "create-pool" && pendingPoolCreateRef.current) {
@@ -245,6 +254,13 @@ export default function Marketplace() {
 
       pendingActionRef.current = null;
       queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
+
+      if (shouldRedirectToDashboard) {
+        // Drop potentially stale cached records so dashboard renders fresh data.
+        queryClient.removeQueries({ queryKey: ["records", PROGRAM_ID] });
+        navigate("/dashboard?refresh=1", { replace: true });
+      }
+
       reset();
     } else if (status === "failed") {
       pendingPoolCreateRef.current = null;
@@ -254,6 +270,13 @@ export default function Marketplace() {
         defaultMessage = "Pool creation failed";
       } else if (pendingActionRef.current === "factor") {
         defaultMessage = "Factoring failed";
+        if (address && pendingFactoringHashRef.current) {
+          removePendingFactoringRequest(
+            address,
+            pendingFactoringHashRef.current,
+          );
+          pendingFactoringHashRef.current = null;
+        }
         if (
           pendingFactorModeRef.current?.usePartial &&
           typeof txError === "string" &&
@@ -274,7 +297,15 @@ export default function Marketplace() {
       setWithdrawingPoolHash(null);
       reset();
     }
-  }, [status, txError, queryClient, reset, address, contributePoolData]);
+  }, [
+    status,
+    txError,
+    queryClient,
+    reset,
+    address,
+    contributePoolData,
+    navigate,
+  ]);
 
   const getMyPoolShare = (invoiceHash: string): AleoRecord | null => {
     if (!address) return null;
@@ -365,12 +396,31 @@ export default function Marketplace() {
     );
     if (!invoice) return;
     const currency = getInvoiceCurrency(invoice);
+    const invoiceHash = getField(invoice.recordPlaintext, "invoice_hash");
+    const debtor = getField(invoice.recordPlaintext, "debtor");
+    const dueDateUnix = parseInt(
+      getField(invoice.recordPlaintext, "due_date").replace(/u64$/, ""),
+      10,
+    );
     const useToken = currency === "USDCx";
     const invoiceAmountMicro = parseInvoiceAmountMicro(invoice);
     const usePartial = wantsPartial && partialAmountMicro < invoiceAmountMicro;
     const functionName = usePartial
       ? "authorize_partial_factoring"
       : "authorize_factoring";
+
+    if (address) {
+      upsertPendingFactoringRequest(address, {
+        invoiceHash,
+        factorAddress: selectedFactor.address,
+        debtor,
+        amountMicro: usePartial ? partialAmountMicro : invoiceAmountMicro,
+        currency,
+        dueDateUnix,
+        requestedAt: Date.now(),
+      });
+      pendingFactoringHashRef.current = invoiceHash;
+    }
 
     pendingActionRef.current = "factor";
     pendingFactorModeRef.current = { usePartial };
@@ -1163,194 +1213,204 @@ export default function Marketplace() {
               </DialogHeader>
 
               {selectedPool && (
-                <div className="space-y-4 text-sm">
-                  {(() => {
-                    const stats = getPoolStats(selectedPool);
-                    const isFullyFunded = stats.percent >= 100;
-                    const isBusiness = activeRole === "business";
-                    const isFactorRole = activeRole === "factor";
-                    return (
-                      <>
-                        <div className="rounded-md border bg-muted/30 p-3 space-y-1">
-                          <p className="text-muted-foreground text-xs">
-                            Pool Name
-                          </p>
-                          <p className="font-medium">
-                            {selectedPool.poolName ?? "Untitled Pool"}
-                          </p>
-                        </div>
-
-                        <div className="rounded-md border bg-muted/30 p-3 space-y-2">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-muted-foreground">
-                              Pool ID
-                            </span>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-7 w-7"
-                              onClick={() =>
-                                copyPoolField(
-                                  selectedPool.invoiceHash,
-                                  "Pool ID",
-                                )
-                              }
-                            >
-                              {copiedPoolField === "Pool ID" ? (
-                                <Check className="h-4 w-4 text-green-600" />
-                              ) : (
-                                <Copy className="h-4 w-4" />
-                              )}
-                            </Button>
-                          </div>
-                          <p className="font-mono text-xs break-all">
-                            {selectedPool.invoiceHash}
-                          </p>
-                        </div>
-
-                        <div className="rounded-md border bg-muted/30 p-3 space-y-2">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-muted-foreground">
-                              Pool Owner
-                            </span>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-7 w-7"
-                              onClick={() =>
-                                copyPoolField(selectedPool.owner, "Pool Owner")
-                              }
-                            >
-                              {copiedPoolField === "Pool Owner" ? (
-                                <Check className="h-4 w-4 text-green-600" />
-                              ) : (
-                                <Copy className="h-4 w-4" />
-                              )}
-                            </Button>
-                          </div>
-                          <AddressDisplay
-                            address={selectedPool.owner}
-                            chars={8}
-                            showExplorer
-                          />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="rounded-md border p-3">
-                            <p className="text-muted-foreground text-xs">
-                              Target
-                            </p>
-                            <p className="font-mono font-medium">
-                              {formatMicroToAleo(
-                                selectedPool.targetAmountMicro,
-                              )}{" "}
-                              ALEO
-                            </p>
-                          </div>
-                          <div className="rounded-md border p-3">
-                            <p className="text-muted-foreground text-xs">
-                              Raised
-                            </p>
-                            <p className="font-mono font-medium">
-                              {formatMicroToAleo(stats.raisedMicro)} ALEO
-                            </p>
-                          </div>
-                          <div className="rounded-md border p-3">
-                            <p className="text-muted-foreground text-xs">
-                              Remaining
-                            </p>
-                            <p className="font-mono font-medium">
-                              {formatMicroToAleo(stats.remainingMicro)} ALEO
-                            </p>
-                          </div>
-                          <div className="rounded-md border p-3">
-                            <p className="text-muted-foreground text-xs">
-                              Contributors
-                            </p>
-                            <p className="font-medium">
-                              {selectedPool.participants.length}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="space-y-1">
-                          <div className="flex items-center justify-between text-xs text-muted-foreground">
-                            <span>Progress</span>
-                            <span>{stats.percent}%</span>
-                          </div>
-                          <Progress value={stats.percent} className="h-2" />
-                        </div>
-
-                        {factorByAddress.get(selectedPool.owner) && (
-                          <p className="text-xs text-muted-foreground">
-                            Owner stats: Factored{" "}
-                            {factorByAddress
-                              .get(selectedPool.owner)
-                              ?.total_factored.toLocaleString()}{" "}
-                            | Rate range{" "}
-                            {(
-                              factorByAddress.get(selectedPool.owner)!
-                                .min_advance_rate / 100
-                            ).toFixed(2)}
-                            % -
-                            {(
-                              factorByAddress.get(selectedPool.owner)!
-                                .max_advance_rate / 100
-                            ).toFixed(2)}
-                            %
-                          </p>
-                        )}
-                      </>
-                    );
-                  })()}
-
-                  <div>
-                    <p className="text-muted-foreground mb-2">
-                      Contributing Factors
-                    </p>
-                    {selectedPool.participants.length === 0 ? (
-                      <p className="text-xs text-muted-foreground">
-                        No contributions recorded yet.
-                      </p>
-                    ) : (
-                      <div className="space-y-2">
-                        {selectedPool.participants.map((participant) => {
-                          const factor = factorByAddress.get(
-                            participant.address,
-                          );
-                          return (
-                            <div
-                              key={`${selectedPool.invoiceHash}-${participant.address}`}
-                              className="rounded-md border p-2"
-                            >
-                              <div className="flex items-center justify-between gap-2">
-                                <AddressDisplay
-                                  address={participant.address}
-                                  chars={5}
-                                  showExplorer
-                                />
-                                <span className="font-medium">
-                                  {formatMicroToAleo(
-                                    participant.contributedMicro,
-                                  )}{" "}
-                                  ALEO
-                                </span>
-                              </div>
-                              {factor && (
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  Active factor | Factored:{" "}
-                                  {factor.total_factored.toLocaleString()} |
-                                  Range:{" "}
-                                  {(factor.min_advance_rate / 100).toFixed(2)}%
-                                  - {(factor.max_advance_rate / 100).toFixed(2)}
-                                  %
-                                </p>
-                              )}
+                <>
+                  <div className="space-y-4 text-sm">
+                    {(() => {
+                      const stats = getPoolStats(selectedPool);
+                      const isFullyFunded = stats.percent >= 100;
+                      const isBusiness = activeRole === "business";
+                      const isFactorRole = activeRole === "factor";
+                      return (
+                        <>
+                          <div className="rounded-md border bg-muted/30 p-3 space-y-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-muted-foreground">
+                                Invoice Hash
+                              </span>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7"
+                                onClick={() =>
+                                  copyPoolField(
+                                    selectedPool.invoiceHash,
+                                    "Invoice Hash",
+                                  )
+                                }
+                              >
+                                {copiedPoolField === "Invoice Hash" ? (
+                                  <Check className="h-4 w-4 text-green-600" />
+                                ) : (
+                                  <Copy className="h-4 w-4" />
+                                )}
+                              </Button>
                             </div>
-                          );
-                        })}
-                      </div>
-                    )}
+                            <p className="font-mono text-xs break-all">
+                              {selectedPool.invoiceHash}
+                            </p>
+                          </div>
+
+                          <div className="rounded-md border bg-muted/30 p-3 space-y-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-muted-foreground">
+                                Pool Owner
+                              </span>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7"
+                                onClick={() =>
+                                  copyPoolField(
+                                    selectedPool.owner,
+                                    "Pool Owner",
+                                  )
+                                }
+                              >
+                                {copiedPoolField === "Pool Owner" ? (
+                                  <Check className="h-4 w-4 text-green-600" />
+                                ) : (
+                                  <Copy className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </div>
+                            <AddressDisplay
+                              address={selectedPool.owner}
+                              chars={8}
+                              showExplorer
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="rounded-md border p-3">
+                              <p className="text-muted-foreground text-xs">
+                                Target
+                              </p>
+                              <p className="font-mono font-medium">
+                                {formatMicroToAleo(
+                                  selectedPool.targetAmountMicro,
+                                )}{" "}
+                                ALEO
+                              </p>
+                            </div>
+                            <div className="rounded-md border p-3">
+                              <p className="text-muted-foreground text-xs">
+                                Raised
+                              </p>
+                              <p className="font-mono font-medium">
+                                {formatMicroToAleo(stats.raisedMicro)} ALEO
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="rounded-md border p-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-muted-foreground text-xs">
+                                Pool Status
+                              </span>
+                              <Badge
+                                variant="outline"
+                                className={
+                                  selectedPool.isClosed
+                                    ? "text-emerald-600 border-emerald-300"
+                                    : isFullyFunded
+                                      ? "text-amber-700 border-amber-300"
+                                      : "text-blue-700 border-blue-300"
+                                }
+                              >
+                                {selectedPool.isClosed
+                                  ? "Completed"
+                                  : isFullyFunded
+                                    ? "Funded"
+                                    : "Open"}
+                              </Badge>
+                            </div>
+                            <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+                              <span>Remaining</span>
+                              <span className="font-mono">
+                                {formatMicroToAleo(stats.remainingMicro)} ALEO
+                              </span>
+                            </div>
+                            <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+                              <span>Contributors</span>
+                              <span>{selectedPool.participants.length}</span>
+                            </div>
+                            <div className="mt-2">
+                              <Progress
+                                value={stats.percent}
+                                className="h-1.5"
+                              />
+                              <p className="mt-1 text-right text-xs text-muted-foreground">
+                                {stats.percent}% funded
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="rounded-md border p-3 space-y-2">
+                            <p className="text-muted-foreground text-xs">
+                              Participants
+                            </p>
+                            {selectedPool.participants.length === 0 ? (
+                              <p className="text-xs text-muted-foreground">
+                                No contributions yet.
+                              </p>
+                            ) : (
+                              <div className="space-y-2">
+                                {selectedPool.participants.map(
+                                  (participant) => {
+                                    const factor = factorByAddress.get(
+                                      participant.address,
+                                    );
+                                    return (
+                                      <div
+                                        key={`${selectedPool.invoiceHash}-${participant.address}`}
+                                        className="rounded-md border bg-muted/30 p-2"
+                                      >
+                                        <div className="flex items-center justify-between gap-2">
+                                          <AddressDisplay
+                                            address={participant.address}
+                                            chars={5}
+                                            showExplorer
+                                          />
+                                          <span className="font-mono text-xs font-medium">
+                                            {formatMicroToAleo(
+                                              participant.contributedMicro,
+                                            )}{" "}
+                                            ALEO
+                                          </span>
+                                        </div>
+                                        {factor && (
+                                          <p className="mt-1 text-xs text-muted-foreground">
+                                            Active factor | Factored:{" "}
+                                            {factor.total_factored.toLocaleString()}{" "}
+                                            | Range:{" "}
+                                            {(
+                                              factor.min_advance_rate / 100
+                                            ).toFixed(2)}
+                                            % -{" "}
+                                            {(
+                                              factor.max_advance_rate / 100
+                                            ).toFixed(2)}
+                                            %
+                                          </p>
+                                        )}
+                                      </div>
+                                    );
+                                  },
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          <p className="text-xs text-muted-foreground">
+                            {isBusiness
+                              ? "Business can sell an invoice to this pool owner while pool is open."
+                              : isFactorRole
+                                ? "Factors can contribute until fully funded, then owner executes the pool."
+                                : "Select a role to interact with this pool."}
+                          </p>
+                        </>
+                      );
+                    })()}
                   </div>
 
                   <DialogFooter>
@@ -1434,7 +1494,7 @@ export default function Marketplace() {
                       </>
                     )}
                   </DialogFooter>
-                </div>
+                </>
               )}
             </DialogContent>
           </Dialog>

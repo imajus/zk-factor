@@ -102,7 +102,6 @@ client/
 │   │   ├── format.ts           # Display formatting utilities
 │   │   ├── ipfs.ts             # IPFS upload via Pinata presigned URLs + cidToField
 │   │   ├── mock-data.ts        # Mock data for development
-│   │   ├── notifications.ts    # Email notifications via Resend
 │   │   └── utils.ts            # Utility functions (cn, etc.)
 │   ├── pages/
 │   │   ├── About.tsx           # About page

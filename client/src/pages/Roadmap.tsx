@@ -121,11 +121,6 @@ const phases: Phase[] = [
       { label: "Multi-chain bridge support", done: false },
       {
         label:
-          "Debtor notification system (privacy-preserving payment instructions)",
-        done: false,
-      },
-      {
-        label:
           "White-label deployment options for enterprise factoring companies",
         done: false,
       },

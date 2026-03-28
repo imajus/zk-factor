@@ -6,7 +6,7 @@ React frontend for ZK Factor: a confidential invoice factoring platform built on
 
 Invoice records live as private, UTXO-like records on-chain. When a business factors an invoice, the record is consumed and its serial number is published. Any attempt to factor the same invoice a second time fails at the protocol level — it is cryptographically impossible, not just policy.
 
-The frontend interacts with the `zk_factor_11765.aleo` program deployed on Aleo testnet. All sensitive data (invoice amounts, debtor identity, business relationships) stays encrypted inside private records. Only the occurrence of a transaction is visible on-chain.
+The frontend interacts with the `zk_factor_***.aleo` program deployed on Aleo testnet. All sensitive data (invoice amounts, debtor identity, business relationships) stays encrypted inside private records. Only the occurrence of a transaction is visible on-chain.
 
 ## User roles
 
@@ -54,7 +54,7 @@ Create a `.env` file in this directory:
 
 ```bash
 VITE_ALEO_NETWORK=testnet                          # testnet | mainnet | canary
-VITE_ALEO_PROGRAM_ID=zk_factor_11765.aleo          # on-chain program to interact with
+VITE_ALEO_PROGRAM_ID=zk_factor_***.aleo          # on-chain program to interact with
 VITE_API_ENDPOINT=https://api.explorer.aleo.org/v1 # Aleo explorer REST base URL
 VITE_ALEO_EXPLORER=https://testnet.explorer.provable.com
 ```
@@ -74,12 +74,19 @@ src/
 │   └── WalletContext.tsx  # Thin facade over the Aleo wallet adapter
 ├── hooks/             # use-mobile, use-toast
 ├── lib/
-│   ├── format.ts      # Formatting helpers (formatAleo, formatDate, …)
-│   └── utils.ts       # Tailwind class merger (cn)
+│   ├── aleo-factors.ts    # Factor status and registry logic
+│   ├── config.ts          # Network and program configuration
+│   ├── format.ts          # Formatting helpers (formatAleo, formatDate, …)
+│   ├── ipfs.ts            # IPFS upload logic (Pinata)
+│   ├── pool-directory.ts  # Off-chain directory for factor pools
+│   └── utils.ts           # Tailwind class merger (cn)
 ├── pages/
 │   ├── CreateInvoice.tsx  # mint_invoice form
+│   ├── InvoicePending.tsx # Success view for invoice creation
 │   ├── Invoices.tsx       # Record browser + settle action
-│   ├── Marketplace.tsx    # Active factors + factor_invoice flow
+│   ├── Marketplace.tsx    # Active factors, pools, and factoring flows
+│   ├── Pools.tsx          # Manage factor pool contributions
+│   ├── SelectRole.tsx     # Initial user onboarding
 │   ├── Transactions.tsx   # Transaction history
 │   ├── Settings.tsx       # Factor registration + preferences
 │   └── Dashboard.tsx      # Role-based landing page
@@ -99,6 +106,6 @@ src/
 
 ## Smart contract
 
-Program ID: `zk_factor_11765.aleo`, deployed on Aleo testnet.
+Program ID: `zk_factor_***.aleo`, deployed on Aleo testnet.
 
 See [`../aleo/`](../aleo/) for the Leo source code and [`../docs/PRD.md`](../docs/PRD.md) for the full product specification.

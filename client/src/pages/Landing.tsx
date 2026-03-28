@@ -156,7 +156,7 @@ export default function Landing() {
             Built on Aleo · Powered by ZK Proofs
           </Badge>
 
-          <h1 className="stagger-in stagger-in-2 text-shimmer text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight max-w-3xl mx-auto leading-[1.1]">
+          <h1 className="stagger-in stagger-in-2 text-shimmer text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight max-w-3xl mx-auto leading-tight">
             Confidential Invoice Factoring on Aleo
           </h1>
 

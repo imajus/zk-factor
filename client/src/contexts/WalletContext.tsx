@@ -54,17 +54,25 @@ const AppWalletContext = createContext<AppWalletContextType | undefined>(
 
 function WalletContextInner({ children }: { children: ReactNode }) {
   const [activeRole, setActiveRoleState] = useState<UserRole>(null);
-  const [resolvingRole, setResolvingRole] = useState(false);
   const adapter = useAdapterWallet();
+  // Track which address we've finished resolving — derive resolvingRole
+  // synchronously during render so child effects (e.g. WalletConnect) see
+  // it immediately, avoiding a race where navigation fires before the role
+  // is restored from localStorage / on-chain.
+  const [resolvedAddress, setResolvedAddress] = useState<string | null>(null);
+  const resolvingRole =
+    adapter.connected && !!adapter.address && adapter.address !== resolvedAddress;
 
   useEffect(() => {
     if (!adapter.connected || !adapter.address) {
-      if (!adapter.connected) setActiveRoleState(null);
+      if (!adapter.connected) {
+        setActiveRoleState(null);
+        setResolvedAddress(null);
+      }
       return;
     }
 
     const stored = localStorage.getItem(roleStorageKey(adapter.address));
-    setResolvingRole(true);
 
     fetchFactorStatus(adapter.address)
       .then((status) => {
@@ -83,7 +91,7 @@ function WalletContextInner({ children }: { children: ReactNode }) {
         setActiveRoleState(null);
       })
       .finally(() => {
-        setResolvingRole(false);
+        setResolvedAddress(adapter.address!);
       });
   }, [adapter.connected, adapter.address]);
 
