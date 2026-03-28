@@ -76,6 +76,11 @@ export function BusinessDashboard() {
   } | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
+  const shortenMiddle = (value: string, start = 10, end = 8) => {
+    if (value.length <= start + end + 3) return value;
+    return `${value.slice(0, start)}...${value.slice(-end)}`;
+  };
+
   const {
     data: records,
     isLoading,
@@ -843,6 +848,9 @@ export function BusinessDashboard() {
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
           </Button>
+          <Button variant="outline" asChild>
+            <Link to="/marketplace">Choose Factors</Link>
+          </Button>
           <Button asChild>
             <Link to="/invoices/create">
               <Plus className="h-4 w-4 mr-2" />
@@ -950,9 +958,12 @@ export function BusinessDashboard() {
                 <label className="text-sm font-medium text-muted-foreground">
                   Invoice Hash
                 </label>
-                <div className="flex items-center justify-between gap-2 p-3 rounded-md bg-muted/50 border border-border">
-                  <span className="font-mono text-xs break-all">
-                    {selectedInvoice.invoiceHash}
+                <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-md bg-muted/50 border border-border">
+                  <span
+                    className="font-mono text-xs truncate"
+                    title={selectedInvoice.invoiceHash}
+                  >
+                    {shortenMiddle(selectedInvoice.invoiceHash)}
                   </span>
                   <Button
                     variant="ghost"
@@ -978,9 +989,12 @@ export function BusinessDashboard() {
                 <label className="text-sm font-medium text-muted-foreground">
                   Debtor
                 </label>
-                <div className="flex items-center justify-between gap-2 p-3 rounded-md bg-muted/50 border border-border">
-                  <span className="font-mono text-xs break-all">
-                    {selectedInvoice.debtor}
+                <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-md bg-muted/50 border border-border">
+                  <span
+                    className="font-mono text-xs truncate"
+                    title={selectedInvoice.debtor}
+                  >
+                    {shortenMiddle(selectedInvoice.debtor)}
                   </span>
                   <Button
                     variant="ghost"
@@ -1003,7 +1017,7 @@ export function BusinessDashboard() {
                 <label className="text-sm font-medium text-muted-foreground">
                   Amount
                 </label>
-                <div className="flex items-center justify-between gap-2 p-3 rounded-md bg-muted/50 border border-border">
+                <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-md bg-muted/50 border border-border">
                   <span className="font-mono font-semibold text-sm">
                     {selectedInvoice.amount} {selectedInvoice.currency}
                   </span>
@@ -1031,7 +1045,7 @@ export function BusinessDashboard() {
                 <label className="text-sm font-medium text-muted-foreground">
                   Due Date
                 </label>
-                <div className="flex items-center justify-between gap-2 p-3 rounded-md bg-muted/50 border border-border">
+                <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-md bg-muted/50 border border-border">
                   <span className="text-sm">
                     {formatDate(selectedInvoice.dueDate)}
                   </span>
