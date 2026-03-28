@@ -24,12 +24,6 @@ export const ALEO_EXPLORER =
 export const USDCX_PROGRAM_ID: string =
   import.meta.env.VITE_USDCX_PROGRAM_ID ?? "test_usdcx_stablecoin.aleo";
 
-// Resend API key for email notifications
-// Set VITE_RESEND_API_KEY in your .env
-// NOTE: in production, proxy Resend calls through a backend/edge function
-// to avoid exposing the API key in the browser bundle.
-export const RESEND_API_KEY: string = import.meta.env.VITE_RESEND_API_KEY ?? "";
-
 export type PaymentCurrency = "ALEO" | "USDCx";
 
 export const WHITELISTED_PROGRAMS: string[] = [

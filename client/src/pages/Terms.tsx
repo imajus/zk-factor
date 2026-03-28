@@ -263,9 +263,6 @@ export default function Terms() {
             <strong>Pinata / IPFS</strong> — document storage for invoice
             attachments
           </li>
-          <li>
-            <strong>Resend</strong> — transactional email notifications
-          </li>
         </ul>
         <p>
           We are not responsible for the availability, security, or practices of
