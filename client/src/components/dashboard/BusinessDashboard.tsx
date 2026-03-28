@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import {
   FileText,
   TrendingUp,
-  Clock,
   CheckCircle2,
   Plus,
   RefreshCw,
@@ -53,10 +52,11 @@ import {
   microToAleo,
   unixToDate,
 } from "@/lib/aleo-records";
+import { listPendingFactoringRequests } from "@/lib/pending-factoring";
 
 export function BusinessDashboard() {
   const queryClient = useQueryClient();
-  const { isConnected, requestRecords } = useWallet();
+  const { isConnected, requestRecords, address } = useWallet();
   const { execute, status, error: txError, reset } = useTransaction();
   const [settlingId, setSettlingId] = useState<string | null>(null);
   const [settledHashes, setSettledHashes] = useState<Set<string>>(new Set());
@@ -107,6 +107,9 @@ export function BusinessDashboard() {
   const recourseNoticeRecords = ((records as AleoRecord[]) ?? []).filter(
     (r) => r.recordName === "RecourseNotice" && !r.spent,
   );
+  const pendingFactoringRequests = address
+    ? listPendingFactoringRequests(address)
+    : [];
 
   const getInvoiceCurrency = (record: AleoRecord): "ALEO" | "USDCx" => {
     const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
@@ -344,8 +347,8 @@ export function BusinessDashboard() {
       icon: <TrendingUp className="h-5 w-5 text-primary" />,
     },
     {
-      title: "Factored",
-      value: isLoading ? "…" : String(factoredRecords.length),
+      title: "Pending Offers",
+      value: isLoading ? "…" : String(pendingFactoringRequests.length),
       icon: <CheckCircle2 className="h-5 w-5 text-primary" />,
     },
     {
@@ -645,7 +648,7 @@ export function BusinessDashboard() {
     );
   };
 
-  const renderOfferCards = () => {
+  const renderPendingCards = () => {
     if (isLoading) {
       return (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -662,13 +665,13 @@ export function BusinessDashboard() {
         </div>
       );
     }
-    if (offerRecords.length === 0) {
+    if (pendingFactoringRequests.length === 0) {
       return (
         <Card className="py-16 text-center">
           <CardContent>
             <p className="font-medium">No pending offers</p>
             <p className="text-sm text-muted-foreground mt-1">
-              Browse the marketplace to request factoring
+              Invoices awaiting factor acceptance will appear here
             </p>
           </CardContent>
         </Card>
@@ -676,39 +679,31 @@ export function BusinessDashboard() {
     }
     return (
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {offerRecords.map((record, idx) => {
-          const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
-          const aleoAmount = microToAleo(
-            getField(record.recordPlaintext, "amount") || "0u64",
-          );
-          const rate =
-            parseInt(
-              getField(record.recordPlaintext, "advance_rate").replace(
-                /u16$/,
-                "",
-              ),
-              10,
-            ) / 100;
-          const originalCreditor = getField(
-            record.recordPlaintext,
-            "original_creditor",
-          );
-          const recordId = record.commitment ?? invoiceHash;
-          const isAccepting = settlingId === recordId;
+        {pendingFactoringRequests.map((request, idx) => {
+          const dueDate = new Date(request.dueDateUnix * 1000);
+          const daysUntil = getDaysUntilDue(dueDate);
           return (
             <Card
-              key={invoiceHash || idx}
+              key={request.invoiceHash || idx}
               className="hover:border-primary/50 transition-colors"
             >
               <CardContent className="pt-4 space-y-3">
                 <span className="font-mono text-sm text-muted-foreground">
-                  {invoiceHash.slice(0, 12)}…
+                  {request.invoiceHash.slice(0, 12)}…
                 </span>
                 <div className="space-y-1 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Business</span>
+                    <span className="text-muted-foreground">Factor</span>
                     <AddressDisplay
-                      address={originalCreditor}
+                      address={request.factorAddress}
+                      chars={4}
+                      showExplorer
+                    />
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Debtor</span>
+                    <AddressDisplay
+                      address={request.debtor}
                       chars={4}
                       showExplorer
                     />
@@ -716,26 +711,44 @@ export function BusinessDashboard() {
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Amount</span>
                     <span className="font-mono font-medium">
-                      {aleoAmount.toLocaleString(undefined, {
-                        maximumFractionDigits: 6,
-                      })}{" "}
-                      ALEO
+                      {(request.amountMicro / 1_000_000).toLocaleString(
+                        undefined,
+                        {
+                          maximumFractionDigits: 6,
+                        },
+                      )}{" "}
+                      {request.currency}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Rate</span>
-                    <span>{rate.toFixed(2)}%</span>
+                    <span className="text-muted-foreground">Due</span>
+                    <div className="text-right">
+                      <span>{formatDate(dueDate)}</span>
+                      <span
+                        className={cn(
+                          "ml-2 text-xs",
+                          daysUntil < 0
+                            ? "text-destructive"
+                            : daysUntil < 7
+                              ? "text-warning"
+                              : "text-muted-foreground",
+                        )}
+                      >
+                        {daysUntil > 0
+                          ? `${daysUntil}d`
+                          : daysUntil === 0
+                            ? "today"
+                            : `${Math.abs(daysUntil)}d overdue`}
+                      </span>
+                    </div>
                   </div>
                 </div>
-                <Button
-                  size="sm"
-                  className="w-full"
-                  onClick={() => handleAcceptOffer(record)}
-                  disabled={isAccepting}
+                <Badge
+                  variant="outline"
+                  className="text-xs text-amber-700 border-amber-300"
                 >
-                  <FileCheck className="h-4 w-4 mr-2" />
-                  {isAccepting ? "Processing…" : "Accept Offer"}
-                </Button>
+                  Awaiting Factor Approval
+                </Badge>
               </CardContent>
             </Card>
           );
@@ -914,6 +927,14 @@ export function BusinessDashboard() {
               </span>
             )}
           </TabsTrigger>
+          <TabsTrigger value="pending">
+            Pending Offers
+            {!isLoading && pendingFactoringRequests.length > 0 && (
+              <span className="ml-1.5 text-xs opacity-70">
+                ({pendingFactoringRequests.length})
+              </span>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="recourse">
             Recourse
             {!isLoading && recourseNoticeRecords.length > 0 && (
@@ -930,6 +951,10 @@ export function BusinessDashboard() {
 
         <TabsContent value="factored" className="mt-4">
           {renderFactoredCards()}
+        </TabsContent>
+
+        <TabsContent value="pending" className="mt-4">
+          {renderPendingCards()}
         </TabsContent>
 
         <TabsContent value="recourse" className="mt-4">

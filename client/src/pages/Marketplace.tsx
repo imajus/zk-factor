@@ -63,6 +63,10 @@ import {
   upsertPoolCreation,
   upsertPoolContribution,
 } from "@/lib/pool-directory";
+import {
+  removePendingFactoringRequest,
+  upsertPendingFactoringRequest,
+} from "@/lib/pending-factoring";
 
 export default function Marketplace() {
   const navigate = useNavigate();
@@ -105,6 +109,7 @@ export default function Marketplace() {
     owner: string;
     targetAmountMicro: number;
   } | null>(null);
+  const pendingFactoringHashRef = useRef<string | null>(null);
 
   const {
     data: factors,
@@ -220,7 +225,7 @@ export default function Marketplace() {
         toast.success("Invoice factored successfully!", { id: opId });
         setDialogOpen(false);
         pendingFactorModeRef.current = null;
-        navigate("/dashboard", { replace: true });
+        pendingFactoringHashRef.current = null;
       }
 
       if (pendingAction === "create-pool" && pendingPoolCreateRef.current) {
@@ -269,6 +274,13 @@ export default function Marketplace() {
         defaultMessage = "Pool creation failed";
       } else if (pendingActionRef.current === "factor") {
         defaultMessage = "Factoring failed";
+        if (address && pendingFactoringHashRef.current) {
+          removePendingFactoringRequest(
+            address,
+            pendingFactoringHashRef.current,
+          );
+          pendingFactoringHashRef.current = null;
+        }
         if (
           pendingFactorModeRef.current?.usePartial &&
           typeof txError === "string" &&
@@ -409,12 +421,31 @@ export default function Marketplace() {
     );
     if (!invoice) return;
     const currency = getInvoiceCurrency(invoice);
+    const invoiceHash = getField(invoice.recordPlaintext, "invoice_hash");
+    const debtor = getField(invoice.recordPlaintext, "debtor");
+    const dueDateUnix = parseInt(
+      getField(invoice.recordPlaintext, "due_date").replace(/u64$/, ""),
+      10,
+    );
     const useToken = currency === "USDCx";
     const invoiceAmountMicro = parseInvoiceAmountMicro(invoice);
     const usePartial = wantsPartial && partialAmountMicro < invoiceAmountMicro;
     const functionName = usePartial
       ? "authorize_partial_factoring"
       : "authorize_factoring";
+
+    if (address) {
+      upsertPendingFactoringRequest(address, {
+        invoiceHash,
+        factorAddress: selectedFactor.address,
+        debtor,
+        amountMicro: usePartial ? partialAmountMicro : invoiceAmountMicro,
+        currency,
+        dueDateUnix,
+        requestedAt: Date.now(),
+      });
+      pendingFactoringHashRef.current = invoiceHash;
+    }
 
     pendingActionRef.current = "factor";
     pendingFactorModeRef.current = { usePartial };
