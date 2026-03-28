@@ -1,3 +1,117 @@
+// Dialog for creating a new pool
+function PoolCreateDialog() {
+  const [open, setOpen] = useState(false);
+  const [poolName, setPoolName] = useState("");
+  const [poolInvoiceHash, setPoolInvoiceHash] = useState("");
+  const [poolTargetAleo, setPoolTargetAleo] = useState("");
+  const queryClient = useQueryClient();
+  const { address } = useWallet();
+  const { execute, status, reset } = useTransaction();
+  const [creating, setCreating] = useState(false);
+
+  const handleCreatePool = async () => {
+    setCreating(true);
+    try {
+      // Pool ID: use provided or generate
+      const poolId = poolInvoiceHash.trim() || `${Date.now()}${Math.floor(Math.random() * 1_000_000)}field`;
+      const targetMicro = Math.round(Number(poolTargetAleo) * 1_000_000).toString();
+      // Simulate on-chain creation (replace with actual logic if needed)
+      // upsertPoolCreation({ invoiceHash: poolId, poolName, owner: address ?? "", targetAmountMicro: Number(targetMicro) });
+      await execute({
+        program: PROGRAM_ID,
+        function: "create_pool", // Replace with actual function if needed
+        inputs: [poolId, targetMicro],
+        fee: 80_000,
+        privateFee: false,
+      });
+      setOpen(false);
+      setPoolName("");
+      setPoolInvoiceHash("");
+      setPoolTargetAleo("");
+      queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
+    } catch (err) {
+      // Handle error (toast, etc.)
+    } finally {
+      setCreating(false);
+      reset();
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm" className="gap-2">
+          <Plus className="h-4 w-4" />
+          Create Pool
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Create Pool</DialogTitle>
+          <DialogDescription>
+            Create a generic liquidity pool so other factors can join and increase your purchasing capacity.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label htmlFor="pool-name">Pool Name</Label>
+            <Input
+              id="pool-name"
+              value={poolName}
+              onChange={(e) => setPoolName(e.target.value)}
+              placeholder="e.g. FastPay Growth Pool"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="pool-invoice-hash">Pool ID</Label>
+            <Input
+              id="pool-invoice-hash"
+              value={poolInvoiceHash}
+              onChange={(e) => setPoolInvoiceHash(e.target.value)}
+              placeholder="Optional - auto generated if empty"
+              className="font-mono"
+            />
+            <p className="text-xs text-muted-foreground">
+              Technical on-chain identifier. Leave blank for auto ID.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="pool-target">Target Amount (ALEO)</Label>
+            <Input
+              id="pool-target"
+              type="number"
+              min="0"
+              step="0.000001"
+              value={poolTargetAleo}
+              onChange={(e) => setPoolTargetAleo(e.target.value)}
+              placeholder="100.0"
+            />
+            <p className="text-xs text-muted-foreground">
+              This target is your pool liquidity cap, not a single invoice assignment.
+            </p>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setOpen(false)} disabled={creating}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleCreatePool}
+            disabled={
+              creating ||
+              !poolName.trim() ||
+              !poolTargetAleo.trim() ||
+              isNaN(Number(poolTargetAleo)) ||
+              Number(poolTargetAleo) <= 0
+            }
+          >
+            {creating ? "Creating..." : "Create Pool"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -13,6 +127,16 @@ import {
   Info,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -900,19 +1024,14 @@ export default function Pools() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button asChild>
-            <Link to="/marketplace">
-              <Plus className="h-4 w-4 mr-2" />
-              Create a Pool
-            </Link>
-          </Button>
           <Button variant="outline" size="sm" onClick={() => refetch()}>
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
           </Button>
-          <Button asChild>
+          <PoolCreateDialog />
+          <Button size="sm" asChild>
             <Link to="/dashboard">
-              <ChevronRight className="h-4 w-4 mr-2 rotate-180" />
+              <ChevronRight className="h-4 w-4 rotate-180" />
               Dashboard
             </Link>
           </Button>
