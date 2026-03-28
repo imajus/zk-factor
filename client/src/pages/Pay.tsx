@@ -29,7 +29,12 @@ import { useTransaction } from "@/hooks/use-transaction";
 import { useQuery } from "@tanstack/react-query";
 import { PROGRAM_ID, API_ENDPOINT } from "@/lib/config";
 import { cn } from "@/lib/utils";
-import { type AleoRecord, getField, microToAleo, unixToDate } from "@/lib/aleo-records";
+import {
+  type AleoRecord,
+  getField,
+  microToAleo,
+  unixToDate,
+} from "@/lib/aleo-records";
 
 export default function Pay() {
   const { isConnected, address, requestRecords } = useWallet();
@@ -55,6 +60,7 @@ export default function Pay() {
     (r) => r.recordName === "PaymentNotice" && !r.spent,
   );
 
+  // Check settled_invoices mapping for each notice on load
   useEffect(() => {
     if (!notices.length) return;
     const client = new AleoNetworkClient(API_ENDPOINT);
@@ -70,9 +76,10 @@ export default function Pay() {
           setSettledHashes((prev) => new Set([...prev, hash]));
         }
       } catch {
-        // not settled yet - ignore
+        // not settled yet — ignore
       }
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notices.length]);
 
   useEffect(() => {
@@ -87,43 +94,40 @@ export default function Pay() {
       reset();
       refetch();
     } else if (status === "failed") {
-      console.error("pay_invoice failed:", txError);
       toast.error(txError || "Payment failed", { id: "pay-invoice" });
       setPayingId(null);
       reset();
     }
   }, [status, txError, reset, payingId, refetch]);
 
+  /**
+   * Pays an invoice atomically in a single transaction.
+   *
+   * The updated pay_invoice transition calls credits.aleo/transfer_public_as_signer
+   * internally, so the credits debit AND the settlement mapping write happen in the
+   * same finalize block. There is no window for payment to succeed without settlement
+   * or vice versa.
+   *
+   * The debtor's public credits balance must be sufficient. If the wallet only has
+   * private records, the debtor should first call credits.aleo/transfer_private_to_public
+   * to convert an adequate amount.
+   */
   const handlePay = async (record: AleoRecord) => {
     const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
     const factor = getField(record.recordPlaintext, "factor");
-    const amount = getField(record.recordPlaintext, "amount").replace(
-      /u64$/,
-      "",
-    );
-
     setPayingId(invoiceHash);
 
     try {
-      toast.loading("Step 1/2: Sending payment…", { id: "pay-invoice" });
-      await execute({
-        program: "credits.aleo",
-        function: "transfer_public",
-        inputs: [factor, `${amount}u64`],
-        fee: 100_000,
-        privateFee: false,
-      });
-
-      toast.loading("Step 2/2: Recording settlement…", { id: "pay-invoice" });
       await execute({
         program: PROGRAM_ID,
         function: "pay_invoice",
+        // Inputs: notice record + factor address
+        // The transition internally calls transfer_public_as_signer(factor, notice.amount)
         inputs: [record.recordPlaintext, factor],
         fee: 100_000,
         privateFee: false,
       });
     } catch (err) {
-      console.error("pay_invoice threw:", err);
       toast.error(err instanceof Error ? err.message : "Payment failed", {
         id: "pay-invoice",
       });
@@ -136,10 +140,15 @@ export default function Pay() {
       <div className="container py-6 max-w-lg mx-auto space-y-6">
         <div>
           <h1 className="text-2xl font-bold">My Invoices</h1>
-          <p className="text-muted-foreground flex flex-wrap justify-center sm:justify-start items-center gap-2">
+          <p className="text-muted-foreground flex flex-wrap items-center gap-2">
             Connect your wallet to view invoices addressed to you.
-            <a href="/docs/debtor/pay-invoice" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
-               <Info className="h-3 w-3" /> Learn more
+            <a
+              href="/docs/debtor/pay-invoice"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              <Info className="h-3 w-3" /> Learn more
             </a>
           </p>
         </div>
@@ -163,8 +172,13 @@ export default function Pay() {
           <h1 className="text-2xl font-bold">My Invoices</h1>
           <p className="text-muted-foreground flex flex-wrap items-center gap-2">
             Invoices addressed to your wallet that are pending payment.
-            <a href="/docs/debtor/pay-invoice" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
-               <Info className="h-3 w-3" /> Learn more
+            <a
+              href="/docs/debtor/pay-invoice"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              <Info className="h-3 w-3" /> Learn more
             </a>
           </p>
         </div>
@@ -217,10 +231,7 @@ export default function Pay() {
       {!isLoading && notices.length > 0 && (
         <div className="space-y-3">
           {notices.map((record, idx) => {
-            const invoiceHash = getField(
-              record.recordPlaintext,
-              "invoice_hash",
-            );
+            const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
             const factor = getField(record.recordPlaintext, "factor");
             const amount = microToAleo(
               getField(record.recordPlaintext, "amount") || "0u64",
@@ -231,7 +242,6 @@ export default function Pay() {
             const daysUntil = getDaysUntilDue(dueDate);
             const isOverdue = daysUntil < 0;
             const isPaying = payingId === invoiceHash;
-            // Check both session memory AND on-chain mapping
             const isPaid =
               paidHashes.has(invoiceHash) || settledHashes.has(invoiceHash);
             const isExpanded = expandedHash === invoiceHash;
@@ -258,11 +268,7 @@ export default function Pay() {
                       </CardTitle>
                       <CardDescription className="flex items-center gap-1">
                         Pay to:{" "}
-                        <AddressDisplay
-                          address={factor}
-                          chars={6}
-                          showExplorer
-                        />
+                        <AddressDisplay address={factor} chars={6} showExplorer />
                       </CardDescription>
                     </div>
                     <div className="text-right shrink-0">
@@ -280,15 +286,15 @@ export default function Pay() {
                             isOverdue
                               ? "text-destructive font-medium"
                               : daysUntil < 7
-                                ? "text-yellow-600"
-                                : "text-muted-foreground",
+                              ? "text-yellow-600"
+                              : "text-muted-foreground",
                           )}
                         >
                           {isOverdue
                             ? `${Math.abs(daysUntil)} days overdue`
                             : daysUntil === 0
-                              ? "Due today"
-                              : `Due ${formatDate(dueDate)}`}
+                            ? "Due today"
+                            : `Due ${formatDate(dueDate)}`}
                         </span>
                         {isExpanded ? (
                           <ChevronUp className="h-3 w-3 text-muted-foreground ml-1" />
@@ -323,29 +329,21 @@ export default function Pay() {
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Due Date</span>
                         <span
-                          className={
-                            isOverdue ? "text-destructive font-medium" : ""
-                          }
+                          className={isOverdue ? "text-destructive font-medium" : ""}
                         >
                           {dueDate.toLocaleDateString()}
                           {isOverdue && " (Overdue)"}
                         </span>
                       </div>
                       <div className="flex justify-between items-center">
-                        <span className="text-muted-foreground">
-                          Factor Address
-                        </span>
-                        <AddressDisplay
-                          address={factor}
-                          chars={8}
-                          showExplorer
-                        />
+                        <span className="text-muted-foreground">Factor Address</span>
+                        <AddressDisplay address={factor} chars={8} showExplorer />
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">
-                          Payment Method
+                        <span className="text-muted-foreground">Payment Method</span>
+                        <span className="text-xs">
+                          credits.aleo public balance (atomic settlement)
                         </span>
-                        <span className="text-xs">credits.aleo (public)</span>
                       </div>
                     </div>
                   )}
@@ -372,6 +370,7 @@ export default function Pay() {
                         {isOverdue ? "Overdue" : "Pending"}
                       </Badge>
                     )}
+
                     <Button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -383,10 +382,10 @@ export default function Pay() {
                       {isPaying
                         ? "Processing…"
                         : isPaid
-                          ? "Paid"
-                          : `Pay ${amount.toLocaleString(undefined, {
-                              maximumFractionDigits: 2,
-                            })} ALEO`}
+                        ? "Paid"
+                        : `Pay ${amount.toLocaleString(undefined, {
+                            maximumFractionDigits: 2,
+                          })} ALEO`}
                     </Button>
                   </div>
                 </CardContent>
@@ -397,8 +396,9 @@ export default function Pay() {
       )}
 
       <p className="text-xs text-center text-muted-foreground">
-        These invoices are encrypted in your wallet - only you can see them.
-        Powered by Aleo private records.
+        Payment deducts from your public credits balance and marks the invoice
+        settled atomically in a single transaction. Powered by Aleo private
+        records.
       </p>
     </div>
   );

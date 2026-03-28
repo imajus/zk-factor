@@ -6,6 +6,7 @@ export interface PoolParticipant {
 
 export interface PoolDirectoryEntry {
   invoiceHash: string;
+  poolName?: string;
   owner: string;
   targetAmountMicro: number;
   isClosed: boolean;
@@ -34,6 +35,7 @@ function writeDirectory(value: Record<string, PoolDirectoryEntry>): void {
 
 export function upsertPoolCreation(input: {
   invoiceHash: string;
+  poolName?: string;
   owner: string;
   targetAmountMicro: number;
 }): void {
@@ -44,6 +46,7 @@ export function upsertPoolCreation(input: {
 
   existing[input.invoiceHash] = {
     invoiceHash: input.invoiceHash,
+    poolName: input.poolName ?? prev?.poolName,
     owner: input.owner,
     targetAmountMicro: input.targetAmountMicro,
     isClosed: prev?.isClosed ?? false,
@@ -56,6 +59,7 @@ export function upsertPoolCreation(input: {
 
 export function upsertPoolContribution(input: {
   invoiceHash: string;
+  poolName?: string;
   owner: string;
   targetAmountMicro?: number;
   contributor: string;
@@ -66,6 +70,7 @@ export function upsertPoolContribution(input: {
   const existing = readDirectory();
   const prev = existing[input.invoiceHash] ?? {
     invoiceHash: input.invoiceHash,
+    poolName: input.poolName,
     owner: input.owner,
     targetAmountMicro: input.targetAmountMicro ?? 0,
     isClosed: false,
@@ -85,6 +90,7 @@ export function upsertPoolContribution(input: {
 
   existing[input.invoiceHash] = {
     ...prev,
+    poolName: input.poolName ?? prev.poolName,
     owner: input.owner,
     targetAmountMicro:
       input.targetAmountMicro !== undefined

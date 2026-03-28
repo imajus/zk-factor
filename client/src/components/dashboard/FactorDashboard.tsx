@@ -37,7 +37,7 @@ import { useWallet } from "@/contexts/WalletContext";
 import { useTransaction } from "@/hooks/use-transaction";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { PROGRAM_ID, API_ENDPOINT } from "@/lib/config";
+import { PROGRAM_ID, API_ENDPOINT, USDCX_PROGRAM_ID } from "@/lib/config";
 import {
   type AleoRecord,
   getPersistedInvoiceCurrency,
@@ -192,6 +192,7 @@ export function FactorDashboard() {
     else if (status === "pending")
       toast.loading("Broadcasting…", { id: "tx-op" });
     else if (status === "accepted") {
+      const acceptedHash = pendingAcceptedCurrencyRef.current?.invoiceHash;
       if (pendingAcceptedCurrencyRef.current) {
         persistInvoiceCurrency(
           pendingAcceptedCurrencyRef.current.invoiceHash,
@@ -199,13 +200,28 @@ export function FactorDashboard() {
         );
         pendingAcceptedCurrencyRef.current = null;
       }
+      if (acceptedHash) {
+        setExecutingOffers((prev) => {
+          const next = { ...prev };
+          delete next[acceptedHash];
+          return next;
+        });
+      }
       toast.success("Transaction confirmed!", { id: "tx-op" });
       queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
       setSettlingId(null);
       setReclaimingId(null);
       reset();
     } else if (status === "failed") {
+      const failedHash = pendingAcceptedCurrencyRef.current?.invoiceHash;
       pendingAcceptedCurrencyRef.current = null;
+      if (failedHash) {
+        setExecutingOffers((prev) => {
+          const next = { ...prev };
+          delete next[failedHash];
+          return next;
+        });
+      }
       const msg = txError || "Transaction failed";
       toast.error(
         msg.includes("already settled") ? "Invoice already settled" : msg,
@@ -291,6 +307,22 @@ export function FactorDashboard() {
     }));
 
     if (currency === "USDCx") {
+      const advanceRateBps = parseInt(
+        getField(record.recordPlaintext, "advance_rate"),
+        10,
+      );
+      const advanceAmount = Math.floor(
+        (amountMicro * advanceRateBps) / 10000,
+      );
+      toast.loading("Step 1/2: Approving USDCx spend\u2026", { id: "tx-op" });
+      await execute({
+        program: USDCX_PROGRAM_ID,
+        function: "approve_public",
+        inputs: [PROGRAM_ID, `${advanceAmount}u128`],
+        fee: 50_000,
+        privateFee: false,
+      });
+      toast.loading("Step 2/2: Executing factoring\u2026", { id: "tx-op" });
       await execute({
         program: PROGRAM_ID,
         function: "execute_factoring_token",
@@ -638,13 +670,13 @@ export function FactorDashboard() {
     return (
       <div className="space-y-4">
         {executingList.length > 0 && (
-          <Card className="border-amber-300 bg-amber-50">
+          <Card className="border-amber-400/50 bg-amber-50 dark:bg-amber-950/30">
             <CardContent className="pt-4 space-y-3">
-              <div className="flex items-center gap-2 text-amber-900">
+              <div className="flex items-center gap-2 text-amber-900 dark:text-amber-300">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 <p className="font-medium">Executing on-chain</p>
               </div>
-              <p className="text-sm text-amber-800">
+              <p className="text-sm text-amber-800 dark:text-amber-400">
                 Accepted offers are being verified and indexed. They will move
                 to Portfolio once finalized.
               </p>
@@ -652,14 +684,14 @@ export function FactorDashboard() {
                 {executingList.map((item) => (
                   <div
                     key={item.invoiceHash}
-                    className="rounded-md border border-amber-300 bg-amber-100/60 p-3"
+                    className="rounded-md border border-amber-300/60 bg-amber-100/60 dark:bg-amber-900/20 p-3"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="space-y-1">
-                        <p className="font-mono text-xs text-amber-900">
+                        <p className="font-mono text-xs text-amber-900 dark:text-amber-300">
                           {item.invoiceHash.slice(0, 12)}…
                         </p>
-                        <p className="text-sm text-amber-900">
+                        <p className="text-sm text-amber-900 dark:text-amber-300">
                           {microToAleo(`${item.amountMicro}u64`).toLocaleString(
                             undefined,
                             { maximumFractionDigits: 6 },
@@ -669,7 +701,7 @@ export function FactorDashboard() {
                       </div>
                       <Badge
                         variant="outline"
-                        className="text-amber-800 border-amber-400"
+                        className="text-amber-800 border-amber-400 dark:text-amber-400 dark:border-amber-600"
                       >
                         <Clock3 className="h-3.5 w-3.5 mr-1" />
                         Verifying

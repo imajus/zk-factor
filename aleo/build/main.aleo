@@ -78,6 +78,7 @@ struct SettlementInfo:
     is_settled as boolean;
     settlement_date as u64;
     factor as address;
+    amount as u64;
 
 mapping active_factors:
     key as address.public;
@@ -106,6 +107,14 @@ mapping pool_owners:
 mapping pool_closed:
     key as field.public;
     value as boolean.public;
+
+mapping pool_proceeds:
+    key as field.public;
+    value as u64.public;
+
+mapping pool_distributed:
+    key as field.public;
+    value as u64.public;
 
 mapping factor_addresses__:
     key as u32.public;
@@ -284,7 +293,7 @@ function execute_factoring_token:
     cast r5 into r6 as u64;
     cast self.caller r0.original_creditor r0.debtor r0.amount r6 r0.due_date 0u64 r0.advance_rate r0.invoice_hash r0.recourse into r7 as FactoredInvoice.record;
     cast r6 into r8 as u128;
-    call test_usdcx_stablecoin.aleo/transfer_public r0.original_creditor r8 into r9;
+    call test_usdcx_stablecoin.aleo/transfer_from_public self.caller r0.original_creditor r8 into r9;
     async execute_factoring_token self.caller r0.invoice_hash r9 into r10;
     output r7 as FactoredInvoice.record;
     output r10 as zk_factor_9597.aleo/execute_factoring_token.future;
@@ -292,7 +301,7 @@ function execute_factoring_token:
 finalize execute_factoring_token:
     input r0 as address.public;
     input r1 as field.public;
-    input r2 as test_usdcx_stablecoin.aleo/transfer_public.future;
+    input r2 as test_usdcx_stablecoin.aleo/transfer_from_public.future;
     await r2;
     get active_factors[r0] into r3;
     assert.eq r3.is_active true;
@@ -307,21 +316,22 @@ function settle_invoice:
     input r0 as FactoredInvoice.record;
     is.eq r0.owner self.caller into r1;
     assert.eq r1 true;
-    async settle_invoice r0.invoice_hash self.caller into r2;
+    async settle_invoice r0.invoice_hash self.caller r0.amount into r2;
     output r2 as zk_factor_9597.aleo/settle_invoice.future;
 
 finalize settle_invoice:
     input r0 as field.public;
     input r1 as address.public;
-    contains settled_invoices[r0] into r2;
-    not r2 into r3;
-    assert.eq r3 true;
-    cast block.timestamp into r4 as u64;
-    cast true r4 r1 into r5 as SettlementInfo;
-    set r5 into settled_invoices[r0];
-    get.or_use protocol_stats[2u8] 0u64 into r6;
-    add r6 1u64 into r7;
-    set r7 into protocol_stats[2u8];
+    input r2 as u64.public;
+    contains settled_invoices[r0] into r3;
+    not r3 into r4;
+    assert.eq r4 true;
+    cast block.timestamp into r5 as u64;
+    cast true r5 r1 r2 into r6 as SettlementInfo;
+    set r6 into settled_invoices[r0];
+    get.or_use protocol_stats[2u8] 0u64 into r7;
+    add r7 1u64 into r8;
+    set r8 into protocol_stats[2u8];
 
 function create_payment_request:
     input r0 as FactoredInvoice.record;
@@ -339,23 +349,26 @@ function pay_invoice:
     assert.eq r2 true;
     is.eq r0.factor r1 into r3;
     assert.eq r3 true;
-    async pay_invoice r0.invoice_hash self.caller r0.amount r1 into r4;
-    output r4 as zk_factor_9597.aleo/pay_invoice.future;
+    call credits.aleo/transfer_public_as_signer r1 r0.amount into r4;
+    async pay_invoice r0.invoice_hash self.caller r0.amount r1 r4 into r5;
+    output r5 as zk_factor_9597.aleo/pay_invoice.future;
 
 finalize pay_invoice:
     input r0 as field.public;
     input r1 as address.public;
     input r2 as u64.public;
     input r3 as address.public;
-    contains settled_invoices[r0] into r4;
-    not r4 into r5;
-    assert.eq r5 true;
-    cast block.timestamp into r6 as u64;
-    cast true r6 r3 into r7 as SettlementInfo;
-    set r7 into settled_invoices[r0];
-    get.or_use protocol_stats[2u8] 0u64 into r8;
-    add r8 1u64 into r9;
-    set r9 into protocol_stats[2u8];
+    input r4 as credits.aleo/transfer_public_as_signer.future;
+    contains settled_invoices[r0] into r5;
+    not r5 into r6;
+    assert.eq r6 true;
+    cast block.timestamp into r7 as u64;
+    cast true r7 r3 r2 into r8 as SettlementInfo;
+    set r8 into settled_invoices[r0];
+    get.or_use protocol_stats[2u8] 0u64 into r9;
+    add r9 1u64 into r10;
+    set r10 into protocol_stats[2u8];
+    await r4;
 
 function initiate_recourse:
     input r0 as FactoredInvoice.record;
@@ -536,29 +549,70 @@ finalize recover_pool_close:
     assert.eq r10 true;
     set true into pool_closed[r1];
 
+function open_pool_distribution:
+    input r0 as field.private;
+    async open_pool_distribution self.caller r0 into r1;
+    output r1 as zk_factor_9597.aleo/open_pool_distribution.future;
+
+finalize open_pool_distribution:
+    input r0 as address.public;
+    input r1 as field.public;
+    get pool_owners[r1] into r2;
+    is.eq r2 r0 into r3;
+    assert.eq r3 true;
+    get settled_invoices[r1] into r4;
+    assert.eq r4.is_settled true;
+    gt r4.amount 0u64 into r5;
+    assert.eq r5 true;
+    get.or_use pool_closed[r1] false into r6;
+    assert.eq r6 true;
+    contains pool_proceeds[r1] into r7;
+    not r7 into r8;
+    assert.eq r8 true;
+    set r4.amount into pool_proceeds[r1];
+    set 0u64 into pool_distributed[r1];
+
 function claim_pool_proceeds:
     input r0 as PoolShare.record;
-    input r1 as credits.aleo/credits.record;
-    gt r0.total_pool 0u64 into r2;
+    input r1 as u64.private;
+    gt r1 0u64 into r2;
     assert.eq r2 true;
-    mul r0.contributed 10000u64 into r3;
-    div r3 r0.total_pool into r4;
-    mul r1.microcredits r4 into r5;
-    div r5 10000u64 into r6;
-    gte r1.microcredits r6 into r7;
-    assert.eq r7 true;
-    call credits.aleo/transfer_private r1 r0.owner r6 into r8 r9;
-    async claim_pool_proceeds r0.invoice_hash into r10;
-    output r8 as credits.aleo/credits.record;
-    output r9 as credits.aleo/credits.record;
-    output r10 as zk_factor_9597.aleo/claim_pool_proceeds.future;
+    gt r0.contributed 0u64 into r3;
+    assert.eq r3 true;
+    call credits.aleo/transfer_public_to_private r0.owner r1 into r4 r5;
+    async claim_pool_proceeds r0.invoice_hash r0.contributed r1 r5 into r6;
+    output r4 as credits.aleo/credits.record;
+    output r6 as zk_factor_9597.aleo/claim_pool_proceeds.future;
 
 finalize claim_pool_proceeds:
     input r0 as field.public;
-    get settled_invoices[r0] into r1;
-    assert.eq r1.is_settled true;
-    get.or_use pool_closed[r0] false into r2;
-    assert.eq r2 true;
+    input r1 as u64.public;
+    input r2 as u64.public;
+    input r3 as credits.aleo/transfer_public_to_private.future;
+    get settled_invoices[r0] into r4;
+    assert.eq r4.is_settled true;
+    get.or_use pool_closed[r0] false into r5;
+    assert.eq r5 true;
+    get pool_proceeds[r0] into r6;
+    gt r6 0u64 into r7;
+    assert.eq r7 true;
+    get pool_contributions[r0] into r8;
+    gt r8 0u64 into r9;
+    assert.eq r9 true;
+    cast r6 into r10 as u128;
+    cast r1 into r11 as u128;
+    mul r10 r11 into r12;
+    cast r8 into r13 as u128;
+    div r12 r13 into r14;
+    cast r14 into r15 as u64;
+    is.eq r2 r15 into r16;
+    assert.eq r16 true;
+    get.or_use pool_distributed[r0] 0u64 into r17;
+    add r17 r2 into r18;
+    lte r18 r6 into r19;
+    assert.eq r19 true;
+    set r18 into pool_distributed[r0];
+    await r3;
 
 constructor:
     assert.eq program_owner aleo19rn544c49da9z2vz52q5f7lm7nsjhp890ahmre6cz94qawdscgps6kq3cu;
