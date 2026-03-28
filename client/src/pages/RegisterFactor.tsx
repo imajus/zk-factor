@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Info } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { ArrowLeft, Info, CheckCircle2 } from "lucide-react";
 import { FactorIcon } from "@/components/icons/RoleIcons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Card,
   CardContent,
@@ -14,15 +16,23 @@ import {
 } from "@/components/ui/card";
 import { useWallet } from "@/contexts/WalletContext";
 import { useTransaction } from "@/hooks/use-transaction";
+import { fetchFactorStatus } from "@/lib/aleo-factors";
 import { toast } from "sonner";
 import { PROGRAM_ID } from "@/lib/config";
 
 export default function RegisterFactor() {
   const navigate = useNavigate();
-  const { setActiveRole } = useWallet();
+  const { address, setActiveRole } = useWallet();
   const { execute, status, error: txError, reset } = useTransaction();
   const [minRate, setMinRate] = useState("");
   const [maxRate, setMaxRate] = useState("");
+  const { data: factorStatus, isLoading: checkingStatus } = useQuery({
+    queryKey: ["factor_status", address],
+    queryFn: () => fetchFactorStatus(address!),
+    enabled: !!address,
+    staleTime: 30_000,
+  });
+  const alreadyRegistered = !!factorStatus?.is_active;
 
   const minRateBps = minRate ? parseInt(minRate, 10) : 0;
   const maxRateBps = maxRate ? parseInt(maxRate, 10) : 0;
@@ -34,6 +44,7 @@ export default function RegisterFactor() {
     minRateBps <= maxRateBps;
 
   const isSubmitting = status !== "idle";
+  const formDisabled = isSubmitting || alreadyRegistered;
 
   useEffect(() => {
     if (status === "submitting") {
@@ -89,6 +100,18 @@ export default function RegisterFactor() {
           </p>
         </div>
 
+        {alreadyRegistered && (
+          <Alert>
+            <CheckCircle2 className="h-4 w-4" />
+            <AlertTitle>Already registered</AlertTitle>
+            <AlertDescription>
+              You are already registered as a factor with advance rates{" "}
+              {(factorStatus!.min_advance_rate / 100).toFixed(0)}%–
+              {(factorStatus!.max_advance_rate / 100).toFixed(0)}%.
+            </AlertDescription>
+          </Alert>
+        )}
+
         <Card>
           <CardHeader>
             <CardTitle>Advance Rate Configuration</CardTitle>
@@ -109,7 +132,7 @@ export default function RegisterFactor() {
                   onChange={(e) => setMinRate(e.target.value)}
                   min="5000"
                   max="9900"
-                  disabled={isSubmitting}
+                  disabled={formDisabled}
                 />
               </div>
               <div className="space-y-2">
@@ -122,7 +145,7 @@ export default function RegisterFactor() {
                   onChange={(e) => setMaxRate(e.target.value)}
                   min="5000"
                   max="9900"
-                  disabled={isSubmitting}
+                  disabled={formDisabled}
                 />
               </div>
             </div>
@@ -142,10 +165,16 @@ export default function RegisterFactor() {
 
             <Button
               onClick={handleRegister}
-              disabled={!registrationValid || isSubmitting}
+              disabled={!registrationValid || formDisabled}
               className="w-full"
             >
-              {isSubmitting ? "Registering…" : "Register on-chain"}
+              {checkingStatus
+                ? "Checking registration…"
+                : isSubmitting
+                  ? "Registering…"
+                  : alreadyRegistered
+                    ? "Already registered"
+                    : "Register on-chain"}
             </Button>
           </CardContent>
         </Card>

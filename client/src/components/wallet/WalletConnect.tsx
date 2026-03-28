@@ -176,13 +176,21 @@ export function WalletConnect() {
               ) : (
                 <Button
                   onClick={handleConnect}
-                  disabled={isConnectingUi}
+                  disabled={isConnectingUi || (isConnected && resolvingRole)}
                   className="w-full gap-2"
                   size="lg"
                 >
-                  <Wallet className="h-5 w-5" />
-                  {isConnectingUi ? "Connecting..." : "Connect Shield Wallet"}
-                  {!isConnectingUi && <ArrowRight className="h-4 w-4" />}
+                  {(isConnectingUi || (isConnected && resolvingRole)) ? (
+                    <div className="h-5 w-5 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                  ) : (
+                    <Wallet className="h-5 w-5" />
+                  )}
+                  {isConnectingUi
+                    ? "Connecting..."
+                    : (isConnected && resolvingRole)
+                      ? "Setting up…"
+                      : "Connect Shield Wallet"}
+                  {!isConnectingUi && !(isConnected && resolvingRole) && <ArrowRight className="h-4 w-4" />}
                 </Button>
               )}
 
