@@ -437,7 +437,7 @@ export function FactorDashboard() {
             </div>
             <Button asChild>
               <Link to="/marketplace">
-                <Search className="h-4 w-4 mr-2" />
+                <Search className="h-4 w-4" />
                 Browse Invoices
               </Link>
             </Button>
@@ -506,14 +506,14 @@ export function FactorDashboard() {
                           isSettled || paymentRequestedHashes.has(invoiceHash)
                         }
                       >
-                        <Receipt className="h-4 w-4 mr-2" />
+                        <Receipt className="h-4 w-4" />
                         Request Payment from Debtor
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         onClick={() => handleSettle(record)}
                         disabled={isSettling || isSettled}
                       >
-                        <CheckCircle className="h-4 w-4 mr-2" />
+                        <CheckCircle className="h-4 w-4" />
                         {isSettling ? "Settling…" : "Settle"}
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
@@ -525,7 +525,7 @@ export function FactorDashboard() {
                           )
                         }
                       >
-                        <ExternalLink className="h-4 w-4 mr-2" />
+                        <ExternalLink className="h-4 w-4" />
                         View on Explorer
                       </DropdownMenuItem>
                     </DropdownMenuContent>
@@ -776,7 +776,7 @@ export function FactorDashboard() {
                       onClick={() => handleAcceptOffer(record)}
                       disabled={isAccepting}
                     >
-                      <FileCheck className="h-4 w-4 mr-2" />
+                      <FileCheck className="h-4 w-4" />
                       {isAccepting ? "Processing…" : "Accept Offer"}
                     </Button>
                   </CardContent>
@@ -887,19 +887,13 @@ export function FactorDashboard() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => refetch()}>
-            <RefreshCw className="h-4 w-4 mr-2" />
+            <RefreshCw className="h-4 w-4" />
             Refresh
           </Button>
           <Button variant="outline" size="sm" asChild>
             <Link to="/pools">
-              <Users className="h-4 w-4 mr-2" />
+              <Users className="h-4 w-4" />
               Pools
-            </Link>
-          </Button>
-          <Button asChild>
-            <Link to="/marketplace">
-              <Search className="h-4 w-4 mr-2" />
-              Browse Invoices
             </Link>
           </Button>
         </div>
