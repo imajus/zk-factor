@@ -31,7 +31,7 @@ ALEO_DIR="$(dirname "$SCRIPT_DIR")"
 
 source "$ALEO_DIR/.env"
 
-PROGRAM_ID="zk_factor_9596.aleo"
+PROGRAM_ID="zk_factor_12250.aleo"
 SKIP_SETTLE="${SKIP_SETTLE:-0}"
 DRY_RUN="${DRY_RUN:-0}"
 

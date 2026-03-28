@@ -541,7 +541,7 @@ assert(notice.factor == factor);
 
 ### Smart Contract Upgrade Procedure
 
-ZK-Factor uses program versioning for upgrades (e.g., `zk_factor_9593.aleo`). Because constructor logic and record structures are immutable once deployed, breaking changes require a new program name.
+ZK-Factor uses program versioning for upgrades (e.g., `zk_factor_12250.aleo`). Because constructor logic and record structures are immutable once deployed, breaking changes require a new program name.
 
 **What Can Be Upgraded (same program name):**
 

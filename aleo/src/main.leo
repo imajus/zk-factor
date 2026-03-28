@@ -3,7 +3,7 @@
 import credits.aleo;
 import test_usdcx_stablecoin.aleo;
 
-program zk_factor_9597.aleo {
+program zk_factor_12250.aleo {
     // Simple admin-controlled upgradable constructor for MVP
     // Can be upgraded to multi-sig governance later
     // IMPORTANT: Replace with actual admin address before deployment
