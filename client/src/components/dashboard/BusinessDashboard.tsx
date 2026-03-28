@@ -984,7 +984,7 @@ export function BusinessDashboard() {
                 <label className="text-sm font-medium text-muted-foreground">
                   Invoice Hash
                 </label>
-                <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-md bg-muted/50 border border-border">
+                <div className="flex items-center justify-between gap-2 pl-3 rounded-md bg-muted/50 border border-border">
                   <span
                     className="font-mono text-xs truncate"
                     title={selectedInvoice.invoiceHash}
@@ -1015,7 +1015,7 @@ export function BusinessDashboard() {
                 <label className="text-sm font-medium text-muted-foreground">
                   Debtor
                 </label>
-                <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-md bg-muted/50 border border-border">
+                <div className="flex items-center justify-between gap-2 pl-3 rounded-md bg-muted/50 border border-border">
                   <span
                     className="font-mono text-xs truncate"
                     title={selectedInvoice.debtor}
@@ -1043,7 +1043,7 @@ export function BusinessDashboard() {
                 <label className="text-sm font-medium text-muted-foreground">
                   Amount
                 </label>
-                <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-md bg-muted/50 border border-border">
+                <div className="flex items-center justify-between gap-2 pl-3 rounded-md bg-muted/50 border border-border">
                   <span className="font-mono font-semibold text-sm">
                     {selectedInvoice.amount} {selectedInvoice.currency}
                   </span>
@@ -1071,7 +1071,7 @@ export function BusinessDashboard() {
                 <label className="text-sm font-medium text-muted-foreground">
                   Due Date
                 </label>
-                <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-md bg-muted/50 border border-border">
+                <div className="flex items-center justify-between gap-2 pl-3 rounded-md bg-muted/50 border border-border">
                   <span className="text-sm">
                     {formatDate(selectedInvoice.dueDate)}
                   </span>
@@ -1110,6 +1110,9 @@ export function BusinessDashboard() {
                   View on Explorer
                 </Button>
               )}
+              <Button asChild className="w-full">
+                <Link to="/marketplace">Choose a Factor</Link>
+              </Button>
             </div>
           )}
         </DialogContent>
