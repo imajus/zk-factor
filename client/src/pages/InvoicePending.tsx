@@ -1,12 +1,12 @@
 import { useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Loader2, Clock3, CheckCircle2 } from "lucide-react";
+import { Loader2, Clock3, CheckCircle2, ExternalLink } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useWallet } from "@/contexts/WalletContext";
-import { PROGRAM_ID } from "@/lib/config";
+import { ALEO_EXPLORER, PROGRAM_ID } from "@/lib/config";
 import { type AleoRecord, getField } from "@/lib/aleo-records";
 
 export default function InvoicePending() {
@@ -15,6 +15,11 @@ export default function InvoicePending() {
   const { requestRecords } = useWallet();
 
   const invoiceHash = searchParams.get("hash")?.trim() ?? "";
+  const shortInvoiceHash =
+    invoiceHash.length > 24
+      ? `${invoiceHash.slice(0, 14)}...${invoiceHash.slice(-10)}`
+      : invoiceHash;
+  const invoiceHashExplorerUrl = `${ALEO_EXPLORER}/search?query=${encodeURIComponent(invoiceHash)}`;
 
   const { data: isVisible, isLoading } = useQuery({
     queryKey: ["invoice-visible", PROGRAM_ID, invoiceHash],
@@ -56,22 +61,22 @@ export default function InvoicePending() {
           <div
             className={
               settled
-                ? "rounded-md border border-emerald-300 bg-emerald-50 p-4"
-                : "rounded-md border border-amber-300 bg-amber-50 p-4"
+                ? "rounded-md border border-emerald-300 bg-emerald-50 p-4 dark:border-emerald-900/60 dark:bg-emerald-950/20"
+                : "rounded-md border border-amber-300 bg-amber-50 p-4 dark:border-amber-900/60 dark:bg-amber-950/20"
             }
           >
             <div className="flex items-start gap-3">
               {settled ? (
-                <CheckCircle2 className="h-5 w-5 mt-0.5 text-emerald-600" />
+                <CheckCircle2 className="h-5 w-5 mt-0.5 text-emerald-600 dark:text-emerald-400" />
               ) : (
-                <Loader2 className="h-5 w-5 animate-spin mt-0.5 text-amber-600" />
+                <Loader2 className="h-5 w-5 animate-spin mt-0.5 text-amber-600 dark:text-amber-400" />
               )}
               <div className="space-y-1">
                 <p
                   className={
                     settled
-                      ? "font-medium text-emerald-900"
-                      : "font-medium text-amber-900"
+                      ? "font-medium text-emerald-900 dark:text-emerald-300"
+                      : "font-medium text-amber-900 dark:text-amber-300"
                   }
                 >
                   {settled ? "Invoice settled" : "Waiting for record sync"}
@@ -79,8 +84,8 @@ export default function InvoicePending() {
                 <p
                   className={
                     settled
-                      ? "text-sm text-emerald-800"
-                      : "text-sm text-amber-800"
+                      ? "text-sm text-emerald-800 dark:text-emerald-400"
+                      : "text-sm text-amber-800 dark:text-amber-400"
                   }
                 >
                   {settled
@@ -94,7 +99,16 @@ export default function InvoicePending() {
           {invoiceHash && (
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground">Invoice Hash</p>
-              <p className="font-mono text-xs break-all">{invoiceHash}</p>
+              <a
+                href={invoiceHashExplorerUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex max-w-full items-center gap-1.5 font-mono text-xs text-primary hover:underline"
+                title={invoiceHash}
+              >
+                <span className="truncate">{shortInvoiceHash}</span>
+                <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+              </a>
             </div>
           )}
 
