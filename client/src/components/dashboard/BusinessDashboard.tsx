@@ -63,6 +63,9 @@ export function BusinessDashboard() {
   const [settlingRecourseId, setSettlingRecourseId] = useState<string | null>(
     null,
   );
+  const [paymentRequestedHashes, setPaymentRequestedHashes] = useState<
+    Set<string>
+  >(new Set());
   const [selectedInvoice, setSelectedInvoice] = useState<{
     invoiceHash: string;
     debtor: string;
@@ -196,6 +199,7 @@ export function BusinessDashboard() {
   };
 
   const handleRequestPayment = async (record: AleoRecord) => {
+    const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
     try {
       await execute({
         program: PROGRAM_ID,
@@ -204,12 +208,14 @@ export function BusinessDashboard() {
         fee: 50_000,
         privateFee: false,
       });
+      setPaymentRequestedHashes((prev) => new Set(prev).add(invoiceHash));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes("already exists in the ledger")) {
         toast.error(
           "Already published - copy the link and send it to your debtor.",
         );
+        setPaymentRequestedHashes((prev) => new Set(prev).add(invoiceHash));
       } else {
         toast.error("Could not publish payment request. Try again.");
       }
@@ -562,7 +568,9 @@ export function BusinessDashboard() {
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem
                         onClick={() => handleRequestPayment(record)}
-                        disabled={isSettled}
+                        disabled={
+                          isSettled || paymentRequestedHashes.has(invoiceHash)
+                        }
                       >
                         <Receipt className="h-4 w-4 mr-2" />
                         Request Payment from Debtor

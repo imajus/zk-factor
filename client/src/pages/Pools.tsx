@@ -27,8 +27,11 @@ import { type AleoRecord, getField, microToAleo } from "@/lib/aleo-records";
 import {
   fetchPoolContributions,
   fetchPoolClosed,
+  fetchInvoiceSettled,
   buildContributeToPoolInputs,
   buildClaimPoolProceedsInputs,
+  buildExecutePoolFactoringInputs,
+  buildRecoverPoolCloseInputs,
 } from "@/lib/aleo-factors";
 import {
   listPoolDirectory,
@@ -54,6 +57,13 @@ export default function Pools() {
   const [contributePoolOwner, setContributePoolOwner] = useState("");
   const [contributeAmountAleo, setContributeAmountAleo] = useState("");
   const [isContributing, setIsContributing] = useState(false);
+  const [claimingShareId, setClaimingShareId] = useState<string | null>(null);
+  const [executingPoolHash, setExecutingPoolHash] = useState<string | null>(
+    null,
+  );
+  const [recoveringPoolHash, setRecoveringPoolHash] = useState<string | null>(
+    null,
+  );
 
   // Per-pool live metadata (contributions + closed status)
   const [poolMetas, setPoolMetas] = useState<Record<string, PoolMeta>>({});
@@ -90,6 +100,12 @@ export default function Pools() {
   const totalVisiblePools = poolRecords.length + directoryOnlyPools.length;
   const poolShareRecords = ((records as AleoRecord[]) ?? []).filter(
     (r) => r.recordName === "PoolShare" && !r.spent,
+  );
+  const offerRecords = ((records as AleoRecord[]) ?? []).filter(
+    (r) => r.recordName === "FactoringOffer" && !r.spent,
+  );
+  const factoredRecords = ((records as AleoRecord[]) ?? []).filter(
+    (r) => r.recordName === "FactoredInvoice" && !r.spent,
   );
 
   // Load live on-chain metadata for all Pool records
@@ -139,11 +155,17 @@ export default function Pools() {
       setContributeInvoiceHash("");
       setContributePoolOwner("");
       setContributeAmountAleo("");
+      setClaimingShareId(null);
+      setExecutingPoolHash(null);
+      setRecoveringPoolHash(null);
       reset();
     } else if (status === "failed") {
       setPendingPoolContribution(null);
       toast.error(txError || "Transaction failed", { id: "pool-op" });
       setIsContributing(false);
+      setClaimingShareId(null);
+      setExecutingPoolHash(null);
+      setRecoveringPoolHash(null);
       reset();
     }
   }, [status, txError, queryClient, reset]);
@@ -223,14 +245,149 @@ export default function Pools() {
   };
 
   const handleClaimProceeds = async (share: AleoRecord) => {
-    const inputs = buildClaimPoolProceedsInputs(share.recordPlaintext);
-    await execute({
-      program: PROGRAM_ID,
-      function: "claim_pool_proceeds",
-      inputs,
-      fee: 80_000,
-      privateFee: false,
-    });
+    const shareId =
+      share.commitment ?? getField(share.recordPlaintext, "invoice_hash");
+    const invoiceHash = getField(share.recordPlaintext, "invoice_hash");
+    setClaimingShareId(shareId);
+
+    try {
+      const [isClosed, isSettled, creditsRecords] = await Promise.all([
+        fetchPoolClosed(invoiceHash),
+        fetchInvoiceSettled(invoiceHash),
+        requestRecords("credits.aleo", true) as Promise<AleoRecord[]>,
+      ]);
+
+      if (!isClosed) {
+        toast.error(
+          "Pool funding may be complete, but pool owner still needs to execute pool factoring before payouts are claimable.",
+        );
+        setClaimingShareId(null);
+        return;
+      }
+
+      if (!isSettled) {
+        toast.error(
+          "Invoice is not settled yet. Wait until debtor payment is confirmed.",
+        );
+        setClaimingShareId(null);
+        return;
+      }
+
+      const paymentRecord = creditsRecords
+        .filter((r) => !r.spent)
+        .find(
+          (r) =>
+            BigInt(
+              getField(r.recordPlaintext, "microcredits").replace(/u64$/, ""),
+            ) > 0n,
+        );
+
+      if (!paymentRecord) {
+        toast.error(
+          "No spendable credits record found for payout transaction.",
+        );
+        setClaimingShareId(null);
+        return;
+      }
+
+      const inputs = buildClaimPoolProceedsInputs(
+        share.recordPlaintext,
+        paymentRecord.recordPlaintext,
+      );
+
+      await execute({
+        program: PROGRAM_ID,
+        function: "claim_pool_proceeds",
+        inputs,
+        fee: 80_000,
+        privateFee: false,
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Claim proceeds failed");
+      setClaimingShareId(null);
+    }
+  };
+
+  const handleExecutePoolFactoring = async (
+    poolRecord: AleoRecord,
+    offerRecord: AleoRecord,
+  ) => {
+    const invoiceHash = getField(poolRecord.recordPlaintext, "invoice_hash");
+    setExecutingPoolHash(invoiceHash);
+
+    try {
+      const offerAmount = BigInt(
+        getField(offerRecord.recordPlaintext, "amount").replace(/u64$/, ""),
+      );
+      const advanceRate = BigInt(
+        getField(offerRecord.recordPlaintext, "advance_rate").replace(
+          /u16$/,
+          "",
+        ),
+      );
+      const advanceAmount = (offerAmount * advanceRate) / 10000n;
+
+      const creditsRecords = (await requestRecords(
+        "credits.aleo",
+        true,
+      )) as AleoRecord[];
+      const paymentRecord = creditsRecords
+        .filter((r) => !r.spent)
+        .find(
+          (r) =>
+            BigInt(
+              getField(r.recordPlaintext, "microcredits").replace(/u64$/, ""),
+            ) >= advanceAmount,
+        );
+
+      if (!paymentRecord) {
+        toast.error("Insufficient credits to execute pool factoring.");
+        setExecutingPoolHash(null);
+        return;
+      }
+
+      await execute({
+        program: PROGRAM_ID,
+        function: "execute_pool_factoring",
+        inputs: buildExecutePoolFactoringInputs(
+          offerRecord.recordPlaintext,
+          poolRecord.recordPlaintext,
+          paymentRecord.recordPlaintext,
+        ),
+        fee: 100_000,
+        privateFee: false,
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Pool execution failed");
+      setExecutingPoolHash(null);
+    }
+  };
+
+  const handleRecoverPoolClose = async (poolRecord: AleoRecord) => {
+    const invoiceHash = getField(poolRecord.recordPlaintext, "invoice_hash");
+    setRecoveringPoolHash(invoiceHash);
+
+    try {
+      const settled = await fetchInvoiceSettled(invoiceHash);
+      if (!settled) {
+        toast.error(
+          "Invoice is not settled yet. Recovery close is only allowed after settlement.",
+        );
+        setRecoveringPoolHash(null);
+        return;
+      }
+
+      await execute({
+        program: PROGRAM_ID,
+        function: "recover_pool_close",
+        inputs: buildRecoverPoolCloseInputs(poolRecord.recordPlaintext),
+        fee: 80_000,
+        privateFee: false,
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Pool recovery failed");
+      setRecoveringPoolHash(null);
+    }
   };
 
   const renderPoolCards = () => {
@@ -274,6 +431,33 @@ export default function Pools() {
           const meta = poolMetas[invoiceHash];
           const contributed = meta?.contributed ?? null;
           const isClosed = meta?.isClosed ?? false;
+          const isTargetReached =
+            contributed !== null &&
+            targetMicro > 0n &&
+            contributed >= targetMicro;
+          const isAwaitingExecution = !isClosed && isTargetReached;
+          const isOwner =
+            !!address && getField(record.recordPlaintext, "owner") === address;
+          const matchingOffer = offerRecords.find(
+            (offer) =>
+              getField(offer.recordPlaintext, "invoice_hash") === invoiceHash &&
+              getField(offer.recordPlaintext, "owner") === address,
+          );
+          const alreadyFactoredByOwner = factoredRecords.some(
+            (factored) =>
+              getField(factored.recordPlaintext, "invoice_hash") ===
+                invoiceHash &&
+              getField(factored.recordPlaintext, "owner") === address,
+          );
+          const awaitingReason = isAwaitingExecution
+            ? !isOwner
+              ? "Only the pool owner can execute this funded pool."
+              : alreadyFactoredByOwner && !matchingOffer
+                ? "Offer was already consumed outside pool execution. This pool cannot be executed anymore."
+                : !matchingOffer
+                  ? "Missing matching FactoringOffer record in this wallet."
+                  : "If debtor already paid, run Execute Pool Factoring now. Then claim from My Shares."
+            : null;
 
           const fillPct =
             contributed !== null && targetMicro > 0n
@@ -297,13 +481,20 @@ export default function Pools() {
                     className={
                       isClosed
                         ? "text-green-600 border-green-300 text-xs"
-                        : "text-blue-600 border-blue-300 text-xs"
+                        : isAwaitingExecution
+                          ? "text-amber-700 border-amber-300 text-xs"
+                          : "text-blue-600 border-blue-300 text-xs"
                     }
                   >
                     {isClosed ? (
                       <>
                         <Lock className="h-3 w-3 mr-1" />
                         Closed
+                      </>
+                    ) : isAwaitingExecution ? (
+                      <>
+                        <Lock className="h-3 w-3 mr-1" />
+                        Funded
                       </>
                     ) : (
                       <>
@@ -351,21 +542,67 @@ export default function Pools() {
                 )}
 
                 {!isClosed && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="w-full gap-1.5"
-                    onClick={() => {
-                      setContributeInvoiceHash(invoiceHash);
-                      setContributePoolOwner(
-                        getField(record.recordPlaintext, "owner"),
-                      );
-                    }}
-                  >
-                    <TrendingUp className="h-3.5 w-3.5" />
-                    Contribute
-                    <ChevronRight className="h-3.5 w-3.5 ml-auto" />
-                  </Button>
+                  <div className="space-y-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full gap-1.5"
+                      disabled={isAwaitingExecution}
+                      onClick={() => {
+                        if (isAwaitingExecution) return;
+                        setContributeInvoiceHash(invoiceHash);
+                        setContributePoolOwner(
+                          getField(record.recordPlaintext, "owner"),
+                        );
+                      }}
+                    >
+                      <TrendingUp className="h-3.5 w-3.5" />
+                      {isAwaitingExecution
+                        ? "Awaiting Pool Execution"
+                        : "Contribute"}
+                      {!isAwaitingExecution && (
+                        <ChevronRight className="h-3.5 w-3.5 ml-auto" />
+                      )}
+                    </Button>
+
+                    {isAwaitingExecution && isOwner && matchingOffer && (
+                      <Button
+                        size="sm"
+                        className="w-full"
+                        onClick={() =>
+                          handleExecutePoolFactoring(record, matchingOffer)
+                        }
+                        disabled={executingPoolHash === invoiceHash}
+                      >
+                        {executingPoolHash === invoiceHash
+                          ? "Executing..."
+                          : "Execute Pool Factoring"}
+                      </Button>
+                    )}
+
+                    {isAwaitingExecution &&
+                      isOwner &&
+                      !matchingOffer &&
+                      alreadyFactoredByOwner && (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="w-full"
+                          onClick={() => handleRecoverPoolClose(record)}
+                          disabled={recoveringPoolHash === invoiceHash}
+                        >
+                          {recoveringPoolHash === invoiceHash
+                            ? "Closing..."
+                            : "Recover / Close Pool"}
+                        </Button>
+                      )}
+
+                    {isAwaitingExecution && awaitingReason && (
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        {awaitingReason}
+                      </p>
+                    )}
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -382,6 +619,10 @@ export default function Pools() {
             (sum, participant) => sum + participant.contributedMicro,
             0,
           );
+          const isTargetReached =
+            pool.targetAmountMicro > 0 &&
+            contributedMicro >= pool.targetAmountMicro;
+          const isAwaitingExecution = !pool.isClosed && isTargetReached;
           const contributedAleo = (contributedMicro / 1_000_000).toLocaleString(
             undefined,
             {
@@ -411,13 +652,20 @@ export default function Pools() {
                     className={
                       pool.isClosed
                         ? "text-green-600 border-green-300 text-xs"
-                        : "text-blue-600 border-blue-300 text-xs"
+                        : isAwaitingExecution
+                          ? "text-amber-700 border-amber-300 text-xs"
+                          : "text-blue-600 border-blue-300 text-xs"
                     }
                   >
                     {pool.isClosed ? (
                       <>
                         <Lock className="h-3 w-3 mr-1" />
                         Closed
+                      </>
+                    ) : isAwaitingExecution ? (
+                      <>
+                        <Lock className="h-3 w-3 mr-1" />
+                        Funded
                       </>
                     ) : (
                       <>
@@ -454,19 +702,34 @@ export default function Pools() {
                 )}
 
                 {!pool.isClosed && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="w-full gap-1.5"
-                    onClick={() => {
-                      setContributeInvoiceHash(pool.invoiceHash);
-                      setContributePoolOwner(pool.owner);
-                    }}
-                  >
-                    <TrendingUp className="h-3.5 w-3.5" />
-                    Contribute
-                    <ChevronRight className="h-3.5 w-3.5 ml-auto" />
-                  </Button>
+                  <div className="space-y-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full gap-1.5"
+                      disabled={isAwaitingExecution}
+                      onClick={() => {
+                        if (isAwaitingExecution) return;
+                        setContributeInvoiceHash(pool.invoiceHash);
+                        setContributePoolOwner(pool.owner);
+                      }}
+                    >
+                      <TrendingUp className="h-3.5 w-3.5" />
+                      {isAwaitingExecution
+                        ? "Awaiting Pool Execution"
+                        : "Contribute"}
+                      {!isAwaitingExecution && (
+                        <ChevronRight className="h-3.5 w-3.5 ml-auto" />
+                      )}
+                    </Button>
+
+                    {isAwaitingExecution && (
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        Pool is funded. The pool owner must execute factoring
+                        on-chain before claims unlock.
+                      </p>
+                    )}
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -515,8 +778,14 @@ export default function Pools() {
           const totalPoolRaw = getField(record.recordPlaintext, "total_pool");
           const contributed = BigInt(contributedRaw.replace(/u64$/, ""));
           const totalPool = BigInt(totalPoolRaw.replace(/u64$/, ""));
+          const livePoolTotal =
+            poolMetas[invoiceHash]?.contributed ?? totalPool;
           const shareBps =
-            totalPool > 0n ? (contributed * 10000n) / totalPool : 0n;
+            livePoolTotal > 0n ? (contributed * 10000n) / livePoolTotal : 0n;
+          const shareId = record.commitment ?? invoiceHash;
+          const isClaiming = claimingShareId === shareId;
+          const isPoolClosed = poolMetas[invoiceHash]?.isClosed ?? false;
+          const canClaim = isPoolClosed;
 
           return (
             <Card
@@ -544,12 +813,18 @@ export default function Pools() {
                     </span>
                   </div>
                 </div>
+                {!canClaim && (
+                  <p className="text-xs text-muted-foreground">
+                    Claim unlocks after pool execution closes this pool.
+                  </p>
+                )}
                 <Button
                   size="sm"
                   className="w-full"
                   onClick={() => handleClaimProceeds(record)}
+                  disabled={isClaiming || !canClaim}
                 >
-                  Claim Proceeds
+                  {isClaiming ? "Claiming…" : "Claim Proceeds"}
                 </Button>
               </CardContent>
             </Card>
@@ -626,6 +901,10 @@ export default function Pools() {
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
             Use Marketplace to create new pools.
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Payout claim requires pool closed + invoice settled + one spendable
+            credits record for the claim transaction input.
           </p>
         </TabsContent>
 

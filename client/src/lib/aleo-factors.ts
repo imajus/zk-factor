@@ -227,6 +227,25 @@ export async function fetchPoolClosed(invoiceHash: string): Promise<boolean> {
 }
 
 /**
+ * Returns true if invoice is marked settled in settled_invoices mapping.
+ */
+export async function fetchInvoiceSettled(
+  invoiceHash: string,
+): Promise<boolean> {
+  try {
+    const client = new AleoNetworkClient(API_ENDPOINT);
+    const value = await client.getProgramMappingValue(
+      PROGRAM_ID,
+      "settled_invoices",
+      invoiceHash,
+    );
+    return parseMappingField(String(value), "is_settled") === "true";
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Build inputs for create_pool transition.
  */
 export function buildCreatePoolInputs(
@@ -266,6 +285,13 @@ export function buildExecutePoolFactoringInputs(
   creditsRecord: string,
 ): string[] {
   return [offer, pool, creditsRecord];
+}
+
+/**
+ * Build inputs for recover_pool_close transition.
+ */
+export function buildRecoverPoolCloseInputs(pool: string): string[] {
+  return [pool];
 }
 
 /**

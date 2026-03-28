@@ -1,5 +1,5 @@
 {
-  "program": "zk_factor_9596.aleo",
+  "program": "zk_factor_9597.aleo",
   "structs": [
     {
       "path": [
@@ -510,7 +510,7 @@
           "path": [
             "FactorInfo"
           ],
-          "program": "zk_factor_9596"
+          "program": "zk_factor_9597"
         }
       }
     },
@@ -524,7 +524,7 @@
           "path": [
             "SettlementInfo"
           ],
-          "program": "zk_factor_9596"
+          "program": "zk_factor_9597"
         }
       }
     },
@@ -665,7 +665,7 @@
               "path": [
                 "Invoice"
               ],
-              "program": "zk_factor_9596"
+              "program": "zk_factor_9597"
             }
           },
           "mode": "None"
@@ -732,7 +732,7 @@
               "path": [
                 "Invoice"
               ],
-              "program": "zk_factor_9596"
+              "program": "zk_factor_9597"
             }
           },
           "mode": "None"
@@ -783,7 +783,7 @@
               "path": [
                 "FactoringOffer"
               ],
-              "program": "zk_factor_9596"
+              "program": "zk_factor_9597"
             }
           },
           "mode": "None"
@@ -805,7 +805,7 @@
               "path": [
                 "Invoice"
               ],
-              "program": "zk_factor_9596"
+              "program": "zk_factor_9597"
             }
           },
           "mode": "None"
@@ -867,7 +867,7 @@
               "path": [
                 "FactoringOffer"
               ],
-              "program": "zk_factor_9596"
+              "program": "zk_factor_9597"
             }
           },
           "mode": "None"
@@ -878,7 +878,7 @@
               "path": [
                 "Invoice"
               ],
-              "program": "zk_factor_9596"
+              "program": "zk_factor_9597"
             }
           },
           "mode": "None"
@@ -900,7 +900,7 @@
               "path": [
                 "FactoringOffer"
               ],
-              "program": "zk_factor_9596"
+              "program": "zk_factor_9597"
             }
           },
           "mode": "None"
@@ -925,7 +925,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_9596"
+              "program": "zk_factor_9597"
             }
           },
           "mode": "None"
@@ -969,7 +969,7 @@
               "path": [
                 "FactoringOffer"
               ],
-              "program": "zk_factor_9596"
+              "program": "zk_factor_9597"
             }
           },
           "mode": "None"
@@ -982,7 +982,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_9596"
+              "program": "zk_factor_9597"
             }
           },
           "mode": "None"
@@ -1004,7 +1004,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_9596"
+              "program": "zk_factor_9597"
             }
           },
           "mode": "None"
@@ -1028,7 +1028,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_9596"
+              "program": "zk_factor_9597"
             }
           },
           "mode": "None"
@@ -1041,7 +1041,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_9596"
+              "program": "zk_factor_9597"
             }
           },
           "mode": "None"
@@ -1052,7 +1052,7 @@
               "path": [
                 "PaymentNotice"
               ],
-              "program": "zk_factor_9596"
+              "program": "zk_factor_9597"
             }
           },
           "mode": "None"
@@ -1070,7 +1070,7 @@
               "path": [
                 "PaymentNotice"
               ],
-              "program": "zk_factor_9596"
+              "program": "zk_factor_9597"
             }
           },
           "mode": "None"
@@ -1103,7 +1103,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_9596"
+              "program": "zk_factor_9597"
             }
           },
           "mode": "None"
@@ -1116,7 +1116,7 @@
               "path": [
                 "RecourseNotice"
               ],
-              "program": "zk_factor_9596"
+              "program": "zk_factor_9597"
             }
           },
           "mode": "None"
@@ -1138,7 +1138,7 @@
               "path": [
                 "RecourseNotice"
               ],
-              "program": "zk_factor_9596"
+              "program": "zk_factor_9597"
             }
           },
           "mode": "None"
@@ -1217,7 +1217,7 @@
               "path": [
                 "FactorPool"
               ],
-              "program": "zk_factor_9596"
+              "program": "zk_factor_9597"
             }
           },
           "mode": "None"
@@ -1292,7 +1292,7 @@
               "path": [
                 "PoolShare"
               ],
-              "program": "zk_factor_9596"
+              "program": "zk_factor_9597"
             }
           },
           "mode": "None"
@@ -1336,7 +1336,7 @@
               "path": [
                 "FactoringOffer"
               ],
-              "program": "zk_factor_9596"
+              "program": "zk_factor_9597"
             }
           },
           "mode": "None"
@@ -1348,7 +1348,7 @@
               "path": [
                 "FactorPool"
               ],
-              "program": "zk_factor_9596"
+              "program": "zk_factor_9597"
             }
           },
           "mode": "None"
@@ -1373,7 +1373,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_9596"
+              "program": "zk_factor_9597"
             }
           },
           "mode": "None"
@@ -1407,6 +1407,30 @@
       ]
     },
     {
+      "name": "recover_pool_close",
+      "is_async": true,
+      "inputs": [
+        {
+          "name": "pool",
+          "ty": {
+            "Record": {
+              "path": [
+                "FactorPool"
+              ],
+              "program": "zk_factor_9597"
+            }
+          },
+          "mode": "None"
+        }
+      ],
+      "outputs": [
+        {
+          "ty": "Future",
+          "mode": "None"
+        }
+      ]
+    },
+    {
       "name": "claim_pool_proceeds",
       "is_async": true,
       "inputs": [
@@ -1417,7 +1441,7 @@
               "path": [
                 "PoolShare"
               ],
-              "program": "zk_factor_9596"
+              "program": "zk_factor_9597"
             }
           },
           "mode": "None"

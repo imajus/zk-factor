@@ -3,7 +3,7 @@
 import credits.aleo;
 import test_usdcx_stablecoin.aleo;
 
-program zk_factor_9596.aleo {
+program zk_factor_9597.aleo {
     // Simple admin-controlled upgradable constructor for MVP
     // Can be upgraded to multi-sig governance later
     // IMPORTANT: Replace with actual admin address before deployment
@@ -787,6 +787,43 @@ program zk_factor_9596.aleo {
             registration_date: factor_info.registration_date,
         };
         Mapping::set(active_factors, factor, updated_factor);
+    }
+
+    // Called by: Pool owner
+    // Recovery path for pools that reached target but cannot execute via
+    // execute_pool_factoring (e.g. offer was consumed outside pool flow).
+    // This only closes the pool after invoice settlement so contributors can claim.
+    async transition recover_pool_close(
+        pool: FactorPool,
+    ) -> Future {
+        assert(pool.owner == self.caller);
+        assert(!pool.is_closed);
+        return finalize_recover_pool_close(self.caller, pool.invoice_hash, pool.target_amount);
+    }
+
+    async function finalize_recover_pool_close(
+        owner: address,
+        invoice_hash: field,
+        target_amount: u64,
+    ) {
+        let factor_info: FactorInfo = Mapping::get(active_factors, owner);
+        assert(factor_info.is_active);
+
+        let registered_owner: address = Mapping::get(pool_owners, invoice_hash);
+        assert(registered_owner == owner);
+
+        // Pool must have reached target before it can be recovered/closed.
+        let total_contributed: u64 = Mapping::get(pool_contributions, invoice_hash);
+        assert(total_contributed >= target_amount);
+
+        // Only allow recovery close once debtor payment has been settled.
+        let settlement: SettlementInfo = Mapping::get(settled_invoices, invoice_hash);
+        assert(settlement.is_settled);
+
+        let is_closed: bool = Mapping::get_or_use(pool_closed, invoice_hash, false);
+        assert(!is_closed);
+
+        Mapping::set(pool_closed, invoice_hash, true);
     }
 
     // Called by: Pool owner

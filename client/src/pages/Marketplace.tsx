@@ -52,7 +52,10 @@ import {
 import { type FactorInfo, fetchActiveFactors } from "@/lib/aleo-factors";
 import {
   buildCreatePoolInputs,
+  buildClaimPoolProceedsInputs,
   buildContributeToPoolInputs,
+  fetchInvoiceSettled,
+  fetchPoolClosed,
 } from "@/lib/aleo-factors";
 import {
   listPoolDirectory,
@@ -87,9 +90,13 @@ export default function Marketplace() {
     pool: PoolDirectoryEntry;
     amount: string;
   } | null>(null);
+  const [showCompletedPools, setShowCompletedPools] = useState(false);
+  const [withdrawingPoolHash, setWithdrawingPoolHash] = useState<string | null>(
+    null,
+  );
   const [copiedPoolField, setCopiedPoolField] = useState<string | null>(null);
   const pendingActionRef = useRef<
-    "factor" | "create-pool" | "contribute-pool" | null
+    "factor" | "create-pool" | "contribute-pool" | "withdraw-proceeds" | null
   >(null);
   const pendingFactorModeRef = useRef<{ usePartial: boolean } | null>(null);
   const pendingPoolCreateRef = useRef<{
@@ -119,6 +126,9 @@ export default function Marketplace() {
 
   const invoiceRecords = ((records as AleoRecord[]) ?? []).filter(
     (r) => r.recordName === "Invoice" && !r.spent,
+  );
+  const poolShareRecords = ((records as AleoRecord[]) ?? []).filter(
+    (r) => r.recordName === "PoolShare" && !r.spent,
   );
 
   const getInvoiceSelectionId = (record: AleoRecord): string => {
@@ -232,6 +242,11 @@ export default function Marketplace() {
         setContributePoolData(null);
       }
 
+      if (pendingAction === "withdraw-proceeds") {
+        toast.success("Pool proceeds withdrawn.", { id: opId });
+        setWithdrawingPoolHash(null);
+      }
+
       pendingActionRef.current = null;
       queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
       reset();
@@ -253,14 +268,113 @@ export default function Marketplace() {
         }
       } else if (pendingActionRef.current === "contribute-pool") {
         defaultMessage = "Contribution failed";
+      } else if (pendingActionRef.current === "withdraw-proceeds") {
+        defaultMessage = "Withdraw failed";
       }
       toast.error(txError || defaultMessage, { id: opId });
 
       pendingActionRef.current = null;
       pendingFactorModeRef.current = null;
+      setWithdrawingPoolHash(null);
       reset();
     }
   }, [status, txError, queryClient, reset, address, contributePoolData]);
+
+  // Auto-fill pool target with invoice amount when invoice hash is entered
+  useEffect(() => {
+    if (!poolInvoiceHash.trim()) {
+      setPoolTargetAleo("");
+      return;
+    }
+
+    const matching = invoiceRecords.find(
+      (r) =>
+        getField(r.recordPlaintext, "invoice_hash") === poolInvoiceHash.trim(),
+    );
+
+    if (matching) {
+      const amountMicro = parseInvoiceAmountMicro(matching);
+      const amountAleo = (amountMicro / 1_000_000).toLocaleString(undefined, {
+        maximumFractionDigits: 6,
+      });
+      setPoolTargetAleo(amountAleo);
+    }
+  }, [poolInvoiceHash, invoiceRecords]);
+
+  const getMyPoolShare = (invoiceHash: string): AleoRecord | null => {
+    if (!address) return null;
+    return (
+      poolShareRecords.find(
+        (record) =>
+          getField(record.recordPlaintext, "invoice_hash") === invoiceHash &&
+          getField(record.recordPlaintext, "owner") === address,
+      ) ?? null
+    );
+  };
+
+  const handleWithdrawPoolProceeds = async (invoiceHash: string) => {
+    const share = getMyPoolShare(invoiceHash);
+    if (!share) {
+      toast.error("No PoolShare record found for this pool in your wallet.");
+      return;
+    }
+
+    setWithdrawingPoolHash(invoiceHash);
+    try {
+      const [isClosed, isSettled, creditsRecords] = await Promise.all([
+        fetchPoolClosed(invoiceHash),
+        fetchInvoiceSettled(invoiceHash),
+        requestRecords("credits.aleo", true) as Promise<AleoRecord[]>,
+      ]);
+
+      if (!isClosed) {
+        toast.error(
+          "Pool funding may be complete, but pool owner still needs to execute pool factoring before payouts are claimable.",
+        );
+        setWithdrawingPoolHash(null);
+        return;
+      }
+
+      if (!isSettled) {
+        toast.error(
+          "Invoice is not settled yet. Withdraw is available after settlement.",
+        );
+        setWithdrawingPoolHash(null);
+        return;
+      }
+
+      const paymentRecord = creditsRecords
+        .filter((r) => !r.spent)
+        .find(
+          (r) =>
+            BigInt(
+              getField(r.recordPlaintext, "microcredits").replace(/u64$/, ""),
+            ) > 0n,
+        );
+
+      if (!paymentRecord) {
+        toast.error("No spendable credits record found for withdraw input.");
+        setWithdrawingPoolHash(null);
+        return;
+      }
+
+      pendingActionRef.current = "withdraw-proceeds";
+      await execute({
+        program: PROGRAM_ID,
+        function: "claim_pool_proceeds",
+        inputs: buildClaimPoolProceedsInputs(
+          share.recordPlaintext,
+          paymentRecord.recordPlaintext,
+        ),
+        fee: 80_000,
+        privateFee: false,
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Withdraw failed");
+      setWithdrawingPoolHash(null);
+      pendingActionRef.current = null;
+    }
+  };
 
   const handleFactorInvoice = async () => {
     if (
@@ -323,6 +437,26 @@ export default function Marketplace() {
     if (!invoiceHash || Number.isNaN(targetAleo) || targetAleo <= 0) {
       toast.error("Provide valid invoice hash and target amount.");
       return;
+    }
+
+    // Find the matching invoice to validate pool target doesn't exceed invoice amount
+    const matchingInvoice = invoiceRecords.find(
+      (r) => getField(r.recordPlaintext, "invoice_hash") === invoiceHash,
+    );
+
+    if (matchingInvoice) {
+      const invoiceAmountMicro = parseInvoiceAmountMicro(matchingInvoice);
+      const targetMicro = Math.round(targetAleo * 1_000_000);
+      if (targetMicro > invoiceAmountMicro) {
+        const invoiceAleo = (invoiceAmountMicro / 1_000_000).toLocaleString(
+          undefined,
+          { maximumFractionDigits: 6 },
+        );
+        toast.error(
+          `Pool target cannot exceed invoice amount (${invoiceAleo} ALEO)`,
+        );
+        return;
+      }
     }
 
     const targetMicro = Math.round(targetAleo * 1_000_000);
@@ -522,6 +656,29 @@ export default function Marketplace() {
                         onChange={(e) => setPoolTargetAleo(e.target.value)}
                         placeholder="100.0"
                       />
+                      {poolInvoiceHash.trim() && (
+                        <p className="text-xs text-muted-foreground">
+                          {invoiceRecords.find(
+                            (r) =>
+                              getField(r.recordPlaintext, "invoice_hash") ===
+                              poolInvoiceHash.trim(),
+                          )
+                            ? `Max: ${(
+                                parseInvoiceAmountMicro(
+                                  invoiceRecords.find(
+                                    (r) =>
+                                      getField(
+                                        r.recordPlaintext,
+                                        "invoice_hash",
+                                      ) === poolInvoiceHash.trim(),
+                                  )!,
+                                ) / 1_000_000
+                              ).toLocaleString(undefined, {
+                                maximumFractionDigits: 6,
+                              })} ALEO (invoice amount)`
+                            : "Invoice not found in your wallet"}
+                        </p>
+                      )}
                     </div>
                   </div>
                   <DialogFooter>
@@ -550,16 +707,20 @@ export default function Marketplace() {
               <div className="space-y-1">
                 <p className="text-sm font-medium">Pool Opportunities</p>
                 <p className="text-xs text-muted-foreground">
-                  Open pools accept new funding. Completed pools remain visible
-                  for audit/history.
+                  Open pools accept new funding. Completed pools are archived in
+                  a separate section.
                 </p>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
-                {poolEntries.map((pool) => {
+                {openPoolEntries.map((pool) => {
                   const owner = factorByAddress.get(pool.owner);
                   const stats = getPoolStats(pool);
                   const isPoolClosed = pool.isClosed;
-                  const isFullyFunded = stats.percent >= 100 || isPoolClosed;
+                  const isTargetReached =
+                    stats.raisedMicro >= pool.targetAmountMicro &&
+                    pool.targetAmountMicro > 0;
+                  const isAwaitingExecution = !isPoolClosed && isTargetReached;
+                  const isFullyFunded = isTargetReached || isPoolClosed;
                   const isBusiness = activeRole === "business";
                   const isFactorRole = activeRole === "factor";
                   return (
@@ -598,10 +759,16 @@ export default function Marketplace() {
                             className={
                               isPoolClosed
                                 ? "text-emerald-600 border-emerald-300"
-                                : "text-blue-700 border-blue-400"
+                                : isAwaitingExecution
+                                  ? "text-amber-700 border-amber-300"
+                                  : "text-blue-700 border-blue-400"
                             }
                           >
-                            {isPoolClosed ? "Completed" : "Open"}
+                            {isPoolClosed
+                              ? "Completed"
+                              : isAwaitingExecution
+                                ? "Funded"
+                                : "Open"}
                           </Badge>
                         </div>
 
@@ -670,7 +837,7 @@ export default function Marketplace() {
                             }}
                           >
                             {isPoolClosed
-                              ? "Pool Completed"
+                              ? "Pool Closed"
                               : "Sell to Pool Owner"}
                             {!isPoolClosed && (
                               <ChevronRight className="h-3.5 w-3.5 ml-auto" />
@@ -719,12 +886,16 @@ export default function Marketplace() {
                         <p className="text-[11px] text-muted-foreground text-center">
                           {isBusiness
                             ? isPoolClosed
-                              ? "Business: pool completed"
-                              : "Business: sell invoice to pool owner"
+                              ? "Business: pool closed"
+                              : isAwaitingExecution
+                                ? "Business: pool funded—sell invoice now"
+                                : "Business: sell invoice to pool owner"
                             : isFactorRole
                               ? isPoolClosed
-                                ? "Factor: pool completed"
-                                : "Factor: contribute if pool is open"
+                                ? "Factor: pool closed"
+                                : isAwaitingExecution
+                                  ? "Factor: funded, awaiting owner execution"
+                                  : "Factor: contribute if pool is open"
                               : "Click card for full pool details"}
                         </p>
                       </CardContent>
@@ -732,6 +903,17 @@ export default function Marketplace() {
                   );
                 })}
               </div>
+              {openPoolEntries.length === 0 && (
+                <Card className="border-dashed">
+                  <CardContent className="py-8 text-center">
+                    <p className="font-medium">No open pools right now</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      You can still review completed pools from the archive
+                      section below.
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
             </>
           )}
 
@@ -1246,8 +1428,12 @@ export default function Marketplace() {
                     {activeRole === "business" && (
                       <Button
                         className="w-full"
-                        variant={selectedPool?.isClosed ? "outline" : "default"}
-                        disabled={!!selectedPool?.isClosed}
+                        variant={
+                          selectedPool && selectedPool.isClosed
+                            ? "outline"
+                            : "default"
+                        }
+                        disabled={!!selectedPool && selectedPool.isClosed}
                         onClick={() => {
                           if (!selectedPool) return;
                           if (selectedPool.isClosed) return;
@@ -1255,51 +1441,68 @@ export default function Marketplace() {
                           openSellToPoolOwner(selectedPool);
                         }}
                       >
-                        {selectedPool?.isClosed
-                          ? "Pool Completed"
+                        {selectedPool && selectedPool.isClosed
+                          ? "Pool Closed"
                           : "Sell Invoice to Pool Owner"}
                       </Button>
                     )}
 
-                    {activeRole === "factor" && (
-                      <Button
-                        variant={
-                          selectedPool &&
-                          (selectedPool.isClosed ||
-                            getPoolStats(selectedPool).percent >= 100)
-                            ? "outline"
-                            : "secondary"
-                        }
-                        className="w-full"
-                        disabled={
-                          !!selectedPool &&
-                          (selectedPool.isClosed ||
-                            getPoolStats(selectedPool).percent >= 100)
-                        }
-                        onClick={() => {
-                          if (
-                            !selectedPool ||
+                    {activeRole === "factor" && selectedPool && (
+                      <>
+                        <Button
+                          variant={
                             selectedPool.isClosed ||
                             getPoolStats(selectedPool).percent >= 100
-                          )
-                            return;
-                          setContributePoolData({
-                            pool: selectedPool,
-                            amount: "",
-                          });
-                          setPoolDialogOpen(false);
-                          setContributePoolOpen(true);
-                        }}
-                      >
-                        <TrendingUp className="h-4 w-4 mr-2" />
-                        {selectedPool &&
-                        (selectedPool.isClosed ||
-                          getPoolStats(selectedPool).percent >= 100)
-                          ? selectedPool?.isClosed
-                            ? "Pool Closed"
-                            : "Pool Fully Funded"
-                          : "Contribute to This Pool"}
-                      </Button>
+                              ? "outline"
+                              : "secondary"
+                          }
+                          className="w-full"
+                          disabled={
+                            selectedPool.isClosed ||
+                            getPoolStats(selectedPool).percent >= 100
+                          }
+                          onClick={() => {
+                            if (
+                              selectedPool.isClosed ||
+                              getPoolStats(selectedPool).percent >= 100
+                            )
+                              return;
+                            setContributePoolData({
+                              pool: selectedPool,
+                              amount: "",
+                            });
+                            setPoolDialogOpen(false);
+                            setContributePoolOpen(true);
+                          }}
+                        >
+                          <TrendingUp className="h-4 w-4 mr-2" />
+                          {selectedPool.isClosed ||
+                          getPoolStats(selectedPool).percent >= 100
+                            ? selectedPool.isClosed
+                              ? "Pool Closed"
+                              : "Pool Fully Funded"
+                            : "Contribute to This Pool"}
+                        </Button>
+
+                        {getMyPoolShare(selectedPool.invoiceHash) && (
+                          <Button
+                            variant="default"
+                            className="w-full"
+                            onClick={() =>
+                              handleWithdrawPoolProceeds(
+                                selectedPool.invoiceHash,
+                              )
+                            }
+                            disabled={
+                              withdrawingPoolHash === selectedPool.invoiceHash
+                            }
+                          >
+                            {withdrawingPoolHash === selectedPool.invoiceHash
+                              ? "Withdrawing..."
+                              : "Withdraw Proceeds"}
+                          </Button>
+                        )}
+                      </>
                     )}
                   </DialogFooter>
                 </div>
@@ -1308,10 +1511,72 @@ export default function Marketplace() {
           </Dialog>
 
           {closedPoolEntries.length > 0 && (
-            <p className="text-xs text-muted-foreground">
-              {closedPoolEntries.length} completed pool
-              {closedPoolEntries.length === 1 ? "" : "s"} archived.
-            </p>
+            <div className="space-y-3">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="px-0"
+                onClick={() => setShowCompletedPools((prev) => !prev)}
+              >
+                {showCompletedPools ? "Hide" : "Show"} Completed Pools (
+                {closedPoolEntries.length})
+              </Button>
+              {showCompletedPools && (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {closedPoolEntries.map((pool) => {
+                    const stats = getPoolStats(pool);
+                    const myShare = getMyPoolShare(pool.invoiceHash);
+                    const isWithdrawing =
+                      withdrawingPoolHash === pool.invoiceHash;
+                    return (
+                      <div
+                        key={`archived-${pool.invoiceHash}`}
+                        className="w-full rounded-md border border-emerald-300/60 bg-emerald-50/30 dark:bg-emerald-950/20 px-3 py-2"
+                      >
+                        <button
+                          type="button"
+                          className="w-full text-left hover:opacity-90 transition-opacity"
+                          onClick={() => {
+                            setSelectedPool(pool);
+                            setPoolDialogOpen(true);
+                          }}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-mono text-xs">
+                              {pool.invoiceHash.slice(0, 12)}…
+                            </span>
+                            <Badge
+                              variant="outline"
+                              className="text-xs text-emerald-700 border-emerald-400"
+                            >
+                              Completed
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Raised {formatMicroToAleo(stats.raisedMicro)} /{" "}
+                            {formatMicroToAleo(pool.targetAmountMicro)} ALEO
+                          </p>
+                        </button>
+                        {activeRole === "factor" && myShare && (
+                          <Button
+                            size="sm"
+                            className="w-full mt-2"
+                            onClick={() =>
+                              handleWithdrawPoolProceeds(pool.invoiceHash)
+                            }
+                            disabled={isWithdrawing}
+                          >
+                            {isWithdrawing
+                              ? "Withdrawing..."
+                              : "Withdraw Proceeds"}
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           )}
 
           {/* Contribute to Pool Dialog */}

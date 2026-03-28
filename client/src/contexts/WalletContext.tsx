@@ -62,19 +62,29 @@ function WalletContextInner({ children }: { children: ReactNode }) {
       if (!adapter.connected) setActiveRoleState(null);
       return;
     }
+
     const stored = localStorage.getItem(roleStorageKey(adapter.address));
-    if (stored === "business" || stored === "factor") {
-      setActiveRoleState(stored);
-      return;
-    }
     setResolvingRole(true);
-    fetchFactorStatus(adapter.address).then((status) => {
-      if (status?.is_active) {
-        setActiveRoleState("factor");
-        localStorage.setItem(roleStorageKey(adapter.address!), "factor");
-      }
-      setResolvingRole(false);
-    });
+
+    fetchFactorStatus(adapter.address)
+      .then((status) => {
+        // On-chain factor registration has priority over any locally cached role.
+        if (status?.is_active) {
+          setActiveRoleState("factor");
+          localStorage.setItem(roleStorageKey(adapter.address!), "factor");
+          return;
+        }
+
+        if (stored === "business") {
+          setActiveRoleState("business");
+          return;
+        }
+
+        setActiveRoleState(null);
+      })
+      .finally(() => {
+        setResolvingRole(false);
+      });
   }, [adapter.connected, adapter.address]);
 
   const connect = useCallback(async () => {

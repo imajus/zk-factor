@@ -15,6 +15,8 @@ import {
   AlertCircle,
   AlertTriangle,
   Users,
+  Loader2,
+  Clock3,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -61,6 +63,21 @@ export function FactorDashboard() {
   const [settlingId, setSettlingId] = useState<string | null>(null);
   const [settledHashes, setSettledHashes] = useState<Set<string>>(new Set());
   const [reclaimingId, setReclaimingId] = useState<string | null>(null);
+  const [paymentRequestedHashes, setPaymentRequestedHashes] = useState<
+    Set<string>
+  >(new Set());
+  const [executingOffers, setExecutingOffers] = useState<
+    Record<
+      string,
+      {
+        invoiceHash: string;
+        business: string;
+        amountMicro: number;
+        rate: number;
+        currency: "ALEO" | "USDCx";
+      }
+    >
+  >({});
   const pendingAcceptedCurrencyRef = useRef<{
     invoiceHash: string;
     currency: "ALEO" | "USDCx";
@@ -84,6 +101,10 @@ export function FactorDashboard() {
   const offerRecords = ((records as AleoRecord[]) ?? []).filter(
     (r) => r.recordName === "FactoringOffer" && !r.spent,
   );
+  const visibleOfferRecords = offerRecords.filter((record) => {
+    const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
+    return !executingOffers[invoiceHash];
+  });
   const poolShareRecords = ((records as AleoRecord[]) ?? []).filter(
     (r) => r.recordName === "PoolShare" && !r.spent,
   );
@@ -140,6 +161,31 @@ export function FactorDashboard() {
     });
   }, [factoredRecords.length]);
 
+  // Keep executing state only while the offer still appears and has not
+  // materialized as a FactoredInvoice yet.
+  useEffect(() => {
+    if (!Object.keys(executingOffers).length) return;
+
+    const openOfferHashes = new Set(
+      offerRecords.map((r) => getField(r.recordPlaintext, "invoice_hash")),
+    );
+    const activeFactoredHashes = new Set(
+      factoredRecords.map((r) => getField(r.recordPlaintext, "invoice_hash")),
+    );
+
+    setExecutingOffers((prev) => {
+      const next: typeof prev = {};
+      for (const [hash, data] of Object.entries(prev)) {
+        if (openOfferHashes.has(hash) && !activeFactoredHashes.has(hash)) {
+          next[hash] = data;
+        }
+      }
+      return Object.keys(next).length === Object.keys(prev).length
+        ? prev
+        : next;
+    });
+  }, [offerRecords, factoredRecords, executingOffers]);
+
   useEffect(() => {
     if (status === "submitting")
       toast.loading("Generating proof…", { id: "tx-op" });
@@ -192,6 +238,7 @@ export function FactorDashboard() {
   };
 
   const handleRequestPayment = async (record: AleoRecord) => {
+    const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
     try {
       await execute({
         program: PROGRAM_ID,
@@ -200,12 +247,14 @@ export function FactorDashboard() {
         fee: 50_000,
         privateFee: false,
       });
+      setPaymentRequestedHashes((prev) => new Set(prev).add(invoiceHash));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes("already exists in the ledger")) {
         toast.error(
           "Already published - copy the link and send it to your debtor.",
         );
+        setPaymentRequestedHashes((prev) => new Set(prev).add(invoiceHash));
       } else {
         toast.error("Could not publish payment request. Try again.");
       }
@@ -217,9 +266,29 @@ export function FactorDashboard() {
       record.commitment ?? getField(record.recordPlaintext, "invoice_hash");
     const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
     const currency = getOfferCurrency(record);
+    const amountMicro = parseInt(
+      getField(record.recordPlaintext, "amount").replace(/u64$/, ""),
+      10,
+    );
+    const rate =
+      parseInt(
+        getField(record.recordPlaintext, "advance_rate").replace(/u16$/, ""),
+        10,
+      ) / 100;
+    const business = getField(record.recordPlaintext, "original_creditor");
     setSettlingId(recordId);
 
     pendingAcceptedCurrencyRef.current = { invoiceHash, currency };
+    setExecutingOffers((prev) => ({
+      ...prev,
+      [invoiceHash]: {
+        invoiceHash,
+        business,
+        amountMicro,
+        rate,
+        currency,
+      },
+    }));
 
     if (currency === "USDCx") {
       await execute({
@@ -261,12 +330,22 @@ export function FactorDashboard() {
         err instanceof Error ? err.message : "Failed to fetch credits",
       );
       setSettlingId(null);
+      setExecutingOffers((prev) => {
+        const next = { ...prev };
+        delete next[invoiceHash];
+        return next;
+      });
       return;
     }
     if (!creditsRecord) {
       toast.error("Insufficient credits to fund this factoring");
       setSettlingId(null);
       pendingAcceptedCurrencyRef.current = null;
+      setExecutingOffers((prev) => {
+        const next = { ...prev };
+        delete next[invoiceHash];
+        return next;
+      });
       return;
     }
     await execute({
@@ -422,7 +501,9 @@ export function FactorDashboard() {
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem
                         onClick={() => handleRequestPayment(record)}
-                        disabled={isSettled}
+                        disabled={
+                          isSettled || paymentRequestedHashes.has(invoiceHash)
+                        }
                       >
                         <Receipt className="h-4 w-4 mr-2" />
                         Request Payment from Debtor
@@ -485,7 +566,10 @@ export function FactorDashboard() {
                   {recourseEnabled && (
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Recourse</span>
-                      <Badge variant="outline" className="text-xs border-orange-300 text-orange-600">
+                      <Badge
+                        variant="outline"
+                        className="text-xs border-orange-300 text-orange-600"
+                      >
                         Enabled
                       </Badge>
                     </div>
@@ -527,6 +611,8 @@ export function FactorDashboard() {
   };
 
   const renderOfferCards = () => {
+    const executingList = Object.values(executingOffers);
+
     if (isLoading) {
       return (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -543,7 +629,7 @@ export function FactorDashboard() {
         </div>
       );
     }
-    if (offerRecords.length === 0) {
+    if (visibleOfferRecords.length === 0 && executingList.length === 0) {
       return (
         <Card className="py-16 text-center">
           <CardContent>
@@ -556,80 +642,148 @@ export function FactorDashboard() {
       );
     }
     return (
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {offerRecords.map((record, idx) => {
-          const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
-          const currency = getOfferCurrency(record);
-          const aleoAmount = microToAleo(
-            getField(record.recordPlaintext, "amount") || "0u64",
-          );
-          const rate =
-            parseInt(
-              getField(record.recordPlaintext, "advance_rate").replace(
-                /u16$/,
-                "",
-              ),
-              10,
-            ) / 100;
-          const originalCreditor = getField(
-            record.recordPlaintext,
-            "original_creditor",
-          );
-          const recourseFlag =
-            getField(record.recordPlaintext, "recourse") === "true";
-          const recordId = record.commitment ?? invoiceHash;
-          const isAccepting = settlingId === recordId;
-          return (
-            <Card
-              key={invoiceHash || idx}
-              className="hover:border-primary/50 transition-colors"
-            >
-              <CardContent className="pt-4 space-y-3">
-                <span className="font-mono text-sm text-muted-foreground">
-                  {invoiceHash.slice(0, 12)}…
-                </span>
-                <div className="space-y-1 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Business</span>
-                    <AddressDisplay
-                      address={originalCreditor}
-                      chars={4}
-                      showExplorer
-                    />
+      <div className="space-y-4">
+        {executingList.length > 0 && (
+          <Card className="border-amber-300 bg-amber-50">
+            <CardContent className="pt-4 space-y-3">
+              <div className="flex items-center gap-2 text-amber-900">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <p className="font-medium">Executing on-chain</p>
+              </div>
+              <p className="text-sm text-amber-800">
+                Accepted offers are being verified and indexed. They will move
+                to Portfolio once finalized.
+              </p>
+              <div className="space-y-2">
+                {executingList.map((item) => (
+                  <div
+                    key={item.invoiceHash}
+                    className="rounded-md border border-amber-300 bg-amber-100/60 p-3"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <p className="font-mono text-xs text-amber-900">
+                          {item.invoiceHash.slice(0, 12)}…
+                        </p>
+                        <p className="text-sm text-amber-900">
+                          {microToAleo(`${item.amountMicro}u64`).toLocaleString(
+                            undefined,
+                            { maximumFractionDigits: 6 },
+                          )}{" "}
+                          {item.currency} at {item.rate.toFixed(2)}%
+                        </p>
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className="text-amber-800 border-amber-400"
+                      >
+                        <Clock3 className="h-3.5 w-3.5 mr-1" />
+                        Verifying
+                      </Badge>
+                    </div>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Amount</span>
-                    <span className="font-mono font-medium">
-                      {aleoAmount.toLocaleString(undefined, {
-                        maximumFractionDigits: 6,
-                      })}{" "}
-                      {currency}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Rate</span>
-                    <span>{rate.toFixed(2)}%</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Recourse</span>
-                    <span className={cn("text-xs", recourseFlag ? "text-orange-500" : "text-muted-foreground")}>
-                      {recourseFlag ? "Yes" : "No"}
-                    </span>
-                  </div>
-                </div>
-                <Button
-                  size="sm"
-                  className="w-full"
-                  onClick={() => handleAcceptOffer(record)}
-                  disabled={isAccepting}
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {visibleOfferRecords.length === 0 ? (
+          <Card className="py-8 text-center">
+            <CardContent>
+              <p className="font-medium">No pending offers</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                New offers from businesses will appear here.
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {visibleOfferRecords.map((record, idx) => {
+              const invoiceHash = getField(
+                record.recordPlaintext,
+                "invoice_hash",
+              );
+              const currency = getOfferCurrency(record);
+              const aleoAmount = microToAleo(
+                getField(record.recordPlaintext, "amount") || "0u64",
+              );
+              const rate =
+                parseInt(
+                  getField(record.recordPlaintext, "advance_rate").replace(
+                    /u16$/,
+                    "",
+                  ),
+                  10,
+                ) / 100;
+              const originalCreditor = getField(
+                record.recordPlaintext,
+                "original_creditor",
+              );
+              const recourseFlag =
+                getField(record.recordPlaintext, "recourse") === "true";
+              const recordId = record.commitment ?? invoiceHash;
+              const isAccepting = settlingId === recordId;
+              return (
+                <Card
+                  key={invoiceHash || idx}
+                  className="hover:border-primary/50 transition-colors"
                 >
-                  <FileCheck className="h-4 w-4 mr-2" />
-                  {isAccepting ? "Processing…" : "Accept Offer"}
-                </Button>
-              </CardContent>
-            </Card>
-          );
-        })}
+                  <CardContent className="pt-4 space-y-3">
+                    <span className="font-mono text-sm text-muted-foreground">
+                      {invoiceHash.slice(0, 12)}…
+                    </span>
+                    <div className="space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Business</span>
+                        <AddressDisplay
+                          address={originalCreditor}
+                          chars={4}
+                          showExplorer
+                        />
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Amount</span>
+                        <span className="font-mono font-medium">
+                          {aleoAmount.toLocaleString(undefined, {
+                            maximumFractionDigits: 6,
+                          })}{" "}
+                          {currency}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Rate</span>
+                        <span>{rate.toFixed(2)}%</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Recourse</span>
+                        <span
+                          className={cn(
+                            "text-xs",
+                            recourseFlag
+                              ? "text-orange-500"
+                              : "text-muted-foreground",
+                          )}
+                        >
+                          {recourseFlag ? "Yes" : "No"}
+                        </span>
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      className="w-full"
+                      onClick={() => handleAcceptOffer(record)}
+                      disabled={isAccepting}
+                    >
+                      <FileCheck className="h-4 w-4 mr-2" />
+                      {isAccepting ? "Processing…" : "Accept Offer"}
+                    </Button>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
       </div>
     );
   };
@@ -706,7 +860,10 @@ export function FactorDashboard() {
                     <span>{sharePct}%</span>
                   </div>
                 </div>
-                <Badge variant="outline" className="text-xs text-blue-600 border-blue-300">
+                <Badge
+                  variant="outline"
+                  className="text-xs text-blue-600 border-blue-300"
+                >
                   Pool Share
                 </Badge>
               </CardContent>
@@ -794,9 +951,9 @@ export function FactorDashboard() {
           </TabsTrigger>
           <TabsTrigger value="offers">
             Pending Offers
-            {!isLoading && offerRecords.length > 0 && (
+            {!isLoading && visibleOfferRecords.length > 0 && (
               <span className="ml-1.5 text-xs opacity-70">
-                ({offerRecords.length})
+                ({visibleOfferRecords.length})
               </span>
             )}
           </TabsTrigger>
