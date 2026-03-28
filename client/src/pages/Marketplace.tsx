@@ -72,14 +72,12 @@ export default function Marketplace() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFactor, setSelectedFactor] = useState<FactorInfo | null>(null);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string>("");
-  const [lockedPoolInvoiceHash, setLockedPoolInvoiceHash] = useState<
-    string | null
-  >(null);
   const [advanceRateInput, setAdvanceRateInput] = useState<string>("");
   const [partialAmountInput, setPartialAmountInput] = useState<string>("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [poolDialogOpen, setPoolDialogOpen] = useState(false);
   const [createPoolDialogOpen, setCreatePoolDialogOpen] = useState(false);
+  const [poolName, setPoolName] = useState("");
   const [poolInvoiceHash, setPoolInvoiceHash] = useState("");
   const [poolTargetAleo, setPoolTargetAleo] = useState("");
   const [selectedPool, setSelectedPool] = useState<PoolDirectoryEntry | null>(
@@ -101,6 +99,7 @@ export default function Marketplace() {
   const pendingFactorModeRef = useRef<{ usePartial: boolean } | null>(null);
   const pendingPoolCreateRef = useRef<{
     invoiceHash: string;
+    poolName?: string;
     owner: string;
     targetAmountMicro: number;
   } | null>(null);
@@ -169,9 +168,6 @@ export default function Marketplace() {
   const selectedInvoiceAmountMicro = selectedInvoiceRecord
     ? parseInvoiceAmountMicro(selectedInvoiceRecord)
     : 0;
-  const selectedInvoiceHash = selectedInvoiceRecord
-    ? getField(selectedInvoiceRecord.recordPlaintext, "invoice_hash")
-    : null;
   const selectedInvoiceCurrency = selectedInvoiceRecord
     ? getInvoiceCurrency(selectedInvoiceRecord)
     : "ALEO";
@@ -188,8 +184,6 @@ export default function Marketplace() {
   const formattedMaxPartialAmount = maxPartialAmount.toLocaleString(undefined, {
     maximumFractionDigits: 6,
   });
-  const isPoolLockedSelection =
-    !!lockedPoolInvoiceHash && selectedInvoiceHash === lockedPoolInvoiceHash;
   const partialAmountMicro = partialAmountInput
     ? Math.round(parseFloat(partialAmountInput) * 1_000_000)
     : 0;
@@ -224,6 +218,7 @@ export default function Marketplace() {
         pendingPoolCreateRef.current = null;
         toast.success("Pool created successfully!", { id: opId });
         setCreatePoolDialogOpen(false);
+        setPoolName("");
         setPoolInvoiceHash("");
         setPoolTargetAleo("");
       }
@@ -231,6 +226,7 @@ export default function Marketplace() {
       if (pendingAction === "contribute-pool" && contributePoolData) {
         upsertPoolContribution({
           invoiceHash: contributePoolData.pool.invoiceHash,
+          poolName: contributePoolData.pool.poolName,
           owner: contributePoolData.pool.owner,
           contributor: address ?? "",
           contributedMicro: Math.round(
@@ -279,27 +275,6 @@ export default function Marketplace() {
       reset();
     }
   }, [status, txError, queryClient, reset, address, contributePoolData]);
-
-  // Auto-fill pool target with invoice amount when invoice hash is entered
-  useEffect(() => {
-    if (!poolInvoiceHash.trim()) {
-      setPoolTargetAleo("");
-      return;
-    }
-
-    const matching = invoiceRecords.find(
-      (r) =>
-        getField(r.recordPlaintext, "invoice_hash") === poolInvoiceHash.trim(),
-    );
-
-    if (matching) {
-      const amountMicro = parseInvoiceAmountMicro(matching);
-      const amountAleo = (amountMicro / 1_000_000).toLocaleString(undefined, {
-        maximumFractionDigits: 6,
-      });
-      setPoolTargetAleo(amountAleo);
-    }
-  }, [poolInvoiceHash, invoiceRecords]);
 
   const getMyPoolShare = (invoiceHash: string): AleoRecord | null => {
     if (!address) return null;
@@ -431,38 +406,21 @@ export default function Marketplace() {
       return;
     }
 
-    const invoiceHash = poolInvoiceHash.trim();
+    const name = poolName.trim();
+    const poolId = poolInvoiceHash.trim() || generatePoolFieldId();
     const targetAleo = parseFloat(poolTargetAleo);
 
-    if (!invoiceHash || Number.isNaN(targetAleo) || targetAleo <= 0) {
-      toast.error("Provide valid invoice hash and target amount.");
+    if (!name || Number.isNaN(targetAleo) || targetAleo <= 0) {
+      toast.error("Provide a pool name and valid target amount.");
       return;
     }
 
-    // Find the matching invoice to validate pool target doesn't exceed invoice amount
-    const matchingInvoice = invoiceRecords.find(
-      (r) => getField(r.recordPlaintext, "invoice_hash") === invoiceHash,
-    );
-
-    if (matchingInvoice) {
-      const invoiceAmountMicro = parseInvoiceAmountMicro(matchingInvoice);
-      const targetMicro = Math.round(targetAleo * 1_000_000);
-      if (targetMicro > invoiceAmountMicro) {
-        const invoiceAleo = (invoiceAmountMicro / 1_000_000).toLocaleString(
-          undefined,
-          { maximumFractionDigits: 6 },
-        );
-        toast.error(
-          `Pool target cannot exceed invoice amount (${invoiceAleo} ALEO)`,
-        );
-        return;
-      }
-    }
-
+    setPoolInvoiceHash(poolId);
     const targetMicro = Math.round(targetAleo * 1_000_000);
     pendingActionRef.current = "create-pool";
     pendingPoolCreateRef.current = {
-      invoiceHash,
+      invoiceHash: poolId,
+      poolName: name,
       owner: address,
       targetAmountMicro: targetMicro,
     };
@@ -470,7 +428,7 @@ export default function Marketplace() {
     await execute({
       program: PROGRAM_ID,
       function: "create_pool",
-      inputs: buildCreatePoolInputs(invoiceHash, BigInt(targetMicro)),
+      inputs: buildCreatePoolInputs(poolId, BigInt(targetMicro)),
       fee: 80_000,
       privateFee: false,
     });
@@ -511,6 +469,12 @@ export default function Marketplace() {
     }
   };
 
+  const generatePoolFieldId = (): string => {
+    const millis = Date.now();
+    const nonce = Math.floor(Math.random() * 1_000_000);
+    return `${millis}${nonce}field`;
+  };
+
   const openSellToPoolOwner = (pool: PoolDirectoryEntry) => {
     const ownerFactor = factorByAddress.get(pool.owner);
     if (!ownerFactor) {
@@ -518,22 +482,8 @@ export default function Marketplace() {
       return;
     }
 
-    const matchingInvoice = invoiceRecords.find(
-      (r) => getField(r.recordPlaintext, "invoice_hash") === pool.invoiceHash,
-    );
-
-    if (!matchingInvoice) {
-      toast.error(
-        "Matching invoice record not found in your wallet. Choose manually.",
-      );
-      setLockedPoolInvoiceHash(null);
-      setSelectedInvoiceId("");
-    } else {
-      setLockedPoolInvoiceHash(pool.invoiceHash);
-      setSelectedInvoiceId(getInvoiceSelectionId(matchingInvoice));
-    }
-
     setSelectedFactor(ownerFactor);
+    setSelectedInvoiceId("");
     setAdvanceRateInput("");
     setPartialAmountInput("");
     setDialogOpen(true);
@@ -630,20 +580,32 @@ export default function Marketplace() {
                   <DialogHeader>
                     <DialogTitle>Create Pool</DialogTitle>
                     <DialogDescription>
-                      Create a pool deal in marketplace so other factors can
-                      join.
+                      Create a generic liquidity pool so other factors can join
+                      and increase your purchasing capacity.
                     </DialogDescription>
                   </DialogHeader>
                   <div className="space-y-4 py-2">
                     <div className="space-y-2">
-                      <Label htmlFor="pool-invoice-hash">Invoice Hash</Label>
+                      <Label htmlFor="pool-name">Pool Name</Label>
+                      <Input
+                        id="pool-name"
+                        value={poolName}
+                        onChange={(e) => setPoolName(e.target.value)}
+                        placeholder="e.g. FastPay Growth Pool"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="pool-invoice-hash">Pool ID</Label>
                       <Input
                         id="pool-invoice-hash"
                         value={poolInvoiceHash}
                         onChange={(e) => setPoolInvoiceHash(e.target.value)}
-                        placeholder="12345field"
+                        placeholder="Optional - auto generated if empty"
                         className="font-mono"
                       />
+                      <p className="text-xs text-muted-foreground">
+                        Technical on-chain identifier. Leave blank for auto ID.
+                      </p>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="pool-target">Target Amount (ALEO)</Label>
@@ -656,29 +618,10 @@ export default function Marketplace() {
                         onChange={(e) => setPoolTargetAleo(e.target.value)}
                         placeholder="100.0"
                       />
-                      {poolInvoiceHash.trim() && (
-                        <p className="text-xs text-muted-foreground">
-                          {invoiceRecords.find(
-                            (r) =>
-                              getField(r.recordPlaintext, "invoice_hash") ===
-                              poolInvoiceHash.trim(),
-                          )
-                            ? `Max: ${(
-                                parseInvoiceAmountMicro(
-                                  invoiceRecords.find(
-                                    (r) =>
-                                      getField(
-                                        r.recordPlaintext,
-                                        "invoice_hash",
-                                      ) === poolInvoiceHash.trim(),
-                                  )!,
-                                ) / 1_000_000
-                              ).toLocaleString(undefined, {
-                                maximumFractionDigits: 6,
-                              })} ALEO (invoice amount)`
-                            : "Invoice not found in your wallet"}
-                        </p>
-                      )}
+                      <p className="text-xs text-muted-foreground">
+                        This target is your pool liquidity cap, not a single
+                        invoice assignment.
+                      </p>
                     </div>
                   </div>
                   <DialogFooter>
@@ -691,7 +634,7 @@ export default function Marketplace() {
                     <Button
                       onClick={handleCreatePool}
                       disabled={
-                        isFactoring || !poolInvoiceHash || !poolTargetAleo
+                        isFactoring || !poolName.trim() || !poolTargetAleo
                       }
                     >
                       {isFactoring ? "Processing…" : "Create"}
@@ -741,8 +684,11 @@ export default function Marketplace() {
                             >
                               Pool
                             </Badge>
+                            <p className="text-sm font-medium mt-1">
+                              {pool.poolName ?? "Untitled Pool"}
+                            </p>
                             <p className="text-xs text-muted-foreground mt-1">
-                              Invoice:{" "}
+                              Pool ID:{" "}
                               <span className="font-mono">
                                 {pool.invoiceHash.slice(0, 10)}…
                               </span>
@@ -1017,17 +963,13 @@ export default function Marketplace() {
                         }
                         onOpenChange={(open) => {
                           setDialogOpen(open);
-                          if (!open) {
-                            setLockedPoolInvoiceHash(null);
-                            return;
-                          }
+                          if (!open) return;
 
                           if (selectedFactor?.address !== factor.address) {
                             setSelectedFactor(factor);
                             setSelectedInvoiceId("");
                             setAdvanceRateInput("");
                             setPartialAmountInput("");
-                            setLockedPoolInvoiceHash(null);
                           }
                         }}
                       >
@@ -1053,74 +995,52 @@ export default function Marketplace() {
                               />
                             </div>
                             <div className="space-y-2">
-                              {isPoolLockedSelection ? (
-                                <>
-                                  <Label>
-                                    Invoice (Auto-selected from Pool)
-                                  </Label>
-                                  <div className="rounded-md border bg-muted/40 p-3 text-sm space-y-1">
-                                    <p className="text-muted-foreground">
-                                      Invoice Hash
-                                    </p>
-                                    <p className="font-mono text-xs break-all">
-                                      {selectedInvoiceHash}
-                                    </p>
-                                    <p className="text-xs text-muted-foreground">
-                                      This was auto-selected from the pool card.
-                                    </p>
-                                  </div>
-                                </>
-                              ) : (
-                                <>
-                                  <Label htmlFor="invoice-select">
-                                    Select Invoice
-                                  </Label>
-                                  <Select
-                                    value={selectedInvoiceId}
-                                    onValueChange={setSelectedInvoiceId}
-                                  >
-                                    <SelectTrigger>
-                                      <SelectValue placeholder="Choose an invoice…" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {invoiceRecords.length === 0 ? (
-                                        <SelectItem value="_none" disabled>
-                                          No invoices available
-                                        </SelectItem>
-                                      ) : (
-                                        invoiceRecords.map((r) => {
-                                          const hash = getField(
+                              <Label htmlFor="invoice-select">
+                                Select Invoice
+                              </Label>
+                              <Select
+                                value={selectedInvoiceId}
+                                onValueChange={setSelectedInvoiceId}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Choose an invoice…" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {invoiceRecords.length === 0 ? (
+                                    <SelectItem value="_none" disabled>
+                                      No invoices available
+                                    </SelectItem>
+                                  ) : (
+                                    invoiceRecords.map((r) => {
+                                      const hash = getField(
+                                        r.recordPlaintext,
+                                        "invoice_hash",
+                                      );
+                                      const selectionId =
+                                        getInvoiceSelectionId(r);
+                                      const currency = getInvoiceCurrency(r);
+                                      const amount = (
+                                        parseInt(
+                                          getField(
                                             r.recordPlaintext,
-                                            "invoice_hash",
-                                          );
-                                          const selectionId =
-                                            getInvoiceSelectionId(r);
-                                          const currency =
-                                            getInvoiceCurrency(r);
-                                          const amount = (
-                                            parseInt(
-                                              getField(
-                                                r.recordPlaintext,
-                                                "amount",
-                                              ).replace(/u64$/, ""),
-                                              10,
-                                            ) / 1_000_000
-                                          ).toFixed(6);
-                                          return (
-                                            <SelectItem
-                                              key={selectionId}
-                                              value={selectionId}
-                                            >
-                                              {hash.slice(0, 12)}… - {amount}{" "}
-                                              {currency}
-                                            </SelectItem>
-                                          );
-                                        })
-                                      )}
-                                    </SelectContent>
-                                  </Select>
-                                </>
-                              )}
+                                            "amount",
+                                          ).replace(/u64$/, ""),
+                                          10,
+                                        ) / 1_000_000
+                                      ).toFixed(6);
+                                      return (
+                                        <SelectItem
+                                          key={selectionId}
+                                          value={selectionId}
+                                        >
+                                          {hash.slice(0, 12)}… - {amount}{" "}
+                                          {currency}
+                                        </SelectItem>
+                                      );
+                                    })
+                                  )}
+                                </SelectContent>
+                              </Select>
                             </div>
                             <div className="space-y-2">
                               <Label htmlFor="partial-amount">
@@ -1251,10 +1171,19 @@ export default function Marketplace() {
                     const isFactorRole = activeRole === "factor";
                     return (
                       <>
+                        <div className="rounded-md border bg-muted/30 p-3 space-y-1">
+                          <p className="text-muted-foreground text-xs">
+                            Pool Name
+                          </p>
+                          <p className="font-medium">
+                            {selectedPool.poolName ?? "Untitled Pool"}
+                          </p>
+                        </div>
+
                         <div className="rounded-md border bg-muted/30 p-3 space-y-2">
                           <div className="flex items-center justify-between gap-2">
                             <span className="text-muted-foreground">
-                              Invoice Hash
+                              Pool ID
                             </span>
                             <Button
                               size="icon"
@@ -1263,11 +1192,11 @@ export default function Marketplace() {
                               onClick={() =>
                                 copyPoolField(
                                   selectedPool.invoiceHash,
-                                  "Invoice Hash",
+                                  "Pool ID",
                                 )
                               }
                             >
-                              {copiedPoolField === "Invoice Hash" ? (
+                              {copiedPoolField === "Pool ID" ? (
                                 <Check className="h-4 w-4 text-green-600" />
                               ) : (
                                 <Copy className="h-4 w-4" />
@@ -1552,6 +1481,9 @@ export default function Marketplace() {
                               Completed
                             </Badge>
                           </div>
+                          <p className="text-sm font-medium mt-1">
+                            {pool.poolName ?? "Untitled Pool"}
+                          </p>
                           <p className="text-xs text-muted-foreground mt-1">
                             Raised {formatMicroToAleo(stats.raisedMicro)} /{" "}
                             {formatMicroToAleo(pool.targetAmountMicro)} ALEO
@@ -1608,7 +1540,7 @@ export default function Marketplace() {
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Invoice</span>
+                      <span className="text-muted-foreground">Pool ID</span>
                       <span className="font-mono text-xs">
                         {contributePoolData.pool.invoiceHash.slice(0, 10)}…
                       </span>

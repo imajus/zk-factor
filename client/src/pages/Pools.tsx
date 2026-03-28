@@ -92,11 +92,20 @@ export default function Pools() {
     (r) => r.recordName === "FactorPool" && !r.spent,
   );
   const localPoolEntries = listPoolDirectory();
+  const poolNameById = new Map(
+    localPoolEntries.map((entry) => [entry.invoiceHash, entry.poolName]),
+  );
   const onChainPoolHashes = new Set(
     poolRecords.map((r) => getField(r.recordPlaintext, "invoice_hash")),
   );
   const directoryOnlyPools = localPoolEntries.filter(
     (p) => !onChainPoolHashes.has(p.invoiceHash),
+  );
+  const ownerPoolRecords = poolRecords.filter(
+    (r) => !!address && getField(r.recordPlaintext, "owner") === address,
+  );
+  const ownerDirectoryPools = directoryOnlyPools.filter(
+    (p) => !!address && p.owner === address,
   );
   const totalVisiblePools = poolRecords.length + directoryOnlyPools.length;
   const poolShareRecords = ((records as AleoRecord[]) ?? []).filter(
@@ -391,7 +400,11 @@ export default function Pools() {
     }
   };
 
-  const renderPoolCards = () => {
+  const renderPoolCards = (view: "all" | "owner" = "all") => {
+    const viewPoolRecords = view === "owner" ? ownerPoolRecords : poolRecords;
+    const viewDirectoryPools =
+      view === "owner" ? ownerDirectoryPools : directoryOnlyPools;
+
     if (isLoading) {
       return (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -407,16 +420,21 @@ export default function Pools() {
         </div>
       );
     }
-    if (poolRecords.length === 0 && directoryOnlyPools.length === 0) {
+    if (viewPoolRecords.length === 0 && viewDirectoryPools.length === 0) {
       return (
         <Card className="py-16 text-center">
           <CardContent className="space-y-4">
             <Layers className="h-12 w-12 mx-auto text-muted-foreground" />
             <div>
-              <p className="font-medium">No pools yet</p>
+              <p className="font-medium">
+                {view === "owner"
+                  ? "You don't own any pools yet"
+                  : "No pools yet"}
+              </p>
               <p className="text-sm text-muted-foreground mt-1">
-                Create a pool to syndicate factoring across multiple
-                contributors
+                {view === "owner"
+                  ? "Create a pool in Marketplace to start managing owner operations."
+                  : "Create a pool to syndicate factoring across multiple contributors"}
               </p>
             </div>
           </CardContent>
@@ -425,8 +443,9 @@ export default function Pools() {
     }
     return (
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {poolRecords.map((record, idx) => {
+        {viewPoolRecords.map((record, idx) => {
           const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
+          const poolName = poolNameById.get(invoiceHash);
           const targetRaw = getField(record.recordPlaintext, "target_amount");
           const targetMicro = BigInt(targetRaw.replace(/u64$/, ""));
           const meta = poolMetas[invoiceHash];
@@ -474,9 +493,14 @@ export default function Pools() {
             >
               <CardContent className="pt-4 space-y-3">
                 <div className="flex items-start justify-between">
-                  <span className="font-mono text-sm text-muted-foreground">
-                    {invoiceHash.slice(0, 14)}…
-                  </span>
+                  <div>
+                    <p className="text-sm font-medium">
+                      {poolName ?? "Untitled Pool"}
+                    </p>
+                    <span className="font-mono text-sm text-muted-foreground">
+                      {invoiceHash.slice(0, 14)}…
+                    </span>
+                  </div>
                   <Badge
                     variant="outline"
                     className={
@@ -610,7 +634,7 @@ export default function Pools() {
           );
         })}
 
-        {directoryOnlyPools.map((pool) => {
+        {viewDirectoryPools.map((pool) => {
           const targetAleo = (
             pool.targetAmountMicro / 1_000_000
           ).toLocaleString(undefined, {
@@ -645,9 +669,14 @@ export default function Pools() {
             >
               <CardContent className="pt-4 space-y-3">
                 <div className="flex items-start justify-between">
-                  <span className="font-mono text-sm text-muted-foreground">
-                    {pool.invoiceHash.slice(0, 14)}…
-                  </span>
+                  <div>
+                    <p className="text-sm font-medium">
+                      {pool.poolName ?? "Untitled Pool"}
+                    </p>
+                    <span className="font-mono text-sm text-muted-foreground">
+                      {pool.invoiceHash.slice(0, 14)}…
+                    </span>
+                  </div>
                   <Badge
                     variant="outline"
                     className={
@@ -880,30 +909,39 @@ export default function Pools() {
         </Card>
       )}
 
-      <Tabs defaultValue="my-pools">
+      <Tabs defaultValue="discover">
         <TabsList>
-          <TabsTrigger value="my-pools">
-            Pools
+          <TabsTrigger value="discover">
+            Discover Pools
             {!isLoading && totalVisiblePools > 0 && (
               <span className="ml-1.5 text-xs opacity-70">
                 ({totalVisiblePools})
               </span>
             )}
           </TabsTrigger>
+          <TabsTrigger value="owner-ops">
+            Owner Ops
+            {!isLoading &&
+              ownerPoolRecords.length + ownerDirectoryPools.length > 0 && (
+                <span className="ml-1.5 text-xs opacity-70">
+                  ({ownerPoolRecords.length + ownerDirectoryPools.length})
+                </span>
+              )}
+          </TabsTrigger>
           <TabsTrigger value="my-shares">
-            My Shares
+            Contributor Claims
             {!isLoading && poolShareRecords.length > 0 && (
               <span className="ml-1.5 text-xs opacity-70">
                 ({poolShareRecords.length})
               </span>
             )}
           </TabsTrigger>
-          <TabsTrigger value="contribute">Contribute</TabsTrigger>
+          <TabsTrigger value="contribute">Join Pool</TabsTrigger>
         </TabsList>
 
-        {/* My Pools tab */}
-        <TabsContent value="my-pools" className="mt-4">
-          {renderPoolCards()}
+        {/* Discover tab */}
+        <TabsContent value="discover" className="mt-4">
+          {renderPoolCards("all")}
           <p className="mt-3 text-xs text-muted-foreground">
             Any active factor can create a pool and any active factor can
             contribute.
@@ -914,6 +952,15 @@ export default function Pools() {
           <p className="mt-1 text-xs text-muted-foreground">
             Payout claim requires pool closed + invoice settled + one spendable
             credits record for the claim transaction input.
+          </p>
+        </TabsContent>
+
+        {/* Owner Ops tab */}
+        <TabsContent value="owner-ops" className="mt-4">
+          {renderPoolCards("owner")}
+          <p className="mt-3 text-xs text-muted-foreground">
+            Owner flow: keep pool funded, execute pool factoring once funded,
+            then monitor settlement and claims.
           </p>
         </TabsContent>
 
@@ -933,15 +980,14 @@ export default function Pools() {
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Enter the pool invoice hash and pool owner address. Any active
-                factor can join, and each contributor receives a PoolShare
-                record.
+                Enter the pool ID and pool owner address. Any active factor can
+                join, and each contributor receives a PoolShare record.
               </p>
               <div className="space-y-2">
-                <Label htmlFor="contrib-hash">Invoice Hash</Label>
+                <Label htmlFor="contrib-hash">Pool ID</Label>
                 <Input
                   id="contrib-hash"
-                  placeholder="invoice_hash field value"
+                  placeholder="pool_id field value (e.g. 12345field)"
                   value={contributeInvoiceHash}
                   onChange={(e) => setContributeInvoiceHash(e.target.value)}
                   className="font-mono text-sm"
