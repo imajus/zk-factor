@@ -40,6 +40,78 @@ export default function About() {
           </Card>
         </section>
 
+        {/* Financing Comparison */}
+        <section className="mb-12">
+          <h2 className="text-2xl font-bold mb-2">Not All Capital Is Created Equal</h2>
+          <p className="text-muted-foreground mb-6">
+            Banks want collateral, credit history, and time. Factoring wants one thing: a customer who pays.
+            Here's how the three main options actually differ when you need working capital.
+          </p>
+          <div className="overflow-x-auto rounded-lg border border-border">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="bg-muted/50">
+                  <th className="text-left py-3 px-4 font-medium text-muted-foreground w-[30%]"></th>
+                  <th className="text-left py-3 px-4 font-semibold text-primary">Invoice Factoring</th>
+                  <th className="text-left py-3 px-4 font-semibold">Bank Line of Credit</th>
+                  <th className="text-left py-3 px-4 font-semibold">Term Loan</th>
+                </tr>
+              </thead>
+              <tbody>
+                {([
+                  {
+                    label: 'Cash in hand',
+                    values: ['24–48 hours', 'Weeks to months', 'Weeks to months'],
+                    highlight: 0,
+                  },
+                  {
+                    label: 'What they check',
+                    values: ["Your customer's credit", 'Your credit', 'Your credit'],
+                    highlight: 0,
+                  },
+                  {
+                    label: 'Adds to your debt?',
+                    values: ['No', 'Yes', 'Yes'],
+                    highlight: 0,
+                  },
+                  {
+                    label: 'Grows with you?',
+                    values: ['Yes — tied to invoices', 'Fixed ceiling', 'Fixed amount'],
+                    highlight: 0,
+                  },
+                  {
+                    label: 'Chases payments',
+                    values: ['Included', 'On you', 'On you'],
+                    highlight: 0,
+                  },
+                  {
+                    label: 'What it costs',
+                    values: ['1–3% per 30 days', 'Prime rate +', 'Fixed rate'],
+                    highlight: -1,
+                  },
+                ] as { label: string; values: string[]; highlight: number }[]).map(({ label, values, highlight }, rowIdx) => (
+                  <tr key={label} className={rowIdx % 2 === 0 ? 'bg-background' : 'bg-muted/20'}>
+                    <td className="py-3 px-4 font-medium text-muted-foreground">{label}</td>
+                    {values.map((val, i) => (
+                      <td
+                        key={i}
+                        className={i === highlight ? 'py-3 px-4 text-primary font-medium' : 'py-3 px-4'}
+                      >
+                        {val}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-sm text-muted-foreground mt-4">
+            If your business has strong credit and a predictable billing cycle, a line of credit likely
+            wins on total cost. Factoring earns its premium when speed matters, banking history is thin,
+            or revenue is growing faster than your credit limit can follow.
+          </p>
+        </section>
+
         {/* Double-Factoring Fraud */}
         <section className="mb-12">
           <div className="flex items-center gap-2 mb-6">
