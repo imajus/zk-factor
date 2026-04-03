@@ -173,6 +173,24 @@ program zk_factor_12250.aleo {
         };
     }
 
+    fn deregister_factor() -> Final {
+        let caller: address = self.caller;
+        return final {
+            // Mapping::get will panic if the factor doesn't exist
+            let factor_info: FactorInfo = Mapping::get(active_factors, caller);
+            assert(factor_info.is_active);
+
+            let updated: FactorInfo = FactorInfo {
+                is_active: false,
+                min_advance_rate: factor_info.min_advance_rate,
+                max_advance_rate: factor_info.max_advance_rate,
+                total_factored: factor_info.total_factored,
+                registration_date: factor_info.registration_date,
+            };
+            Mapping::set(active_factors, caller, updated);
+        };
+    }
+    
     // ─────────────────────────────────────────────────────────────
     // TWO-STEP FACTORING HANDSHAKE
     // ─────────────────────────────────────────────────────────────

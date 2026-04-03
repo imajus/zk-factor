@@ -165,6 +165,17 @@ finalize register_factor:
     cast true r1 r2 0u64 r8 into r9 as FactorInfo;
     set r9 into active_factors[r0];
 
+function deregister_factor:
+    async deregister_factor self.caller into r0;
+    output r0 as zk_factor_12250.aleo/deregister_factor.future;
+
+finalize deregister_factor:
+    input r0 as address.public;
+    get active_factors[r0] into r1;
+    assert.eq r1.is_active true;
+    cast false r1.min_advance_rate r1.max_advance_rate r1.total_factored r1.registration_date into r2 as FactorInfo;
+    set r2 into active_factors[r0];
+
 function authorize_factoring:
     input r0 as Invoice.record;
     input r1 as address.private;

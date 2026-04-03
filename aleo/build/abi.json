@@ -649,6 +649,17 @@
       ]
     },
     {
+      "name": "deregister_factor",
+      "is_final": true,
+      "inputs": [],
+      "outputs": [
+        {
+          "ty": "Final",
+          "mode": "None"
+        }
+      ]
+    },
+    {
       "name": "authorize_factoring",
       "is_final": true,
       "inputs": [
