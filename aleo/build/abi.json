@@ -1,5 +1,5 @@
 {
-  "program": "zk_factor_12250.aleo",
+  "program": "zk_factor_12251.aleo",
   "structs": [
     {
       "path": [
@@ -77,6 +77,108 @@
             "Primitive": {
               "UInt": "U64"
             }
+          }
+        }
+      ]
+    },
+    {
+      "path": [
+        "PoolMeta"
+      ],
+      "fields": [
+        {
+          "name": "name_u128",
+          "ty": {
+            "Primitive": {
+              "UInt": "U128"
+            }
+          }
+        },
+        {
+          "name": "target_amount",
+          "ty": {
+            "Primitive": {
+              "UInt": "U64"
+            }
+          }
+        },
+        {
+          "name": "min_contribution",
+          "ty": {
+            "Primitive": {
+              "UInt": "U64"
+            }
+          }
+        },
+        {
+          "name": "created_at",
+          "ty": {
+            "Primitive": {
+              "UInt": "U64"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": [
+        "PendingPoolOffer"
+      ],
+      "fields": [
+        {
+          "name": "original_creditor",
+          "ty": {
+            "Primitive": "Address"
+          }
+        },
+        {
+          "name": "debtor",
+          "ty": {
+            "Primitive": "Address"
+          }
+        },
+        {
+          "name": "amount",
+          "ty": {
+            "Primitive": {
+              "UInt": "U64"
+            }
+          }
+        },
+        {
+          "name": "advance_rate",
+          "ty": {
+            "Primitive": {
+              "UInt": "U16"
+            }
+          }
+        },
+        {
+          "name": "advance_amount",
+          "ty": {
+            "Primitive": {
+              "UInt": "U64"
+            }
+          }
+        },
+        {
+          "name": "due_date",
+          "ty": {
+            "Primitive": {
+              "UInt": "U64"
+            }
+          }
+        },
+        {
+          "name": "nonce",
+          "ty": {
+            "Primitive": "Field"
+          }
+        },
+        {
+          "name": "is_executed",
+          "ty": {
+            "Primitive": "Boolean"
           }
         }
       ]
@@ -505,6 +607,45 @@
           "mode": "None"
         }
       ]
+    },
+    {
+      "path": [
+        "PoolPaymentNotice"
+      ],
+      "fields": [
+        {
+          "name": "owner",
+          "ty": {
+            "Primitive": "Address"
+          },
+          "mode": "None"
+        },
+        {
+          "name": "invoice_hash",
+          "ty": {
+            "Primitive": "Field"
+          },
+          "mode": "None"
+        },
+        {
+          "name": "amount",
+          "ty": {
+            "Primitive": {
+              "UInt": "U64"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "due_date",
+          "ty": {
+            "Primitive": {
+              "UInt": "U64"
+            }
+          },
+          "mode": "None"
+        }
+      ]
     }
   ],
   "mappings": [
@@ -518,7 +659,7 @@
           "path": [
             "FactorInfo"
           ],
-          "program": "zk_factor_12250"
+          "program": "zk_factor_12251.aleo"
         }
       }
     },
@@ -532,7 +673,7 @@
           "path": [
             "SettlementInfo"
           ],
-          "program": "zk_factor_12250"
+          "program": "zk_factor_12251.aleo"
         }
       }
     },
@@ -608,6 +749,74 @@
           "UInt": "U64"
         }
       }
+    },
+    {
+      "name": "pool_meta",
+      "key": {
+        "Primitive": "Field"
+      },
+      "value": {
+        "Struct": {
+          "path": [
+            "PoolMeta"
+          ],
+          "program": "zk_factor_12251.aleo"
+        }
+      }
+    },
+    {
+      "name": "pool_pending_offer",
+      "key": {
+        "Primitive": "Field"
+      },
+      "value": {
+        "Struct": {
+          "path": [
+            "PendingPoolOffer"
+          ],
+          "program": "zk_factor_12251.aleo"
+        }
+      }
+    },
+    {
+      "name": "pool_vote_count",
+      "key": {
+        "Primitive": "Field"
+      },
+      "value": {
+        "Primitive": {
+          "UInt": "U8"
+        }
+      }
+    },
+    {
+      "name": "pool_voter_cast",
+      "key": {
+        "Primitive": "Field"
+      },
+      "value": {
+        "Primitive": "Boolean"
+      }
+    },
+    {
+      "name": "pool_executor",
+      "key": {
+        "Primitive": "Field"
+      },
+      "value": {
+        "Primitive": "Address"
+      }
+    },
+    {
+      "name": "active_factor_count",
+      "key": {
+        "Primitive": "Boolean"
+      },
+      "value": {
+        "Primitive": {
+          "UInt": "U32"
+        }
+      }
     }
   ],
   "storage_variables": [
@@ -620,12 +829,22 @@
           }
         }
       }
+    },
+    {
+      "name": "pool_registry",
+      "ty": {
+        "Vector": {
+          "Plaintext": {
+            "Primitive": "Field"
+          }
+        }
+      }
     }
   ],
-  "transitions": [
+  "functions": [
     {
       "name": "mint_invoice",
-      "is_async": true,
+      "is_final": true,
       "inputs": [
         {
           "name": "debtor",
@@ -695,20 +914,20 @@
               "path": [
                 "Invoice"
               ],
-              "program": "zk_factor_12250"
+              "program": "zk_factor_12251.aleo"
             }
           },
           "mode": "None"
         },
         {
-          "ty": "Future",
+          "ty": "Final",
           "mode": "None"
         }
       ]
     },
     {
       "name": "register_factor",
-      "is_async": true,
+      "is_final": true,
       "inputs": [
         {
           "name": "min_advance_rate",
@@ -735,25 +954,25 @@
       ],
       "outputs": [
         {
-          "ty": "Future",
+          "ty": "Final",
           "mode": "None"
         }
       ]
     },
     {
       "name": "deregister_factor",
-      "is_async": true,
+      "is_final": true,
       "inputs": [],
       "outputs": [
         {
-          "ty": "Future",
+          "ty": "Final",
           "mode": "None"
         }
       ]
     },
     {
       "name": "authorize_factoring",
-      "is_async": true,
+      "is_final": true,
       "inputs": [
         {
           "name": "invoice",
@@ -762,7 +981,7 @@
               "path": [
                 "Invoice"
               ],
-              "program": "zk_factor_12250"
+              "program": "zk_factor_12251.aleo"
             }
           },
           "mode": "None"
@@ -813,20 +1032,20 @@
               "path": [
                 "FactoringOffer"
               ],
-              "program": "zk_factor_12250"
+              "program": "zk_factor_12251.aleo"
             }
           },
           "mode": "None"
         },
         {
-          "ty": "Future",
+          "ty": "Final",
           "mode": "None"
         }
       ]
     },
     {
       "name": "authorize_partial_factoring",
-      "is_async": true,
+      "is_final": true,
       "inputs": [
         {
           "name": "invoice",
@@ -835,7 +1054,7 @@
               "path": [
                 "Invoice"
               ],
-              "program": "zk_factor_12250"
+              "program": "zk_factor_12251.aleo"
             }
           },
           "mode": "None"
@@ -897,7 +1116,7 @@
               "path": [
                 "FactoringOffer"
               ],
-              "program": "zk_factor_12250"
+              "program": "zk_factor_12251.aleo"
             }
           },
           "mode": "None"
@@ -908,20 +1127,20 @@
               "path": [
                 "Invoice"
               ],
-              "program": "zk_factor_12250"
+              "program": "zk_factor_12251.aleo"
             }
           },
           "mode": "None"
         },
         {
-          "ty": "Future",
+          "ty": "Final",
           "mode": "None"
         }
       ]
     },
     {
       "name": "execute_factoring",
-      "is_async": true,
+      "is_final": true,
       "inputs": [
         {
           "name": "offer",
@@ -930,7 +1149,7 @@
               "path": [
                 "FactoringOffer"
               ],
-              "program": "zk_factor_12250"
+              "program": "zk_factor_12251.aleo"
             }
           },
           "mode": "None"
@@ -942,7 +1161,7 @@
               "path": [
                 "credits"
               ],
-              "program": "credits"
+              "program": "credits.aleo"
             }
           },
           "mode": "None"
@@ -955,7 +1174,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_12250"
+              "program": "zk_factor_12251.aleo"
             }
           },
           "mode": "None"
@@ -966,7 +1185,7 @@
               "path": [
                 "credits"
               ],
-              "program": "credits"
+              "program": "credits.aleo"
             }
           },
           "mode": "None"
@@ -977,20 +1196,20 @@
               "path": [
                 "credits"
               ],
-              "program": "credits"
+              "program": "credits.aleo"
             }
           },
           "mode": "None"
         },
         {
-          "ty": "Future",
+          "ty": "Final",
           "mode": "None"
         }
       ]
     },
     {
       "name": "execute_factoring_token",
-      "is_async": true,
+      "is_final": true,
       "inputs": [
         {
           "name": "offer",
@@ -999,7 +1218,7 @@
               "path": [
                 "FactoringOffer"
               ],
-              "program": "zk_factor_12250"
+              "program": "zk_factor_12251.aleo"
             }
           },
           "mode": "None"
@@ -1012,20 +1231,20 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_12250"
+              "program": "zk_factor_12251.aleo"
             }
           },
           "mode": "None"
         },
         {
-          "ty": "Future",
+          "ty": "Final",
           "mode": "None"
         }
       ]
     },
     {
       "name": "settle_invoice",
-      "is_async": true,
+      "is_final": true,
       "inputs": [
         {
           "name": "factored",
@@ -1034,7 +1253,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_12250"
+              "program": "zk_factor_12251.aleo"
             }
           },
           "mode": "None"
@@ -1042,14 +1261,14 @@
       ],
       "outputs": [
         {
-          "ty": "Future",
+          "ty": "Final",
           "mode": "None"
         }
       ]
     },
     {
       "name": "create_payment_request",
-      "is_async": false,
+      "is_final": false,
       "inputs": [
         {
           "name": "factored",
@@ -1058,7 +1277,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_12250"
+              "program": "zk_factor_12251.aleo"
             }
           },
           "mode": "None"
@@ -1071,7 +1290,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_12250"
+              "program": "zk_factor_12251.aleo"
             }
           },
           "mode": "None"
@@ -1082,7 +1301,7 @@
               "path": [
                 "PaymentNotice"
               ],
-              "program": "zk_factor_12250"
+              "program": "zk_factor_12251.aleo"
             }
           },
           "mode": "None"
@@ -1091,7 +1310,7 @@
     },
     {
       "name": "pay_invoice",
-      "is_async": true,
+      "is_final": true,
       "inputs": [
         {
           "name": "notice",
@@ -1100,7 +1319,7 @@
               "path": [
                 "PaymentNotice"
               ],
-              "program": "zk_factor_12250"
+              "program": "zk_factor_12251.aleo"
             }
           },
           "mode": "None"
@@ -1117,14 +1336,14 @@
       ],
       "outputs": [
         {
-          "ty": "Future",
+          "ty": "Final",
           "mode": "None"
         }
       ]
     },
     {
       "name": "initiate_recourse",
-      "is_async": true,
+      "is_final": true,
       "inputs": [
         {
           "name": "factored",
@@ -1133,7 +1352,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_12250"
+              "program": "zk_factor_12251.aleo"
             }
           },
           "mode": "None"
@@ -1146,20 +1365,20 @@
               "path": [
                 "RecourseNotice"
               ],
-              "program": "zk_factor_12250"
+              "program": "zk_factor_12251.aleo"
             }
           },
           "mode": "None"
         },
         {
-          "ty": "Future",
+          "ty": "Final",
           "mode": "None"
         }
       ]
     },
     {
       "name": "settle_recourse",
-      "is_async": true,
+      "is_final": true,
       "inputs": [
         {
           "name": "notice",
@@ -1168,7 +1387,7 @@
               "path": [
                 "RecourseNotice"
               ],
-              "program": "zk_factor_12250"
+              "program": "zk_factor_12251.aleo"
             }
           },
           "mode": "None"
@@ -1180,7 +1399,7 @@
               "path": [
                 "credits"
               ],
-              "program": "credits"
+              "program": "credits.aleo"
             }
           },
           "mode": "None"
@@ -1193,7 +1412,7 @@
               "path": [
                 "credits"
               ],
-              "program": "credits"
+              "program": "credits.aleo"
             }
           },
           "mode": "None"
@@ -1204,20 +1423,20 @@
               "path": [
                 "credits"
               ],
-              "program": "credits"
+              "program": "credits.aleo"
             }
           },
           "mode": "None"
         },
         {
-          "ty": "Future",
+          "ty": "Final",
           "mode": "None"
         }
       ]
     },
     {
       "name": "create_pool",
-      "is_async": true,
+      "is_final": true,
       "inputs": [
         {
           "name": "invoice_hash",
@@ -1247,20 +1466,20 @@
               "path": [
                 "FactorPool"
               ],
-              "program": "zk_factor_12250"
+              "program": "zk_factor_12251.aleo"
             }
           },
           "mode": "None"
         },
         {
-          "ty": "Future",
+          "ty": "Final",
           "mode": "None"
         }
       ]
     },
     {
       "name": "contribute_to_pool",
-      "is_async": true,
+      "is_final": true,
       "inputs": [
         {
           "name": "invoice_hash",
@@ -1298,7 +1517,7 @@
               "path": [
                 "credits"
               ],
-              "program": "credits"
+              "program": "credits.aleo"
             }
           },
           "mode": "None"
@@ -1322,7 +1541,7 @@
               "path": [
                 "PoolShare"
               ],
-              "program": "zk_factor_12250"
+              "program": "zk_factor_12251.aleo"
             }
           },
           "mode": "None"
@@ -1333,7 +1552,7 @@
               "path": [
                 "credits"
               ],
-              "program": "credits"
+              "program": "credits.aleo"
             }
           },
           "mode": "None"
@@ -1344,20 +1563,20 @@
               "path": [
                 "credits"
               ],
-              "program": "credits"
+              "program": "credits.aleo"
             }
           },
           "mode": "None"
         },
         {
-          "ty": "Future",
+          "ty": "Final",
           "mode": "None"
         }
       ]
     },
     {
       "name": "execute_pool_factoring",
-      "is_async": true,
+      "is_final": true,
       "inputs": [
         {
           "name": "offer",
@@ -1366,7 +1585,7 @@
               "path": [
                 "FactoringOffer"
               ],
-              "program": "zk_factor_12250"
+              "program": "zk_factor_12251.aleo"
             }
           },
           "mode": "None"
@@ -1378,7 +1597,7 @@
               "path": [
                 "FactorPool"
               ],
-              "program": "zk_factor_12250"
+              "program": "zk_factor_12251.aleo"
             }
           },
           "mode": "None"
@@ -1390,7 +1609,7 @@
               "path": [
                 "credits"
               ],
-              "program": "credits"
+              "program": "credits.aleo"
             }
           },
           "mode": "None"
@@ -1403,7 +1622,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_12250"
+              "program": "zk_factor_12251.aleo"
             }
           },
           "mode": "None"
@@ -1414,7 +1633,7 @@
               "path": [
                 "credits"
               ],
-              "program": "credits"
+              "program": "credits.aleo"
             }
           },
           "mode": "None"
@@ -1425,20 +1644,20 @@
               "path": [
                 "credits"
               ],
-              "program": "credits"
+              "program": "credits.aleo"
             }
           },
           "mode": "None"
         },
         {
-          "ty": "Future",
+          "ty": "Final",
           "mode": "None"
         }
       ]
     },
     {
       "name": "recover_pool_close",
-      "is_async": true,
+      "is_final": true,
       "inputs": [
         {
           "name": "pool",
@@ -1447,7 +1666,7 @@
               "path": [
                 "FactorPool"
               ],
-              "program": "zk_factor_12250"
+              "program": "zk_factor_12251.aleo"
             }
           },
           "mode": "None"
@@ -1455,14 +1674,14 @@
       ],
       "outputs": [
         {
-          "ty": "Future",
+          "ty": "Final",
           "mode": "None"
         }
       ]
     },
     {
       "name": "open_pool_distribution",
-      "is_async": true,
+      "is_final": true,
       "inputs": [
         {
           "name": "invoice_hash",
@@ -1476,35 +1695,14 @@
       ],
       "outputs": [
         {
-          "ty": "Future",
-          "mode": "None"
-        }
-      ]
-    },
-    {
-      "name": "open_pool_distribution",
-      "is_async": true,
-      "inputs": [
-        {
-          "name": "invoice_hash",
-          "ty": {
-            "Plaintext": {
-              "Primitive": "Field"
-            }
-          },
-          "mode": "None"
-        }
-      ],
-      "outputs": [
-        {
-          "ty": "Future",
+          "ty": "Final",
           "mode": "None"
         }
       ]
     },
     {
       "name": "claim_pool_proceeds",
-      "is_async": true,
+      "is_final": true,
       "inputs": [
         {
           "name": "share",
@@ -1513,7 +1711,7 @@
               "path": [
                 "PoolShare"
               ],
-              "program": "zk_factor_12250"
+              "program": "zk_factor_12251.aleo"
             }
           },
           "mode": "None"
@@ -1537,13 +1735,332 @@
               "path": [
                 "credits"
               ],
-              "program": "credits"
+              "program": "credits.aleo"
             }
           },
           "mode": "None"
         },
         {
-          "ty": "Future",
+          "ty": "Final",
+          "mode": "None"
+        }
+      ]
+    },
+    {
+      "name": "create_ownerless_pool",
+      "is_final": true,
+      "inputs": [
+        {
+          "name": "invoice_hash",
+          "ty": {
+            "Plaintext": {
+              "Primitive": "Field"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "name_u128",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U128"
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "target_amount",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "min_contribution",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        }
+      ],
+      "outputs": [
+        {
+          "ty": "Final",
+          "mode": "None"
+        }
+      ]
+    },
+    {
+      "name": "pool_contribute",
+      "is_final": true,
+      "inputs": [
+        {
+          "name": "invoice_hash",
+          "ty": {
+            "Plaintext": {
+              "Primitive": "Field"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "program_addr",
+          "ty": {
+            "Plaintext": {
+              "Primitive": "Address"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "contribution",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "existing_total",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        }
+      ],
+      "outputs": [
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "PoolShare"
+              ],
+              "program": "zk_factor_12251.aleo"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "ty": "Final",
+          "mode": "None"
+        }
+      ]
+    },
+    {
+      "name": "pool_submit_invoice",
+      "is_final": true,
+      "inputs": [
+        {
+          "name": "invoice",
+          "ty": {
+            "Record": {
+              "path": [
+                "Invoice"
+              ],
+              "program": "zk_factor_12251.aleo"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "pool_hash",
+          "ty": {
+            "Plaintext": {
+              "Primitive": "Field"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "advance_rate",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U16"
+              }
+            }
+          },
+          "mode": "None"
+        }
+      ],
+      "outputs": [
+        {
+          "ty": "Final",
+          "mode": "None"
+        }
+      ]
+    },
+    {
+      "name": "pool_vote",
+      "is_final": true,
+      "inputs": [
+        {
+          "name": "invoice_hash",
+          "ty": {
+            "Plaintext": {
+              "Primitive": "Field"
+            }
+          },
+          "mode": "None"
+        }
+      ],
+      "outputs": [
+        {
+          "ty": "Final",
+          "mode": "None"
+        }
+      ]
+    },
+    {
+      "name": "execute_approved_pool",
+      "is_final": true,
+      "inputs": [
+        {
+          "name": "invoice_hash",
+          "ty": {
+            "Plaintext": {
+              "Primitive": "Field"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "business_addr",
+          "ty": {
+            "Plaintext": {
+              "Primitive": "Address"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "debtor_addr",
+          "ty": {
+            "Plaintext": {
+              "Primitive": "Address"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "advance_amount",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "invoice_amount",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "due_date",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        }
+      ],
+      "outputs": [
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "PoolPaymentNotice"
+              ],
+              "program": "zk_factor_12251.aleo"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "ty": "Final",
+          "mode": "None"
+        }
+      ]
+    },
+    {
+      "name": "pay_pool_invoice",
+      "is_final": true,
+      "inputs": [
+        {
+          "name": "notice",
+          "ty": {
+            "Record": {
+              "path": [
+                "PoolPaymentNotice"
+              ],
+              "program": "zk_factor_12251.aleo"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "program_addr",
+          "ty": {
+            "Plaintext": {
+              "Primitive": "Address"
+            }
+          },
+          "mode": "None"
+        }
+      ],
+      "outputs": [
+        {
+          "ty": "Final",
+          "mode": "None"
+        }
+      ]
+    },
+    {
+      "name": "pool_open_distribution",
+      "is_final": true,
+      "inputs": [
+        {
+          "name": "invoice_hash",
+          "ty": {
+            "Plaintext": {
+              "Primitive": "Field"
+            }
+          },
+          "mode": "None"
+        }
+      ],
+      "outputs": [
+        {
+          "ty": "Final",
           "mode": "None"
         }
       ]
