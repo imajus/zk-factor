@@ -1,7 +1,7 @@
 import { AleoWalletProvider } from "@provablehq/aleo-wallet-adaptor-react";
 import { ShieldWalletAdapter } from "@provablehq/aleo-wallet-adaptor-shield";
 import { DecryptPermission } from "@provablehq/aleo-wallet-adaptor-core";
-import { Routes, Route } from "react-router-dom";
+import { Navigate, Routes, Route } from "react-router-dom";
 import { NETWORK, WHITELISTED_PROGRAMS } from "@/lib/config";
 import { WalletProvider, useWallet } from "@/contexts/WalletContext";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -24,6 +24,14 @@ import InvoicePending from "./pages/InvoicePending";
 function Dashboard() {
   const { activeRole } = useWallet();
   return activeRole === "factor" ? <FactorDashboard /> : <BusinessDashboard />;
+}
+
+function RequireFactor({ children }: { children: JSX.Element }) {
+  const { activeRole } = useWallet();
+  if (activeRole !== "factor") {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return children;
 }
 
 const wallets = [new ShieldWalletAdapter()];
@@ -115,9 +123,11 @@ export default function WalletApp() {
             path="/pools"
             element={
               <RequireAuth>
-                <AppLayout>
-                  <Pools />
-                </AppLayout>
+                <RequireFactor>
+                  <AppLayout>
+                    <Pools />
+                  </AppLayout>
+                </RequireFactor>
               </RequireAuth>
             }
           />

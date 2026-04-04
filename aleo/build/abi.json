@@ -1,5 +1,5 @@
 {
-  "program": "zk_factor_12251.aleo",
+  "program": "zk_factor_12253.aleo",
   "structs": [
     {
       "path": [
@@ -95,10 +95,18 @@
           }
         },
         {
-          "name": "target_amount",
+          "name": "min_advance_rate",
           "ty": {
             "Primitive": {
-              "UInt": "U64"
+              "UInt": "U16"
+            }
+          }
+        },
+        {
+          "name": "max_advance_rate",
+          "ty": {
+            "Primitive": {
+              "UInt": "U16"
             }
           }
         },
@@ -659,7 +667,7 @@
           "path": [
             "FactorInfo"
           ],
-          "program": "zk_factor_12251.aleo"
+          "program": "zk_factor_12253.aleo"
         }
       }
     },
@@ -673,7 +681,7 @@
           "path": [
             "SettlementInfo"
           ],
-          "program": "zk_factor_12251.aleo"
+          "program": "zk_factor_12253.aleo"
         }
       }
     },
@@ -760,7 +768,7 @@
           "path": [
             "PoolMeta"
           ],
-          "program": "zk_factor_12251.aleo"
+          "program": "zk_factor_12253.aleo"
         }
       }
     },
@@ -774,7 +782,7 @@
           "path": [
             "PendingPoolOffer"
           ],
-          "program": "zk_factor_12251.aleo"
+          "program": "zk_factor_12253.aleo"
         }
       }
     },
@@ -914,7 +922,7 @@
               "path": [
                 "Invoice"
               ],
-              "program": "zk_factor_12251.aleo"
+              "program": "zk_factor_12253.aleo"
             }
           },
           "mode": "None"
@@ -981,7 +989,7 @@
               "path": [
                 "Invoice"
               ],
-              "program": "zk_factor_12251.aleo"
+              "program": "zk_factor_12253.aleo"
             }
           },
           "mode": "None"
@@ -1032,7 +1040,7 @@
               "path": [
                 "FactoringOffer"
               ],
-              "program": "zk_factor_12251.aleo"
+              "program": "zk_factor_12253.aleo"
             }
           },
           "mode": "None"
@@ -1054,7 +1062,7 @@
               "path": [
                 "Invoice"
               ],
-              "program": "zk_factor_12251.aleo"
+              "program": "zk_factor_12253.aleo"
             }
           },
           "mode": "None"
@@ -1116,7 +1124,7 @@
               "path": [
                 "FactoringOffer"
               ],
-              "program": "zk_factor_12251.aleo"
+              "program": "zk_factor_12253.aleo"
             }
           },
           "mode": "None"
@@ -1127,7 +1135,7 @@
               "path": [
                 "Invoice"
               ],
-              "program": "zk_factor_12251.aleo"
+              "program": "zk_factor_12253.aleo"
             }
           },
           "mode": "None"
@@ -1149,7 +1157,7 @@
               "path": [
                 "FactoringOffer"
               ],
-              "program": "zk_factor_12251.aleo"
+              "program": "zk_factor_12253.aleo"
             }
           },
           "mode": "None"
@@ -1174,7 +1182,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_12251.aleo"
+              "program": "zk_factor_12253.aleo"
             }
           },
           "mode": "None"
@@ -1218,7 +1226,7 @@
               "path": [
                 "FactoringOffer"
               ],
-              "program": "zk_factor_12251.aleo"
+              "program": "zk_factor_12253.aleo"
             }
           },
           "mode": "None"
@@ -1231,7 +1239,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_12251.aleo"
+              "program": "zk_factor_12253.aleo"
             }
           },
           "mode": "None"
@@ -1253,7 +1261,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_12251.aleo"
+              "program": "zk_factor_12253.aleo"
             }
           },
           "mode": "None"
@@ -1277,7 +1285,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_12251.aleo"
+              "program": "zk_factor_12253.aleo"
             }
           },
           "mode": "None"
@@ -1290,7 +1298,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_12251.aleo"
+              "program": "zk_factor_12253.aleo"
             }
           },
           "mode": "None"
@@ -1301,7 +1309,7 @@
               "path": [
                 "PaymentNotice"
               ],
-              "program": "zk_factor_12251.aleo"
+              "program": "zk_factor_12253.aleo"
             }
           },
           "mode": "None"
@@ -1319,7 +1327,7 @@
               "path": [
                 "PaymentNotice"
               ],
-              "program": "zk_factor_12251.aleo"
+              "program": "zk_factor_12253.aleo"
             }
           },
           "mode": "None"
@@ -1352,7 +1360,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_12251.aleo"
+              "program": "zk_factor_12253.aleo"
             }
           },
           "mode": "None"
@@ -1365,7 +1373,7 @@
               "path": [
                 "RecourseNotice"
               ],
-              "program": "zk_factor_12251.aleo"
+              "program": "zk_factor_12253.aleo"
             }
           },
           "mode": "None"
@@ -1387,7 +1395,7 @@
               "path": [
                 "RecourseNotice"
               ],
-              "program": "zk_factor_12251.aleo"
+              "program": "zk_factor_12253.aleo"
             }
           },
           "mode": "None"
@@ -1466,7 +1474,7 @@
               "path": [
                 "FactorPool"
               ],
-              "program": "zk_factor_12251.aleo"
+              "program": "zk_factor_12253.aleo"
             }
           },
           "mode": "None"
@@ -1541,7 +1549,7 @@
               "path": [
                 "PoolShare"
               ],
-              "program": "zk_factor_12251.aleo"
+              "program": "zk_factor_12253.aleo"
             }
           },
           "mode": "None"
@@ -1585,7 +1593,7 @@
               "path": [
                 "FactoringOffer"
               ],
-              "program": "zk_factor_12251.aleo"
+              "program": "zk_factor_12253.aleo"
             }
           },
           "mode": "None"
@@ -1597,7 +1605,7 @@
               "path": [
                 "FactorPool"
               ],
-              "program": "zk_factor_12251.aleo"
+              "program": "zk_factor_12253.aleo"
             }
           },
           "mode": "None"
@@ -1622,7 +1630,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_12251.aleo"
+              "program": "zk_factor_12253.aleo"
             }
           },
           "mode": "None"
@@ -1666,7 +1674,7 @@
               "path": [
                 "FactorPool"
               ],
-              "program": "zk_factor_12251.aleo"
+              "program": "zk_factor_12253.aleo"
             }
           },
           "mode": "None"
@@ -1711,7 +1719,7 @@
               "path": [
                 "PoolShare"
               ],
-              "program": "zk_factor_12251.aleo"
+              "program": "zk_factor_12253.aleo"
             }
           },
           "mode": "None"
@@ -1771,11 +1779,22 @@
           "mode": "None"
         },
         {
-          "name": "target_amount",
+          "name": "min_advance_rate",
           "ty": {
             "Plaintext": {
               "Primitive": {
-                "UInt": "U64"
+                "UInt": "U16"
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "max_advance_rate",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U16"
               }
             }
           },
@@ -1852,7 +1871,7 @@
               "path": [
                 "PoolShare"
               ],
-              "program": "zk_factor_12251.aleo"
+              "program": "zk_factor_12253.aleo"
             }
           },
           "mode": "None"
@@ -1874,7 +1893,7 @@
               "path": [
                 "Invoice"
               ],
-              "program": "zk_factor_12251.aleo"
+              "program": "zk_factor_12253.aleo"
             }
           },
           "mode": "None"
@@ -2000,7 +2019,7 @@
               "path": [
                 "PoolPaymentNotice"
               ],
-              "program": "zk_factor_12251.aleo"
+              "program": "zk_factor_12253.aleo"
             }
           },
           "mode": "None"
@@ -2022,7 +2041,7 @@
               "path": [
                 "PoolPaymentNotice"
               ],
-              "program": "zk_factor_12251.aleo"
+              "program": "zk_factor_12253.aleo"
             }
           },
           "mode": "None"
