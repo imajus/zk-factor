@@ -9,6 +9,10 @@ function resolveNetwork(value: string | undefined): Network {
 export const PROGRAM_ID: string =
   import.meta.env.VITE_ALEO_PROGRAM_ID ?? "zk_factor_12250.aleo";
 
+export const PROGRAM_ADDRESS: string =
+  import.meta.env.VITE_PROGRAM_ADDRESS ??
+  "aleo1s8hgprffm0tqdc9d4q5mshu90efwcg7qfvwzyr3r9wpangazrq8s5yfww6";
+
 export const NETWORK: Network = resolveNetwork(
   import.meta.env.VITE_ALEO_NETWORK ?? "testnet",
 );

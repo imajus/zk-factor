@@ -3,36 +3,110 @@ function PoolCreateDialog() {
   const [open, setOpen] = useState(false);
   const [poolName, setPoolName] = useState("");
   const [poolInvoiceHash, setPoolInvoiceHash] = useState("");
-  const [poolTargetAleo, setPoolTargetAleo] = useState("");
+  const [poolMinAdvanceRate, setPoolMinAdvanceRate] = useState("50");
+  const [poolMaxAdvanceRate, setPoolMaxAdvanceRate] = useState("80");
+  const [poolMinContribAleo, setPoolMinContribAleo] = useState("5");
   const queryClient = useQueryClient();
-  const { address } = useWallet();
-  const { execute, status, reset } = useTransaction();
+  const { activeRole } = useWallet();
+  const { execute, status, error: txError, reset } = useTransaction();
   const [creating, setCreating] = useState(false);
+  const pendingPoolCreateRef = useRef(false);
 
-  const handleCreatePool = async () => {
-    setCreating(true);
-    try {
-      // Pool ID: use provided or generate
-      const poolId = poolInvoiceHash.trim() || `${Date.now()}${Math.floor(Math.random() * 1_000_000)}field`;
-      const targetMicro = Math.round(Number(poolTargetAleo) * 1_000_000).toString();
-      // Simulate on-chain creation (replace with actual logic if needed)
-      // upsertPoolCreation({ invoiceHash: poolId, poolName, owner: address ?? "", targetAmountMicro: Number(targetMicro) });
-      await execute({
-        program: PROGRAM_ID,
-        function: "create_pool", // Replace with actual function if needed
-        inputs: [poolId, targetMicro],
-        fee: 80_000,
-        privateFee: false,
-      });
+  useEffect(() => {
+    if (!pendingPoolCreateRef.current) return;
+
+    if (status === "submitting") {
+      toast.loading("Generating proof...", { id: "create-pool" });
+      return;
+    }
+
+    if (status === "pending") {
+      toast.loading("Broadcasting...", { id: "create-pool" });
+      return;
+    }
+
+    if (status === "accepted") {
+      toast.success("Pool created successfully.", { id: "create-pool" });
       setOpen(false);
       setPoolName("");
       setPoolInvoiceHash("");
-      setPoolTargetAleo("");
-      queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
-    } catch (err) {
-      // Handle error (toast, etc.)
-    } finally {
+      setPoolMinAdvanceRate("50");
+      setPoolMaxAdvanceRate("80");
+      setPoolMinContribAleo("5");
       setCreating(false);
+      queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
+      queryClient.invalidateQueries({ queryKey: ["all_pools"] });
+      queryClient.refetchQueries({ queryKey: ["all_pools"] });
+      pendingPoolCreateRef.current = false;
+      reset();
+      return;
+    }
+
+    if (status === "failed") {
+      toast.error(txError || "Failed to create pool.", { id: "create-pool" });
+      setCreating(false);
+      pendingPoolCreateRef.current = false;
+      reset();
+    }
+  }, [status, txError, queryClient, reset]);
+
+  const handleCreatePool = async () => {
+    const trimmedName = poolName.trim();
+    const minRate = Number(poolMinAdvanceRate);
+    const maxRate = Number(poolMaxAdvanceRate);
+    const minContrib = Number(poolMinContribAleo);
+    
+    if (!trimmedName) {
+      toast.error("Pool name is required.");
+      return;
+    }
+    if (!Number.isFinite(minRate) || minRate < 50 || minRate > 99) {
+      toast.error("Min advance rate must be between 50% and 99%.");
+      return;
+    }
+    if (!Number.isFinite(maxRate) || maxRate < 50 || maxRate > 99) {
+      toast.error("Max advance rate must be between 50% and 99%.");
+      return;
+    }
+    if (minRate > maxRate) {
+      toast.error("Min advance rate cannot exceed max advance rate.");
+      return;
+    }
+    if (!Number.isFinite(minContrib) || minContrib < 5) {
+      toast.error("Minimum contribution must be at least 5 ALEO.");
+      return;
+    }
+
+    const minRateBps = Math.round(minRate * 100);
+    const maxRateBps = Math.round(maxRate * 100);
+    const minContribMicro = BigInt(Math.round(minContrib * 1_000_000));
+
+    setCreating(true);
+    pendingPoolCreateRef.current = true;
+    try {
+      const poolId =
+        poolInvoiceHash.trim() ||
+        `${Date.now()}${Math.floor(Math.random() * 1_000_000)}field`;
+      await execute({
+        program: PROGRAM_ID,
+        function: "create_ownerless_pool",
+        inputs: buildCreateOwnerlessPoolInputs(
+          poolId,
+          encodePoolName(trimmedName),
+          minRateBps,
+          maxRateBps,
+          minContribMicro,
+        ),
+        fee: 100_000,
+        privateFee: false,
+      });
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to create pool.",
+        { id: "create-pool" },
+      );
+      setCreating(false);
+      pendingPoolCreateRef.current = false;
       reset();
     }
   };
@@ -49,7 +123,7 @@ function PoolCreateDialog() {
         <DialogHeader>
           <DialogTitle>Create Pool</DialogTitle>
           <DialogDescription>
-            Create a generic liquidity pool so other factors can join and increase your purchasing capacity.
+            Create an ownerless pool that accepts invoices at specific advance rates. Any business can submit an invoice if their requested advance rate falls within the pool's range.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">
@@ -59,60 +133,111 @@ function PoolCreateDialog() {
               id="pool-name"
               value={poolName}
               onChange={(e) => setPoolName(e.target.value)}
-              placeholder="e.g. FastPay Growth Pool"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="pool-invoice-hash">Pool ID</Label>
-            <Input
-              id="pool-invoice-hash"
-              value={poolInvoiceHash}
-              onChange={(e) => setPoolInvoiceHash(e.target.value)}
-              placeholder="Optional - auto generated if empty"
-              className="font-mono"
+              placeholder="e.g. FastPay Growth"
+              maxLength={16}
             />
             <p className="text-xs text-muted-foreground">
-              Technical on-chain identifier. Leave blank for auto ID.
+              Max 16 ASCII characters.
             </p>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="pool-target">Target Amount (ALEO)</Label>
+            <Label htmlFor="pool-target">Pool ID (optional)</Label>
             <Input
               id="pool-target"
-              type="number"
-              min="0"
-              step="0.000001"
-              value={poolTargetAleo}
-              onChange={(e) => setPoolTargetAleo(e.target.value)}
-              placeholder="100.0"
+              value={poolInvoiceHash}
+              onChange={(e) => setPoolInvoiceHash(e.target.value)}
+              placeholder="Auto-generated if left empty"
+              className="font-mono text-xs"
             />
             <p className="text-xs text-muted-foreground">
-              This target is your pool liquidity cap, not a single invoice assignment.
+              A pool is generic and can accept any invoice later if the advance rate matches this pool's configured range.
             </p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="pool-min-rate">Min Advance Rate (%)</Label>
+            <Input
+              id="pool-min-rate"
+              type="number"
+              min="50"
+              max="99"
+              step="1"
+              value={poolMinAdvanceRate}
+              onChange={(e) => setPoolMinAdvanceRate(e.target.value)}
+              placeholder="50"
+            />
+            <p className="text-xs text-muted-foreground">
+              Minimum percentage advance (50-99%).
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="pool-max-rate">Max Advance Rate (%)</Label>
+            <Input
+              id="pool-max-rate"
+              type="number"
+              min="50"
+              max="99"
+              step="1"
+              value={poolMaxAdvanceRate}
+              onChange={(e) => setPoolMaxAdvanceRate(e.target.value)}
+              placeholder="80"
+            />
+            <p className="text-xs text-muted-foreground">
+              Maximum percentage advance (50-99%).
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="pool-min-contrib">
+              Minimum Contribution (ALEO)
+            </Label>
+            <Input
+              id="pool-min-contrib"
+              type="number"
+              min="5"
+              step="0.000001"
+              value={poolMinContribAleo}
+              onChange={(e) => setPoolMinContribAleo(e.target.value)}
+              placeholder="5"
+            />
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)} disabled={creating}>
+          <Button
+            variant="outline"
+            onClick={() => setOpen(false)}
+            disabled={creating}
+          >
             Cancel
           </Button>
           <Button
             onClick={handleCreatePool}
             disabled={
               creating ||
+              status !== "idle" ||
+              activeRole !== "factor" ||
               !poolName.trim() ||
-              !poolTargetAleo.trim() ||
-              isNaN(Number(poolTargetAleo)) ||
-              Number(poolTargetAleo) <= 0
+              !poolMinAdvanceRate.trim() ||
+              !poolMaxAdvanceRate.trim() ||
+              isNaN(Number(poolMinAdvanceRate)) ||
+              isNaN(Number(poolMaxAdvanceRate)) ||
+              Number(poolMinAdvanceRate) < 50 ||
+              Number(poolMaxAdvanceRate) > 99 ||
+              Number(poolMinAdvanceRate) > Number(poolMaxAdvanceRate)
             }
           >
-            {creating ? "Creating..." : "Create Pool"}
+            {status === "submitting"
+              ? "Generating proof..."
+              : status === "pending"
+                ? "Broadcasting..."
+                : creating
+                  ? "Creating..."
+                  : "Create Pool"}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import {
   Users,
@@ -148,7 +273,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useWallet } from "@/contexts/WalletContext";
 import { useTransaction } from "@/hooks/use-transaction";
 import { toast } from "sonner";
-import { PROGRAM_ID } from "@/lib/config";
+import { PROGRAM_ID, PROGRAM_ADDRESS } from "@/lib/config";
 import { type AleoRecord, getField, microToAleo } from "@/lib/aleo-records";
 import {
   computeExpectedPoolPayout,
@@ -166,6 +291,18 @@ import {
   updatePoolClosed,
   upsertPoolContribution,
 } from "@/lib/pool-directory";
+import {
+  buildCreateOwnerlessPoolInputs,
+  buildPoolContributeInputs,
+  encodePoolName,
+  fetchPublicCreditsBalance,
+  fetchAllPools,
+  type OnChainPoolState,
+} from "@/lib/pool-chain";
+
+const DEFAULT_PROGRAM_ID = "zk_factor_12250.aleo";
+const DEFAULT_PROGRAM_ADDRESS =
+  "aleo1s8hgprffm0tqdc9d4q5mshu90efwcg7qfvwzyr3r9wpangazrq8s5yfww6";
 
 interface PoolMeta {
   invoiceHash: string;
@@ -177,7 +314,7 @@ interface PoolMeta {
 
 export default function Pools() {
   const queryClient = useQueryClient();
-  const { isConnected, requestRecords, address } = useWallet();
+  const { isConnected, requestRecords, address, activeRole } = useWallet();
   const { execute, status, error: txError, reset } = useTransaction();
 
   // Contribute form state
@@ -192,6 +329,12 @@ export default function Pools() {
   const [recoveringPoolHash, setRecoveringPoolHash] = useState<string | null>(
     null,
   );
+  const [ownerlessContributeOpen, setOwnerlessContributeOpen] = useState(false);
+  const [ownerlessContributePool, setOwnerlessContributePool] =
+    useState<OnChainPoolState | null>(null);
+  const [ownerlessContributeAmount, setOwnerlessContributeAmount] =
+    useState("");
+  const [publicBalance, setPublicBalance] = useState<bigint | null>(null);
 
   // Per-pool live metadata (contributions + closed status)
   const [poolMetas, setPoolMetas] = useState<Record<string, PoolMeta>>({});
@@ -215,6 +358,17 @@ export default function Pools() {
     staleTime: 60_000,
   });
 
+  const {
+    data: onChainPools = [],
+    isLoading: onChainPoolsLoading,
+    refetch: refetchOnChainPools,
+  } = useQuery({
+    queryKey: ["all_pools"],
+    queryFn: fetchAllPools,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+
   const poolRecords = ((records as AleoRecord[]) ?? []).filter(
     (r) => r.recordName === "FactorPool" && !r.spent,
   );
@@ -235,6 +389,7 @@ export default function Pools() {
     (p) => !!address && p.owner === address,
   );
   const totalVisiblePools = poolRecords.length + directoryOnlyPools.length;
+  const totalOwnerlessPools = onChainPools.length;
   const poolShareRecords = ((records as AleoRecord[]) ?? []).filter(
     (r) => r.recordName === "PoolShare" && !r.spent,
   );
@@ -288,6 +443,7 @@ export default function Pools() {
 
       toast.success("Transaction confirmed!", { id: "pool-op" });
       queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
+      queryClient.invalidateQueries({ queryKey: ["all_pools"] });
       setIsContributing(false);
       setContributeInvoiceHash("");
       setContributePoolOwner("");
@@ -295,6 +451,10 @@ export default function Pools() {
       setClaimingShareId(null);
       setExecutingPoolHash(null);
       setRecoveringPoolHash(null);
+      setOwnerlessContributeOpen(false);
+      setOwnerlessContributePool(null);
+      setOwnerlessContributeAmount("");
+      setPublicBalance(null);
       reset();
     } else if (status === "failed") {
       setPendingPoolContribution(null);
@@ -303,9 +463,79 @@ export default function Pools() {
       setClaimingShareId(null);
       setExecutingPoolHash(null);
       setRecoveringPoolHash(null);
+      setOwnerlessContributeOpen(false);
+      setOwnerlessContributePool(null);
+      setOwnerlessContributeAmount("");
+      setPublicBalance(null);
       reset();
     }
   }, [status, txError, queryClient, reset, pendingPoolContribution]);
+
+  const openOwnerlessContribute = async (pool: OnChainPoolState) => {
+    setOwnerlessContributePool(pool);
+    setOwnerlessContributeAmount("");
+    setOwnerlessContributeOpen(true);
+    if (address) {
+      const balance = await fetchPublicCreditsBalance(address);
+      setPublicBalance(balance);
+    }
+  };
+
+  const handleOwnerlessContribute = async () => {
+    if (!ownerlessContributePool || !address) return;
+    const amountAleo = parseFloat(ownerlessContributeAmount);
+    if (Number.isNaN(amountAleo) || amountAleo <= 0) {
+      toast.error("Enter a valid amount.");
+      return;
+    }
+
+    const contribution = BigInt(Math.round(amountAleo * 1_000_000));
+    const minContrib = ownerlessContributePool.meta.minContribution;
+    if (contribution < minContrib) {
+      toast.error(
+        `Minimum contribution is ${(Number(minContrib) / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 6 })} ALEO.`,
+      );
+      return;
+    }
+
+    if (publicBalance !== null && contribution > publicBalance) {
+      toast.error(
+        `Insufficient public credits balance (${(Number(publicBalance) / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 6 })} ALEO).`,
+      );
+      return;
+    }
+
+    if (!PROGRAM_ADDRESS) {
+      toast.error("PROGRAM_ADDRESS is not set.");
+      return;
+    }
+
+    // Helpful guard: most generic "Rejected" tx here are program address mismatch.
+    if (
+      PROGRAM_ID !== DEFAULT_PROGRAM_ID &&
+      PROGRAM_ADDRESS === DEFAULT_PROGRAM_ADDRESS
+    ) {
+      toast.error(
+        "PROGRAM_ADDRESS likely does not match your deployed PROGRAM_ID. Update VITE_PROGRAM_ADDRESS for the current program deployment.",
+      );
+      return;
+    }
+
+    const existingTotal = ownerlessContributePool.totalContributed;
+
+    await execute({
+      program: PROGRAM_ID,
+      function: "pool_contribute",
+      inputs: buildPoolContributeInputs(
+        ownerlessContributePool.meta.invoiceHash,
+        PROGRAM_ADDRESS,
+        contribution,
+        existingTotal,
+      ),
+      fee: 80_000,
+      privateFee: false,
+    });
+  };
 
   const handleContribute = async () => {
     if (
@@ -369,7 +599,6 @@ export default function Pools() {
       owner: contributePoolOwner.trim(),
       contributor: address ?? "",
       contributedMicro: Number(contributionMicro),
-      targetAmountMicro: meta ? Number(meta.targetAmount) : undefined,
     });
 
     await execute({
@@ -390,11 +619,11 @@ export default function Pools() {
     try {
       const [isClosed, isSettled, totalContributions, poolProceeds] =
         await Promise.all([
-        fetchPoolClosed(invoiceHash),
-        fetchInvoiceSettled(invoiceHash),
-        fetchPoolContributions(invoiceHash),
-        fetchPoolProceeds(invoiceHash),
-      ]);
+          fetchPoolClosed(invoiceHash),
+          fetchInvoiceSettled(invoiceHash),
+          fetchPoolContributions(invoiceHash),
+          fetchPoolProceeds(invoiceHash),
+        ]);
 
       if (!isClosed) {
         toast.error(
@@ -910,6 +1139,96 @@ export default function Pools() {
     );
   };
 
+  const renderOwnerlessPoolCards = () => {
+    if (onChainPoolsLoading) {
+      return (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Card key={`ownerless-skeleton-${i}`}>
+              <CardContent className="pt-4 space-y-3">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-2 w-full" />
+                <Skeleton className="h-4 w-20" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      );
+    }
+
+    if (onChainPools.length === 0) {
+      return (
+        <Card className="py-10 text-center border-dashed">
+          <CardContent className="space-y-2">
+            <p className="font-medium">No ownerless pools on-chain yet</p>
+            <p className="text-sm text-muted-foreground">
+              Create one to make it publicly visible to all users.
+            </p>
+          </CardContent>
+        </Card>
+      );
+    }
+
+    return (
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {onChainPools.map((pool: OnChainPoolState) => {
+          const raisedAleo = Number(pool.totalContributed) / 1_000_000;
+
+          return (
+            <Card key={`ownerless-${pool.meta.invoiceHash}`}>
+              <CardContent className="pt-4 space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-medium">{pool.meta.name}</p>
+                    <p className="font-mono text-xs text-muted-foreground">
+                      {pool.meta.invoiceHash.slice(0, 14)}…
+                    </p>
+                  </div>
+                  <Badge variant="outline" className="text-xs">
+                    {pool.isClosed ? "Closed" : "Open"}
+                  </Badge>
+                </div>
+
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Rate range</span>
+                    <span className="font-mono">
+                      {pool.meta.minAdvanceRate / 100}% -{" "}
+                      {pool.meta.maxAdvanceRate / 100}%
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Raised</span>
+                    <span className="font-mono">
+                      {raisedAleo.toLocaleString(undefined, {
+                        maximumFractionDigits: 2,
+                      })}{" "}
+                      ALEO
+                    </span>
+                  </div>
+                </div>
+
+                {activeRole === "factor" && !pool.isClosed && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="w-full gap-1.5"
+                    onClick={() => openOwnerlessContribute(pool)}
+                    disabled={status !== "idle"}
+                  >
+                    <TrendingUp className="h-3.5 w-3.5" />
+                    Contribute
+                    <ChevronRight className="h-3.5 w-3.5 ml-auto" />
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+    );
+  };
+
   const renderShareCards = () => {
     if (isLoading) {
       return (
@@ -1024,7 +1343,14 @@ export default function Pools() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => refetch()}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              refetch();
+              refetchOnChainPools();
+            }}
+          >
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
           </Button>
@@ -1055,9 +1381,9 @@ export default function Pools() {
         <TabsList>
           <TabsTrigger value="discover">
             Discover Pools
-            {!isLoading && totalVisiblePools > 0 && (
+            {!isLoading && totalOwnerlessPools > 0 && (
               <span className="ml-1.5 text-xs opacity-70">
-                ({totalVisiblePools})
+                ({totalOwnerlessPools})
               </span>
             )}
           </TabsTrigger>
@@ -1083,6 +1409,11 @@ export default function Pools() {
 
         {/* Discover tab */}
         <TabsContent value="discover" className="mt-4">
+          <div className="mb-4 space-y-2">
+            <p className="text-sm font-medium">Ownerless Pools (On-Chain)</p>
+            {renderOwnerlessPoolCards()}
+          </div>
+
           {renderPoolCards("all")}
           <p className="mt-3 text-xs text-muted-foreground">
             Any active factor can create a pool and any active factor can
@@ -1176,6 +1507,114 @@ export default function Pools() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <Dialog
+        open={ownerlessContributeOpen}
+        onOpenChange={(open) => {
+          setOwnerlessContributeOpen(open);
+          if (!open) {
+            setOwnerlessContributePool(null);
+            setOwnerlessContributeAmount("");
+            setPublicBalance(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-blue-500" />
+              Contribute to Pool
+            </DialogTitle>
+            <DialogDescription>
+              Credits go to protocol escrow and you receive a PoolShare record.
+            </DialogDescription>
+          </DialogHeader>
+
+          {ownerlessContributePool && (
+            <div className="space-y-4 py-2">
+              <div className="bg-muted rounded-lg p-3 text-sm space-y-1.5">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Pool</span>
+                  <span className="font-medium">
+                    {ownerlessContributePool.meta.name}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Total Raised</span>
+                  <span className="font-mono">
+                    {(
+                      Number(ownerlessContributePool.totalContributed) /
+                      1_000_000
+                    ).toLocaleString(undefined, {
+                      maximumFractionDigits: 6,
+                    })}{" "}
+                    ALEO
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">
+                    Min contribution
+                  </span>
+                  <span className="font-mono">
+                    {(
+                      Number(ownerlessContributePool.meta.minContribution) /
+                      1_000_000
+                    ).toLocaleString(undefined, {
+                      maximumFractionDigits: 6,
+                    })}{" "}
+                    ALEO
+                  </span>
+                </div>
+                {publicBalance !== null && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">
+                      Your public balance
+                    </span>
+                    <span className="font-mono">
+                      {(Number(publicBalance) / 1_000_000).toLocaleString(
+                        undefined,
+                        {
+                          maximumFractionDigits: 6,
+                        },
+                      )}{" "}
+                      ALEO
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label>Contribution Amount (ALEO)</Label>
+                <Input
+                  type="number"
+                  min={
+                    Number(ownerlessContributePool.meta.minContribution) / 1e6
+                  }
+                  step="0.000001"
+                  value={ownerlessContributeAmount}
+                  onChange={(e) => setOwnerlessContributeAmount(e.target.value)}
+                  placeholder="e.g. 25"
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setOwnerlessContributeOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleOwnerlessContribute}
+              disabled={status !== "idle" || !ownerlessContributeAmount}
+            >
+              {status !== "idle" ? "Contributing..." : "Contribute"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

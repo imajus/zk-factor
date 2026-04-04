@@ -92,6 +92,13 @@ export function WalletConnect() {
     };
   }, [connecting, isConnected, ignoreAdapterConnecting]);
 
+  useEffect(() => {
+    if (!isConnected && wallets.length > 0) {
+      // Automatically prompt wallet connection on account switch
+      handleConnect();
+    }
+  }, [activeRole, wallets]);
+
   const handleConnect = async () => {
     if (wallets.length === 0) {
       return;
@@ -123,7 +130,11 @@ export function WalletConnect() {
         <Card className="border-border/50 shadow-xl">
           <CardHeader className="text-center pb-2">
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 glow-primary">
-              <img src="/logo-navbar.png" alt="ZK Factor" className="h-10 w-auto" />
+              <img
+                src="/logo-navbar.png"
+                alt="ZK Factor"
+                className="h-10 w-auto"
+              />
             </div>
             <CardTitle className="text-2xl">Welcome to ZK Factor</CardTitle>
             <CardDescription className="text-base">
@@ -180,17 +191,19 @@ export function WalletConnect() {
                   className="w-full gap-2"
                   size="lg"
                 >
-                  {(isConnectingUi || (isConnected && resolvingRole)) ? (
+                  {isConnectingUi || (isConnected && resolvingRole) ? (
                     <div className="h-5 w-5 rounded-full border-2 border-current border-t-transparent animate-spin" />
                   ) : (
                     <Wallet className="h-5 w-5" />
                   )}
                   {isConnectingUi
                     ? "Connecting..."
-                    : (isConnected && resolvingRole)
+                    : isConnected && resolvingRole
                       ? "Setting up…"
                       : "Connect Shield Wallet"}
-                  {!isConnectingUi && !(isConnected && resolvingRole) && <ArrowRight className="h-4 w-4" />}
+                  {!isConnectingUi && !(isConnected && resolvingRole) && (
+                    <ArrowRight className="h-4 w-4" />
+                  )}
                 </Button>
               )}
 

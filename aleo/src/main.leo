@@ -29,7 +29,8 @@ struct SettlementInfo {
 // On-chain metadata for an ownerless pool. Stored in pool_meta mapping.
 struct PoolMeta {
     name_u128: u128,         // ASCII pool name encoded as u128 (max 16 chars)
-    target_amount: u64,      // equals expected advance_amount (invoice × rate / 10000)
+    min_advance_rate: u16,   // pool-accepted minimum advance rate (bps)
+    max_advance_rate: u16,   // pool-accepted maximum advance rate (bps)
     min_contribution: u64,   // enforced >= 5_000_000 (5 ALEO in microcredits)
     created_at: u64,
 }
@@ -102,7 +103,7 @@ final fn record_settlement(invoice_hash: field, factor: address, amount: u64) {
 // PROGRAM
 // ─────────────────────────────────────────────────────────────────────────────
 
-program zk_factor_12251.aleo {
+program zk_factor_12253.aleo {
     // IMPORTANT: Replace with actual admin address before deployment.
     // See aleo/docs/deployment.md for admin key management.
     @admin(address="aleo19rn544c49da9z2vz52q5f7lm7nsjhp890ahmre6cz94qawdscgps6kq3cu")
@@ -824,20 +825,20 @@ program zk_factor_12251.aleo {
     //
     // name_u128: ASCII pool name encoded as u128 (max 16 chars).
     //            Use encodePoolName() from src/lib/pool-chain.ts.
-    // target_amount: must equal the expected advance_amount
-    //                (invoice_amount × advance_rate / 10000).
-    //                Pool will not accept contributions past this cap.
+    // min_advance_rate/max_advance_rate: accepted invoice pricing range (bps).
     // min_contribution: enforced >= 5_000_000 (5 ALEO in microcredits).
 
     fn create_ownerless_pool(
         invoice_hash: field,
         name_u128: u128,
-        target_amount: u64,
+        min_advance_rate: u16,
+        max_advance_rate: u16,
         min_contribution: u64,
     ) -> Final {
-        assert(target_amount > 0u64);
+        assert(min_advance_rate >= 5000u16 && min_advance_rate <= 9900u16);
+        assert(max_advance_rate >= 5000u16 && max_advance_rate <= 9900u16);
+        assert(min_advance_rate <= max_advance_rate);
         assert(min_contribution >= 5_000_000u64);
-        assert(min_contribution <= target_amount);
         let creator: address = self.caller;
         return final {
             verify_factor_active(creator);
@@ -847,7 +848,8 @@ program zk_factor_12251.aleo {
             pool_registry.push(invoice_hash);
             Mapping::set(pool_meta, invoice_hash, PoolMeta {
                 name_u128:        name_u128,
-                target_amount:    target_amount,
+                min_advance_rate: min_advance_rate,
+                max_advance_rate: max_advance_rate,
                 min_contribution: min_contribution,
                 created_at:       (block.timestamp as u64),
             });
@@ -899,7 +901,6 @@ program zk_factor_12251.aleo {
             assert(contribution >= meta.min_contribution);
             let current: u64 = Mapping::get_or_use(pool_contributions, invoice_hash, 0u64);
             let new_total: u64 = current + contribution;
-            assert(new_total <= meta.target_amount);
             Mapping::set(pool_contributions, invoice_hash, new_total);
             f.run();
         });
@@ -911,9 +912,11 @@ program zk_factor_12251.aleo {
     // Called by the business (Invoice.owner) once the pool is fully funded.
     // Consumes the Invoice record — prevents double-factoring.
     // Creates a public PendingPoolOffer that any factor can vote to approve.
+    // pool_hash identifies the pool and does not need to match invoice_hash.
     //
-    // The advance_rate must produce an advance_amount that exactly equals
-    // the pool's target_amount. Verified on-chain in the final block.
+    // The submitted advance_rate must be within the pool-configured range.
+    // The pool must currently have enough contributed balance for the computed
+    // advance_amount.
 
     fn pool_submit_invoice(
         invoice: Invoice,
@@ -921,8 +924,6 @@ program zk_factor_12251.aleo {
         advance_rate: u16,
     ) -> Final {
         assert(invoice.owner == self.caller);
-        assert(invoice.invoice_hash == pool_hash);
-        assert(advance_rate >= 5000u16 && advance_rate <= 9900u16);
 
         let product: u128 = (invoice.amount as u128) * (advance_rate as u128);
         let advance_amount: u64 = (product / 10000u128) as u64;
@@ -937,10 +938,10 @@ program zk_factor_12251.aleo {
             let is_closed: bool = Mapping::get_or_use(pool_closed, pool_hash, false);
             assert(!is_closed);
             assert(!Mapping::contains(pool_pending_offer, pool_hash));
+            assert(advance_rate >= meta.min_advance_rate);
+            assert(advance_rate <= meta.max_advance_rate);
             let total_contributed: u64 = Mapping::get(pool_contributions, pool_hash);
-            assert(total_contributed >= meta.target_amount);
-            // Advance amount must exactly match the pool's funding target.
-            assert(advance_amount == meta.target_amount);
+            assert(total_contributed >= advance_amount);
             Mapping::set(pool_pending_offer, pool_hash, PendingPoolOffer {
                 original_creditor: creditor,
                 debtor:            debtor,
