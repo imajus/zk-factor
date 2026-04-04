@@ -1093,9 +1093,14 @@ program zk_factor_12253.aleo {
             assert(settlement.amount > 0u64);
             let is_closed: bool = Mapping::get_or_use(pool_closed, invoice_hash, false);
             assert(is_closed);
+            let total_contributed: u64 = Mapping::get(pool_contributions, invoice_hash);
+            let offer: PendingPoolOffer = Mapping::get(pool_pending_offer, invoice_hash);
+            assert(offer.is_executed);
+            assert(total_contributed >= offer.advance_amount);
+            let true_proceeds: u64 = total_contributed - offer.advance_amount + settlement.amount;
             // Idempotency — only open once.
             assert(!Mapping::contains(pool_proceeds, invoice_hash));
-            Mapping::set(pool_proceeds,    invoice_hash, settlement.amount);
+            Mapping::set(pool_proceeds,    invoice_hash, true_proceeds);
             Mapping::set(pool_distributed, invoice_hash, 0u64);
         };
     }
