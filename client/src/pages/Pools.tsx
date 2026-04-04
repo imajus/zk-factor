@@ -1,3 +1,74 @@
+import { useState, useEffect, useRef } from "react";
+import { Link } from "react-router-dom";
+import {
+  Users,
+  RefreshCw,
+  AlertCircle,
+  TrendingUp,
+  Plus,
+  Lock,
+  Unlock,
+  ChevronRight,
+  Layers,
+  Info,
+  Vote,
+  Zap,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
+import { AddressDisplay } from "@/components/ui/address-display";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useWallet } from "@/contexts/WalletContext";
+import { useTransaction } from "@/hooks/use-transaction";
+import { toast } from "sonner";
+import { PROGRAM_ID, PROGRAM_ADDRESS } from "@/lib/config";
+import { type AleoRecord, getField, microToAleo } from "@/lib/aleo-records";
+import {
+  computeExpectedPoolPayout,
+  fetchPoolContributions,
+  fetchPoolClosed,
+  fetchPoolProceeds,
+  fetchInvoiceSettled,
+  buildContributeToPoolInputs,
+  buildClaimPoolProceedsInputs,
+  buildExecutePoolFactoringInputs,
+  buildRecoverPoolCloseInputs,
+} from "@/lib/aleo-factors";
+import {
+  listPoolDirectory,
+  updatePoolClosed,
+  upsertPoolContribution,
+} from "@/lib/pool-directory";
+import {
+  buildCreateOwnerlessPoolInputs,
+  buildPoolContributeInputs,
+  buildPoolVoteInputs,
+  buildExecuteApprovedPoolInputs,
+  computePoolStats,
+  encodePoolName,
+  fetchPublicCreditsBalance,
+  fetchActiveFactorCount,
+  fetchAllPools,
+  type OnChainPoolState,
+} from "@/lib/pool-chain";
+import { PoolTimeline } from "@/components/pools/PoolTimeline";
+
 // Dialog for creating a new pool
 function PoolCreateDialog() {
   const [open, setOpen] = useState(false);
@@ -240,75 +311,6 @@ function PoolCreateDialog() {
     </Dialog>
   );
 }
-import { useState, useEffect, useRef } from "react";
-import { Link } from "react-router-dom";
-import {
-  Users,
-  RefreshCw,
-  AlertCircle,
-  TrendingUp,
-  Plus,
-  Lock,
-  Unlock,
-  ChevronRight,
-  Layers,
-  Info,
-  Vote,
-  Zap,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Progress } from "@/components/ui/progress";
-import { AddressDisplay } from "@/components/ui/address-display";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useWallet } from "@/contexts/WalletContext";
-import { useTransaction } from "@/hooks/use-transaction";
-import { toast } from "sonner";
-import { PROGRAM_ID, PROGRAM_ADDRESS } from "@/lib/config";
-import { type AleoRecord, getField, microToAleo } from "@/lib/aleo-records";
-import {
-  computeExpectedPoolPayout,
-  fetchPoolContributions,
-  fetchPoolClosed,
-  fetchPoolProceeds,
-  fetchInvoiceSettled,
-  buildContributeToPoolInputs,
-  buildClaimPoolProceedsInputs,
-  buildExecutePoolFactoringInputs,
-  buildRecoverPoolCloseInputs,
-} from "@/lib/aleo-factors";
-import {
-  listPoolDirectory,
-  updatePoolClosed,
-  upsertPoolContribution,
-} from "@/lib/pool-directory";
-import {
-  buildCreateOwnerlessPoolInputs,
-  buildPoolContributeInputs,
-  buildPoolVoteInputs,
-  buildExecuteApprovedPoolInputs,
-  computePoolStats,
-  encodePoolName,
-  fetchPublicCreditsBalance,
-  fetchActiveFactorCount,
-  fetchAllPools,
-  type OnChainPoolState,
-} from "@/lib/pool-chain";
 
 const DEFAULT_PROGRAM_ID = "zk_factor_12250.aleo";
 const DEFAULT_PROGRAM_ADDRESS =
@@ -339,9 +341,12 @@ export default function Pools() {
   const [recoveringPoolHash, setRecoveringPoolHash] = useState<string | null>(
     null,
   );
-  const [pendingExecutionHash, setPendingExecutionHash] = useState<string | null>(
-    null,
-  );
+  const [pendingExecutionHash, setPendingExecutionHash] = useState<
+    string | null
+  >(null);
+  const [pendingDistributionHash, setPendingDistributionHash] = useState<
+    string | null
+  >(null);
   const [ownerlessContributeOpen, setOwnerlessContributeOpen] = useState(false);
   const [ownerlessContributePool, setOwnerlessContributePool] =
     useState<OnChainPoolState | null>(null);
@@ -392,6 +397,40 @@ export default function Pools() {
     queryFn: fetchActiveFactorCount,
     staleTime: 60_000,
   });
+
+  const getOwnerlessPoolStatus = (pool: OnChainPoolState) => {
+    const stats = computePoolStats(pool, activeFactorCount);
+
+    if (pool.isClosed) {
+      if (stats.isFullyDistributed) {
+        return {
+          label: "Closed",
+          className: "text-green-600 border-green-300 text-xs",
+        };
+      }
+      if (pool.isSettled && pool.proceeds === null) {
+        return {
+          label: "Awaiting Distribution",
+          className: "text-violet-700 border-violet-300 text-xs",
+        };
+      }
+      if (pool.proceeds !== null && pool.proceeds > 0n) {
+        return {
+          label: "Paying Out",
+          className: "text-amber-700 border-amber-300 text-xs",
+        };
+      }
+      return {
+        label: "Executed",
+        className: "text-blue-600 border-blue-300 text-xs",
+      };
+    }
+
+    return {
+      label: "Open",
+      className: "text-blue-600 border-blue-300 text-xs",
+    };
+  };
 
   const openPoolDetails = (
     invoiceHash: string,
@@ -491,6 +530,7 @@ export default function Pools() {
       setExecutingPoolHash(null);
       setRecoveringPoolHash(null);
       setPendingExecutionHash(null);
+      setPendingDistributionHash(null);
       setOwnerlessContributeOpen(false);
       setOwnerlessContributePool(null);
       setOwnerlessContributeAmount("");
@@ -504,6 +544,7 @@ export default function Pools() {
       setExecutingPoolHash(null);
       setRecoveringPoolHash(null);
       setPendingExecutionHash(null);
+      setPendingDistributionHash(null);
       setOwnerlessContributeOpen(false);
       setOwnerlessContributePool(null);
       setOwnerlessContributeAmount("");
@@ -538,6 +579,30 @@ export default function Pools() {
     pendingExecutionHash,
     onChainPools,
     poolMetas,
+    queryClient,
+    reset,
+  ]);
+
+  useEffect(() => {
+    if (status !== "pending" || !pendingDistributionHash) return;
+
+    const ownerlessPool = onChainPools.find(
+      (pool) => pool.meta.invoiceHash === pendingDistributionHash,
+    );
+    const distributionOpened =
+      !!ownerlessPool && ownerlessPool.proceeds !== null && ownerlessPool.proceeds > 0n;
+
+    if (!distributionOpened) return;
+
+    toast.success("Distribution opened.", { id: "pool-op" });
+    setPendingDistributionHash(null);
+    queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
+    queryClient.invalidateQueries({ queryKey: ["all_pools"] });
+    reset();
+  }, [
+    status,
+    pendingDistributionHash,
+    onChainPools,
     queryClient,
     reset,
   ]);
@@ -634,6 +699,17 @@ export default function Pools() {
         offer.dueDate,
       ),
       fee: 120_000,
+      privateFee: false,
+    });
+  };
+
+  const handleOpenOwnerlessDistribution = async (invoiceHash: string) => {
+    setPendingDistributionHash(invoiceHash);
+    await execute({
+      program: PROGRAM_ID,
+      function: "pool_open_distribution",
+      inputs: [invoiceHash],
+      fee: 80_000,
       privateFee: false,
     });
   };
@@ -1221,6 +1297,9 @@ export default function Pools() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {onChainPools.map((pool: OnChainPoolState) => {
           const raisedAleo = Number(pool.totalContributed) / 1_000_000;
+          const status = getOwnerlessPoolStatus(pool);
+          const canOpenDistributionFromCard =
+            pool.isSettled && pool.isClosed && pool.proceeds === null;
 
           return (
             <Card key={`ownerless-${pool.meta.invoiceHash}`}>
@@ -1237,8 +1316,8 @@ export default function Pools() {
                       {pool.meta.invoiceHash.slice(0, 14)}…
                     </p>
                   </div>
-                  <Badge variant="outline" className="text-xs">
-                    {pool.isClosed ? "Closed" : "Open"}
+                  <Badge variant="outline" className={status.className}>
+                    {status.label}
                   </Badge>
                 </div>
 
@@ -1266,6 +1345,25 @@ export default function Pools() {
                     Open pool. Use the Voting tab when a business submits an
                     invoice.
                   </p>
+                )}
+
+                {canOpenDistributionFromCard && (
+                  <div className="space-y-1.5">
+                    <Button
+                      size="sm"
+                      className="w-full"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenOwnerlessDistribution(pool.meta.invoiceHash);
+                      }}
+                      disabled={status !== "idle"}
+                    >
+                      Open Distribution
+                    </Button>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      Permissionless — anyone can call this once debtor has paid.
+                    </p>
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -1473,16 +1571,36 @@ export default function Pools() {
   const selectedOwnerlessStats = selectedOwnerlessPool
     ? computePoolStats(selectedOwnerlessPool, activeFactorCount)
     : null;
-  const selectedOwnerlessVotePct = selectedOwnerlessStats
-    ? Math.min(
-        100,
-        Math.round(
-          (selectedOwnerlessStats.voteCount /
-            selectedOwnerlessStats.threshold) *
-            100,
-        ),
-      )
+  const selectedOwnerlessStatus = selectedOwnerlessPool
+    ? getOwnerlessPoolStatus(selectedOwnerlessPool)
     : null;
+  const canOpenSelectedOwnerlessDistribution =
+    !!selectedOwnerlessPool &&
+    selectedOwnerlessPool.isSettled &&
+    selectedOwnerlessPool.isClosed &&
+    selectedOwnerlessPool.proceeds === null;
+  const selectedOwnerlessPercentText = (() => {
+    if (!selectedOwnerlessPool) return "Loading";
+
+    if (selectedOwnerlessStats?.isFullyDistributed) {
+      return "100% complete";
+    }
+
+    if (selectedOwnerlessPool.pendingOffer?.isExecuted) {
+      if (selectedOwnerlessPool.proceeds && selectedOwnerlessPool.proceeds > 0n) {
+        const claimedPct = Number(
+          (selectedOwnerlessPool.distributed * 10000n) /
+            selectedOwnerlessPool.proceeds,
+        ) / 100;
+        return `${claimedPct.toFixed(1)}% claimed`;
+      }
+      return "0.0% claimed";
+    }
+
+    return `${(Number(selectedOwnerlessPool.totalContributed) / 1_000_000).toLocaleString(undefined, {
+      maximumFractionDigits: 6,
+    })} ALEO raised`;
+  })();
   const selectedPoolName =
     selectedPoolKind === "ownerless"
       ? (selectedOwnerlessPool?.meta.name ?? "Pool")
@@ -1536,8 +1654,20 @@ export default function Pools() {
             livePoolTotal > 0n ? (contributed * 10000n) / livePoolTotal : 0n;
           const shareId = record.commitment ?? invoiceHash;
           const isClaiming = claimingShareId === shareId;
+
+          // Legacy pool check
           const isPoolClosed = poolMetas[invoiceHash]?.isClosed ?? false;
-          const canClaim = isPoolClosed;
+
+          // Ownerless pool check — find matching pool from onChainPools
+          const ownerlessPool = onChainPools.find(
+            (p) => p.meta.invoiceHash === invoiceHash,
+          );
+          const ownerlessReady =
+            ownerlessPool !== undefined &&
+            ownerlessPool.proceeds !== null &&
+            ownerlessPool.proceeds > 0n;
+
+          const canClaim = isPoolClosed || ownerlessReady;
 
           return (
             <Card
@@ -1567,7 +1697,7 @@ export default function Pools() {
                 </div>
                 {!canClaim && (
                   <p className="text-xs text-muted-foreground">
-                    Claim unlocks after pool execution closes this pool.
+                    Claim unlocks once distribution is opened after debtor pays.
                   </p>
                 )}
                 <Button
@@ -1686,7 +1816,8 @@ export default function Pools() {
         <TabsContent value="claims" className="mt-4">
           {renderShareCards()}
           <p className="mt-3 text-xs text-muted-foreground">
-            Claim pool proceeds after the pool is closed and the invoice is settled.
+            Claim pool proceeds after the pool is closed and the invoice is
+            settled.
           </p>
         </TabsContent>
       </Tabs>
@@ -1699,7 +1830,7 @@ export default function Pools() {
       >
         <DialogContent className="max-w-3xl overflow-y-auto max-h-[85vh]">
           <DialogHeader>
-            <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start justify-between gap-3 pr-10">
               <div>
                 <DialogTitle className="flex items-center gap-2">
                   <Layers className="h-5 w-5 text-primary" />
@@ -1710,20 +1841,23 @@ export default function Pools() {
                   addresses.
                 </DialogDescription>
               </div>
-              <div className="flex flex-wrap justify-end gap-2">
+              <div className="flex flex-wrap justify-end gap-2 max-w-[70%]">
                 <Badge
                   variant="secondary"
                   className="text-xs uppercase tracking-wide"
                 >
                   {selectedPoolKind === "ownerless" ? "Ownerless" : "Legacy"}
                 </Badge>
-                <Badge variant="outline" className="text-xs">
+                <Badge
+                  variant="outline"
+                  className={
+                    selectedPoolKind === "ownerless"
+                      ? selectedOwnerlessStatus?.className ?? "text-xs"
+                      : "text-xs"
+                  }
+                >
                   {selectedPoolKind === "ownerless"
-                    ? selectedOwnerlessPool?.isClosed
-                      ? "Closed"
-                      : selectedOwnerlessPool
-                        ? "Open"
-                        : "Loading"
+                    ? (selectedOwnerlessStatus?.label ?? "Loading")
                     : selectedLegacyMeta?.isClosed
                       ? "Closed"
                       : selectedLegacyMeta
@@ -1766,7 +1900,7 @@ export default function Pools() {
                       <p className="text-xs text-muted-foreground">Percent</p>
                       <p className="mt-1 font-mono text-sm font-semibold">
                         {selectedPoolKind === "ownerless"
-                          ? `${selectedOwnerlessVotePct ?? 0}% vote progress`
+                          ? selectedOwnerlessPercentText
                           : `${selectedLegacyFillPct !== null ? selectedLegacyFillPct.toFixed(1) : "0.0"}% funded`}
                       </p>
                     </div>
@@ -1898,6 +2032,32 @@ export default function Pools() {
                   </div>
                 </CardContent>
               </Card>
+              <PoolTimeline
+                pool={selectedOwnerlessPool}
+                activeFactorCount={activeFactorCount}
+                layout="horizontal"
+              />
+
+              {canOpenSelectedOwnerlessDistribution && (
+                <Card className="border-dashed">
+                  <CardContent className="pt-4 space-y-2">
+                    <Button
+                      className="w-full"
+                      onClick={() =>
+                        handleOpenOwnerlessDistribution(
+                          selectedOwnerlessPool.meta.invoiceHash,
+                        )
+                      }
+                      disabled={status !== "idle"}
+                    >
+                      Open Distribution
+                    </Button>
+                    <p className="text-xs text-muted-foreground text-center">
+                      Permissionless — anyone can call this once debtor has paid.
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
 
               <Card className="border-dashed">
                 <CardContent className="pt-4 space-y-3 text-sm">

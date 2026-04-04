@@ -54,23 +54,18 @@ import { type FactorInfo, fetchActiveFactors } from "@/lib/aleo-factors";
 import {
   buildPoolContributeInputs,
   buildPoolSubmitInvoiceInputs,
-  buildClaimPoolProceedsInputs,
-  computePoolPayout,
   computePoolStats,
   fetchAllPools,
   fetchActiveFactorCount,
   fetchPublicCreditsBalance,
   type OnChainPoolState,
 } from "../lib/pool-chain";
-import {
-  buildExecuteInputs,
-  getExecuteTransition,
-  fetchPoolContributions,
-} from "@/lib/aleo-factors";
+import { buildExecuteInputs, getExecuteTransition } from "@/lib/aleo-factors";
 import {
   removePendingFactoringRequest,
   upsertPendingFactoringRequest,
 } from "@/lib/pending-factoring";
+import { PoolTimeline } from "@/components/pools/PoolTimeline";
 
 const DEFAULT_PROGRAM_ID = "zk_factor_12250.aleo";
 const DEFAULT_PROGRAM_ADDRESS =
@@ -106,6 +101,66 @@ function getInvoiceCurrency(
   return cached ?? fromMetadata;
 }
 
+function getOwnerlessPoolStatus(
+  pool: OnChainPoolState,
+  stats: ReturnType<typeof computePoolStats>,
+): { label: string; colorClass: string; cardClass: string } {
+  if (pool.isClosed) {
+    if (stats.isFullyDistributed) {
+      return {
+        label: "Closed",
+        colorClass: "text-emerald-600 border-emerald-300",
+        cardClass:
+          "border-emerald-300/60 bg-emerald-50/30 dark:bg-emerald-950/20",
+      };
+    }
+
+    if (pool.isSettled && pool.proceeds === null) {
+      return {
+        label: "Awaiting Distribution",
+        colorClass: "text-violet-700 border-violet-300",
+        cardClass: "border-violet-300/70 bg-violet-50/40 dark:bg-violet-950/20",
+      };
+    }
+
+    if (pool.proceeds !== null && pool.proceeds > 0n) {
+      return {
+        label: "Paying Out",
+        colorClass: "text-amber-700 border-amber-300",
+        cardClass: "border-amber-300/70 bg-amber-50/40 dark:bg-amber-950/20",
+      };
+    }
+
+    return {
+      label: "Executed",
+      colorClass: "text-blue-700 border-blue-400",
+      cardClass: "border-blue-300/60 bg-blue-50/40 dark:bg-blue-950/20",
+    };
+  }
+
+  if (stats.hasPendingOffer) {
+    return {
+      label: "Voting",
+      colorClass: "text-amber-700 border-amber-300",
+      cardClass: "border-amber-300/70 bg-amber-50/40 dark:bg-amber-950/20",
+    };
+  }
+
+  if (stats.isFullyFunded) {
+    return {
+      label: "Funded",
+      colorClass: "text-amber-700 border-amber-300",
+      cardClass: "border-blue-300/60 bg-blue-50/40 dark:bg-blue-950/20",
+    };
+  }
+
+  return {
+    label: "Open",
+    colorClass: "text-blue-700 border-blue-400",
+    cardClass: "border-blue-300/60 bg-blue-50/40 dark:bg-blue-950/20",
+  };
+}
+
 // ── types ─────────────────────────────────────────────────────────────
 type PendingAction =
   | "factor"
@@ -114,7 +169,7 @@ type PendingAction =
   | "submit-invoice-pool"
   | "vote-pool"
   | "execute-pool"
-  | "withdraw-proceeds"
+  | "open-distribution"
   | null;
 
 export default function Marketplace() {
@@ -158,12 +213,12 @@ export default function Marketplace() {
   // ── misc state ─────────────────────────────────────────────────────
   const [showCompletedPools, setShowCompletedPools] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
-  const [withdrawingHash, setWithdrawingHash] = useState<string | null>(null);
 
   // ── refs (survive re-renders during async execute) ─────────────────
   const pendingActionRef = useRef<PendingAction>(null);
   const pendingFactorModeRef = useRef<{ usePartial: boolean } | null>(null);
   const pendingFactoringHashRef = useRef<string | null>(null);
+  const pendingOpenDistributionHashRef = useRef<string | null>(null);
 
   // ── data queries ───────────────────────────────────────────────────
   const {
@@ -206,10 +261,6 @@ export default function Marketplace() {
   const invoiceRecords = ((records as AleoRecord[]) ?? []).filter(
     (r) => r.recordName === "Invoice" && !r.spent,
   );
-  const poolShareRecords = ((records as AleoRecord[]) ?? []).filter(
-    (r) => r.recordName === "PoolShare" && !r.spent,
-  );
-
   const filteredFactors = (factors ?? []).filter(
     (f) =>
       !searchQuery ||
@@ -217,10 +268,10 @@ export default function Marketplace() {
   );
 
   const openPools = (Array.isArray(onChainPools) ? onChainPools : []).filter(
-    (p) => !p.isClosed,
+    (p) => !computePoolStats(p, activeFactorCount).isFullyDistributed,
   );
   const closedPools = (Array.isArray(onChainPools) ? onChainPools : []).filter(
-    (p) => p.isClosed,
+    (p) => computePoolStats(p, activeFactorCount).isFullyDistributed,
   );
 
   // ── invoice dialog computed values ────────────────────────────────
@@ -325,12 +376,13 @@ export default function Marketplace() {
         });
         refetchPools();
         setPoolDetailOpen(false);
-      } else if (action === "withdraw-proceeds") {
-        toast.success("Pool proceeds withdrawn.", { id: opId });
-        setWithdrawingHash(null);
+      } else if (action === "open-distribution") {
+        toast.success("Distribution opened.", { id: opId });
+        refetchPools();
       }
 
       pendingActionRef.current = null;
+      pendingOpenDistributionHashRef.current = null;
       queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
 
       if (shouldNav) {
@@ -365,11 +417,11 @@ export default function Marketplace() {
         msg = "Invoice submission failed";
       else if (action === "vote-pool") msg = "Vote failed";
       else if (action === "execute-pool") msg = "Execution failed";
-      else if (action === "withdraw-proceeds") msg = "Withdraw failed";
+      else if (action === "open-distribution") msg = "Open distribution failed";
 
       toast.error(txError || msg, { id: opId });
       pendingActionRef.current = null;
-      setWithdrawingHash(null);
+      pendingOpenDistributionHashRef.current = null;
       reset();
     }
   }, [
@@ -382,6 +434,27 @@ export default function Marketplace() {
     refetchPools,
     selectedPool,
   ]);
+
+  useEffect(() => {
+    if (status !== "pending") return;
+    if (pendingActionRef.current !== "open-distribution") return;
+
+    const pendingHash = pendingOpenDistributionHashRef.current;
+    if (!pendingHash) return;
+
+    const pool = onChainPools.find((p) => p.meta.invoiceHash === pendingHash);
+    const distributionOpened =
+      !!pool && pool.proceeds !== null && pool.proceeds > 0n;
+
+    if (!distributionOpened) return;
+
+    toast.success("Distribution opened.", { id: "marketplace-op" });
+    pendingActionRef.current = null;
+    pendingOpenDistributionHashRef.current = null;
+    queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
+    queryClient.invalidateQueries({ queryKey: ["all_pools"] });
+    reset();
+  }, [status, onChainPools, queryClient, reset]);
 
   // ── action: factor invoice ─────────────────────────────────────────
   const handleFactorInvoice = async () => {
@@ -551,56 +624,13 @@ export default function Marketplace() {
     });
   };
 
-  // ── action: withdraw pool proceeds ────────────────────────────────
-  const handleWithdraw = async (pool: OnChainPoolState) => {
-    const invoiceHash = pool.meta.invoiceHash;
-    if (!address) return;
-
-    const share = poolShareRecords.find(
-      (r) => getField(r.recordPlaintext, "invoice_hash") === invoiceHash,
-    );
-    if (!share) {
-      toast.error("No PoolShare record found in your wallet for this pool.");
-      return;
-    }
-    if (!pool.isClosed) {
-      toast.error("Pool must be closed before withdrawing.");
-      return;
-    }
-    if (pool.proceeds === null || pool.proceeds <= 0n) {
-      toast.error(
-        "Distribution not opened yet — anyone can call pool_open_distribution.",
-      );
-      return;
-    }
-
-    const contributed = BigInt(
-      getField(share.recordPlaintext, "contributed").replace(/u64$/, ""),
-    );
-    const totalContributions = await fetchPoolContributions(invoiceHash);
-    if (totalContributions === null) {
-      toast.error("Could not read pool totals.");
-      return;
-    }
-    const expectedPayout = computePoolPayout(
-      contributed,
-      totalContributions,
-      pool.proceeds,
-    );
-    if (expectedPayout <= 0n) {
-      toast.error("No claimable proceeds yet.");
-      return;
-    }
-
-    setWithdrawingHash(invoiceHash);
-    pendingActionRef.current = "withdraw-proceeds";
+  const handleOpenDistribution = async (invoiceHash: string) => {
+    pendingActionRef.current = "open-distribution";
+    pendingOpenDistributionHashRef.current = invoiceHash;
     await execute({
       program: PROGRAM_ID,
-      function: "claim_pool_proceeds",
-      inputs: buildClaimPoolProceedsInputs(
-        share.recordPlaintext,
-        expectedPayout,
-      ),
+      function: "pool_open_distribution",
+      inputs: [invoiceHash],
       fee: 80_000,
       privateFee: false,
     });
@@ -624,29 +654,7 @@ export default function Marketplace() {
   // ── pool card renderer ─────────────────────────────────────────────
   const renderPoolCard = (pool: OnChainPoolState) => {
     const stats = computePoolStats(pool, activeFactorCount);
-    const myShare = poolShareRecords.find(
-      (r) =>
-        getField(r.recordPlaintext, "invoice_hash") === pool.meta.invoiceHash,
-    );
-    const isWithdrawing = withdrawingHash === pool.meta.invoiceHash;
-
-    const statusLabel = pool.isClosed
-      ? stats.isExecuted
-        ? "Executed"
-        : "Closed"
-      : stats.hasPendingOffer
-        ? "Voting"
-        : stats.isFullyFunded
-          ? "Funded"
-          : "Open";
-
-    const statusColor = pool.isClosed
-      ? "text-emerald-600 border-emerald-300"
-      : stats.hasPendingOffer
-        ? "text-amber-700 border-amber-300"
-        : stats.isFullyFunded
-          ? "text-amber-700 border-amber-300"
-          : "text-blue-700 border-blue-400";
+    const status = getOwnerlessPoolStatus(pool, stats);
 
     const voteProgressPct =
       stats.threshold > 0
@@ -658,10 +666,7 @@ export default function Marketplace() {
         key={pool.meta.invoiceHash}
         className={cn(
           "border-blue-300/60 bg-blue-50/40 dark:bg-blue-950/20 hover:border-blue-400/80 transition-colors cursor-pointer",
-          pool.isClosed &&
-            "border-emerald-300/60 bg-emerald-50/30 dark:bg-emerald-950/20",
-          stats.hasPendingOffer &&
-            "border-amber-300/70 bg-amber-50/40 dark:bg-amber-950/20",
+          status.cardClass,
         )}
         onClick={() => {
           setSelectedPool(pool);
@@ -671,8 +676,11 @@ export default function Marketplace() {
         <CardContent className="pt-4 space-y-3">
           <div className="flex items-start justify-between">
             <div>
-              <Badge variant="outline" className={cn("text-xs", statusColor)}>
-                {statusLabel}
+              <Badge
+                variant="outline"
+                className={cn("text-xs", status.colorClass)}
+              >
+                {status.label}
               </Badge>
               <p className="text-sm font-medium mt-1">{pool.meta.name}</p>
               <p className="text-xs text-muted-foreground font-mono mt-0.5">
@@ -681,7 +689,10 @@ export default function Marketplace() {
             </div>
             <div className="flex items-center gap-1.5">
               {stats.hasPendingOffer && (
-                <Badge variant="secondary" className="text-[10px] uppercase tracking-wide">
+                <Badge
+                  variant="secondary"
+                  className="text-[10px] uppercase tracking-wide"
+                >
                   New
                 </Badge>
               )}
@@ -708,10 +719,7 @@ export default function Marketplace() {
                   {stats.voteCount} / {stats.threshold} needed
                 </span>
               </div>
-              <Progress
-                value={voteProgressPct}
-                className="h-1 bg-amber-200"
-              />
+              <Progress value={voteProgressPct} className="h-1 bg-amber-200" />
             </div>
           )}
 
@@ -771,21 +779,19 @@ export default function Marketplace() {
           {/* Factor CTAs */}
           {isFactor && !pool.isClosed && (
             <div className="space-y-2">
-              {!stats.isFullyFunded && (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="w-full gap-1.5"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openContribute(pool);
-                  }}
-                >
-                  <TrendingUp className="h-3.5 w-3.5" />
-                  Contribute
-                  <ChevronRight className="h-3.5 w-3.5 ml-auto" />
-                </Button>
-              )}
+              <Button
+                size="sm"
+                variant="secondary"
+                className="w-full gap-1.5"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openContribute(pool);
+                }}
+              >
+                <TrendingUp className="h-3.5 w-3.5" />
+                Contribute
+                <ChevronRight className="h-3.5 w-3.5 ml-auto" />
+              </Button>
               {stats.hasPendingOffer && !stats.isApproved && (
                 <Button
                   size="sm"
@@ -815,21 +821,6 @@ export default function Marketplace() {
               )}
             </div>
           )}
-
-          {/* Withdraw if share held and pool closed */}
-          {isFactor && pool.isClosed && myShare && (
-            <Button
-              size="sm"
-              className="w-full"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleWithdraw(pool);
-              }}
-              disabled={isWithdrawing || isWorking}
-            >
-              {isWithdrawing ? "Withdrawing…" : "Withdraw Proceeds"}
-            </Button>
-          )}
         </CardContent>
       </Card>
     );
@@ -840,13 +831,12 @@ export default function Marketplace() {
     if (!selectedPool) return null;
     const pool = selectedPool;
     const stats = computePoolStats(pool, activeFactorCount);
-    const myShare = poolShareRecords.find(
-      (r) =>
-        getField(r.recordPlaintext, "invoice_hash") === pool.meta.invoiceHash,
-    );
+    const status = getOwnerlessPoolStatus(pool, stats);
+    const canOpenDistribution =
+      pool.isSettled && pool.isClosed && pool.proceeds === null;
 
     return (
-      <DialogContent className="max-w-xl">
+      <DialogContent className="max-w-xl max-h-[92vh] overflow-y-auto">
         <DialogHeader>
           <div className="mx-auto rounded-full bg-primary/10 p-3 mb-2">
             <Layers className="h-6 w-6 text-primary" />
@@ -855,9 +845,17 @@ export default function Marketplace() {
           <DialogDescription className="text-center">
             On-chain pool — visible to everyone, no single owner.
           </DialogDescription>
+          <div className="flex justify-center mt-2">
+            <Badge
+              variant="outline"
+              className={cn("text-xs", status.colorClass)}
+            >
+              {status.label}
+            </Badge>
+          </div>
         </DialogHeader>
 
-        <div className="space-y-3 text-sm max-h-[60vh] overflow-y-auto pr-1">
+        <div className="space-y-3 text-sm max-h-[36vh] overflow-y-auto pr-1">
           {/* Pool ID */}
           <div className="rounded-md border bg-muted/30 p-3 space-y-1.5">
             <div className="flex items-center justify-between">
@@ -998,7 +996,24 @@ export default function Marketplace() {
           )}
         </div>
 
+        <PoolTimeline pool={pool} activeFactorCount={activeFactorCount} />
+
         <DialogFooter className="flex-col gap-2">
+          {canOpenDistribution && (
+            <div className="w-full space-y-1.5">
+              <Button
+                className="w-full"
+                onClick={() => handleOpenDistribution(pool.meta.invoiceHash)}
+                disabled={isWorking}
+              >
+                Open Distribution
+              </Button>
+              <p className="text-xs text-muted-foreground text-center">
+                Permissionless — anyone can call this once debtor has paid.
+              </p>
+            </div>
+          )}
+
           {/* Business */}
           {isBusiness &&
             stats.isFullyFunded &&
@@ -1017,7 +1032,7 @@ export default function Marketplace() {
             )}
 
           {/* Factor: contribute */}
-          {isFactor && !pool.isClosed && !stats.isFullyFunded && (
+          {isFactor && !pool.isClosed && (
             <Button
               variant="secondary"
               className="w-full"
@@ -1057,19 +1072,6 @@ export default function Marketplace() {
             >
               <ArrowRight className="h-4 w-4 mr-2" />
               Go to Pools Execution
-            </Button>
-          )}
-
-          {/* Factor: withdraw */}
-          {isFactor && pool.isClosed && myShare && (
-            <Button
-              className="w-full"
-              onClick={() => handleWithdraw(pool)}
-              disabled={withdrawingHash === pool.meta.invoiceHash || isWorking}
-            >
-              {withdrawingHash === pool.meta.invoiceHash
-                ? "Withdrawing…"
-                : "Withdraw Proceeds"}
             </Button>
           )}
         </DialogFooter>

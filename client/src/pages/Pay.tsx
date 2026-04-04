@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ChevronUp,
   Info,
+  Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,7 +28,7 @@ import { formatDate, getDaysUntilDue } from "@/lib/format";
 import { useWallet } from "@/contexts/WalletContext";
 import { useTransaction } from "@/hooks/use-transaction";
 import { useQuery } from "@tanstack/react-query";
-import { PROGRAM_ID, API_ENDPOINT } from "@/lib/config";
+import { PROGRAM_ID, PROGRAM_ADDRESS, API_ENDPOINT } from "@/lib/config";
 import { cn } from "@/lib/utils";
 import {
   type AleoRecord,
@@ -35,6 +36,42 @@ import {
   microToAleo,
   unixToDate,
 } from "@/lib/aleo-records";
+
+// Distinguish the two notice types so we call the right transition
+type NoticeKind = "single" | "pool";
+
+interface NoticeRow {
+  record: AleoRecord;
+  kind: NoticeKind;
+  invoiceHash: string;
+  // single-factor path
+  factor: string;
+  // pool path — program address used as recipient
+  programAddr: string;
+  amount: number;
+  dueDate: Date;
+}
+
+function parseNotice(record: AleoRecord, programAddr: string): NoticeRow {
+  const isPool = record.recordName === "PoolPaymentNotice";
+  const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
+  const factor = isPool ? "" : getField(record.recordPlaintext, "factor");
+  const amount = microToAleo(
+    getField(record.recordPlaintext, "amount") || "0u64",
+  );
+  const dueDate = unixToDate(
+    getField(record.recordPlaintext, "due_date") || "0u64",
+  );
+  return {
+    record,
+    kind: isPool ? "pool" : "single",
+    invoiceHash,
+    factor,
+    programAddr,
+    amount,
+    dueDate,
+  };
+}
 
 export default function Pay() {
   const { isConnected, address, requestRecords } = useWallet();
@@ -56,30 +93,37 @@ export default function Pay() {
     staleTime: 30_000,
   });
 
-  const notices = ((records as AleoRecord[]) ?? []).filter(
-    (r) => r.recordName === "PaymentNotice" && !r.spent,
+  // Collect both PaymentNotice and PoolPaymentNotice records
+  const rawNotices = ((records as AleoRecord[]) ?? []).filter(
+    (r) =>
+      (r.recordName === "PaymentNotice" ||
+        r.recordName === "PoolPaymentNotice") &&
+      !r.spent,
+  );
+
+  const notices: NoticeRow[] = rawNotices.map((r) =>
+    parseNotice(r, PROGRAM_ADDRESS),
   );
 
   // Check settled_invoices mapping for each notice on load
   useEffect(() => {
     if (!notices.length) return;
     const client = new AleoNetworkClient(API_ENDPOINT);
-    notices.forEach(async (record) => {
-      const hash = getField(record.recordPlaintext, "invoice_hash");
+    notices.forEach(async ({ invoiceHash }) => {
       try {
         const result = await client.getProgramMappingValue(
           PROGRAM_ID,
           "settled_invoices",
-          hash,
+          invoiceHash,
         );
         if (result) {
-          setSettledHashes((prev) => new Set([...prev, hash]));
+          setSettledHashes((prev) => new Set([...prev, invoiceHash]));
         }
       } catch {
         // not settled yet — ignore
       }
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notices.length]);
 
   useEffect(() => {
@@ -101,32 +145,41 @@ export default function Pay() {
   }, [status, txError, reset, payingId, refetch]);
 
   /**
-   * Pays an invoice atomically in a single transaction.
+   * Single-factor path: pay_invoice(notice, factor)
+   *   → transfer_public_as_signer(factor, amount) + settlement in same finalize
    *
-   * The updated pay_invoice transition calls credits.aleo/transfer_public_as_signer
-   * internally, so the credits debit AND the settlement mapping write happen in the
-   * same finalize block. There is no window for payment to succeed without settlement
-   * or vice versa.
-   *
-   * The debtor's public credits balance must be sufficient. If the wallet only has
-   * private records, the debtor should first call credits.aleo/transfer_private_to_public
-   * to convert an adequate amount.
+   * Pool path: pay_pool_invoice(notice, program_addr)
+   *   → transfer_public_as_signer(program_addr, amount) + settlement in same finalize
+   *   Funds land in the program's public escrow, ready for distribution.
    */
-  const handlePay = async (record: AleoRecord) => {
-    const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
-    const factor = getField(record.recordPlaintext, "factor");
-    setPayingId(invoiceHash);
-
+  const handlePay = async (row: NoticeRow) => {
+    setPayingId(row.invoiceHash);
     try {
-      await execute({
-        program: PROGRAM_ID,
-        function: "pay_invoice",
-        // Inputs: notice record + factor address
-        // The transition internally calls transfer_public_as_signer(factor, notice.amount)
-        inputs: [record.recordPlaintext, factor],
-        fee: 100_000,
-        privateFee: false,
-      });
+      if (row.kind === "pool") {
+        if (!row.programAddr) {
+          toast.error(
+            "PROGRAM_ADDRESS is not set — cannot route payment to pool escrow.",
+            { id: "pay-invoice" },
+          );
+          setPayingId(null);
+          return;
+        }
+        await execute({
+          program: PROGRAM_ID,
+          function: "pay_pool_invoice",
+          inputs: [row.record.recordPlaintext, row.programAddr],
+          fee: 100_000,
+          privateFee: false,
+        });
+      } else {
+        await execute({
+          program: PROGRAM_ID,
+          function: "pay_invoice",
+          inputs: [row.record.recordPlaintext, row.factor],
+          fee: 100_000,
+          privateFee: false,
+        });
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Payment failed", {
         id: "pay-invoice",
@@ -230,21 +283,15 @@ export default function Pay() {
 
       {!isLoading && notices.length > 0 && (
         <div className="space-y-3">
-          {notices.map((record, idx) => {
-            const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
-            const factor = getField(record.recordPlaintext, "factor");
-            const amount = microToAleo(
-              getField(record.recordPlaintext, "amount") || "0u64",
-            );
-            const dueDate = unixToDate(
-              getField(record.recordPlaintext, "due_date") || "0u64",
-            );
+          {notices.map((row, idx) => {
+            const { invoiceHash, factor, kind, amount, dueDate, record } = row;
             const daysUntil = getDaysUntilDue(dueDate);
             const isOverdue = daysUntil < 0;
             const isPaying = payingId === invoiceHash;
             const isPaid =
               paidHashes.has(invoiceHash) || settledHashes.has(invoiceHash);
             const isExpanded = expandedHash === invoiceHash;
+            const isPool = kind === "pool";
 
             return (
               <Card
@@ -253,6 +300,9 @@ export default function Pay() {
                   "transition-colors",
                   isPaid && "opacity-60",
                   isOverdue && !isPaid && "border-destructive/50",
+                  isPool &&
+                    !isPaid &&
+                    "border-blue-300/60 bg-blue-50/30 dark:bg-blue-950/10",
                 )}
               >
                 <CardHeader
@@ -263,12 +313,35 @@ export default function Pay() {
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div className="space-y-1">
-                      <CardTitle className="text-base font-mono">
-                        {invoiceHash.slice(0, 16)}…
-                      </CardTitle>
-                      <CardDescription className="flex items-center gap-1">
-                        Pay to:{" "}
-                        <AddressDisplay address={factor} chars={6} showExplorer />
+                      <div className="flex items-center gap-2">
+                        {isPool && (
+                          <Layers className="h-4 w-4 text-blue-500 shrink-0" />
+                        )}
+                        <CardTitle className="text-base font-mono">
+                          {invoiceHash.slice(0, 16)}…
+                        </CardTitle>
+                        {isPool && (
+                          <Badge
+                            variant="outline"
+                            className="text-xs text-blue-700 border-blue-400"
+                          >
+                            Pool Invoice
+                          </Badge>
+                        )}
+                      </div>
+                      <CardDescription>
+                        {isPool ? (
+                          "Payment goes to pool escrow — factors will claim proportionally"
+                        ) : (
+                          <>
+                            Pay to:{" "}
+                            <AddressDisplay
+                              address={factor}
+                              chars={6}
+                              showExplorer
+                            />
+                          </>
+                        )}
                       </CardDescription>
                     </div>
                     <div className="text-right shrink-0">
@@ -286,15 +359,15 @@ export default function Pay() {
                             isOverdue
                               ? "text-destructive font-medium"
                               : daysUntil < 7
-                              ? "text-yellow-600"
-                              : "text-muted-foreground",
+                                ? "text-yellow-600"
+                                : "text-muted-foreground",
                           )}
                         >
                           {isOverdue
                             ? `${Math.abs(daysUntil)} days overdue`
                             : daysUntil === 0
-                            ? "Due today"
-                            : `Due ${formatDate(dueDate)}`}
+                              ? "Due today"
+                              : `Due ${formatDate(dueDate)}`}
                         </span>
                         {isExpanded ? (
                           <ChevronUp className="h-3 w-3 text-muted-foreground ml-1" />
@@ -329,20 +402,46 @@ export default function Pay() {
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Due Date</span>
                         <span
-                          className={isOverdue ? "text-destructive font-medium" : ""}
+                          className={
+                            isOverdue ? "text-destructive font-medium" : ""
+                          }
                         >
                           {dueDate.toLocaleDateString()}
                           {isOverdue && " (Overdue)"}
                         </span>
                       </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-muted-foreground">Factor Address</span>
-                        <AddressDisplay address={factor} chars={8} showExplorer />
-                      </div>
+                      {!isPool && (
+                        <div className="flex justify-between items-center">
+                          <span className="text-muted-foreground">
+                            Factor Address
+                          </span>
+                          <AddressDisplay
+                            address={factor}
+                            chars={8}
+                            showExplorer
+                          />
+                        </div>
+                      )}
+                      {isPool && (
+                        <div className="flex justify-between items-center">
+                          <span className="text-muted-foreground">
+                            Escrow Address
+                          </span>
+                          <AddressDisplay
+                            address={row.programAddr}
+                            chars={8}
+                            showExplorer
+                          />
+                        </div>
+                      )}
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Payment Method</span>
+                        <span className="text-muted-foreground">
+                          Payment Method
+                        </span>
                         <span className="text-xs">
-                          credits.aleo public balance (atomic settlement)
+                          {isPool
+                            ? "Public credits → pool escrow (atomic)"
+                            : "Public credits → factor (atomic settlement)"}
                         </span>
                       </div>
                     </div>
@@ -374,7 +473,7 @@ export default function Pay() {
                     <Button
                       onClick={(e) => {
                         e.stopPropagation();
-                        handlePay(record);
+                        handlePay(row);
                       }}
                       disabled={isPaying || isPaid}
                       size="sm"
@@ -382,10 +481,10 @@ export default function Pay() {
                       {isPaying
                         ? "Processing…"
                         : isPaid
-                        ? "Paid"
-                        : `Pay ${amount.toLocaleString(undefined, {
-                            maximumFractionDigits: 2,
-                          })} ALEO`}
+                          ? "Paid"
+                          : `Pay ${amount.toLocaleString(undefined, {
+                              maximumFractionDigits: 2,
+                            })} ALEO`}
                     </Button>
                   </div>
                 </CardContent>

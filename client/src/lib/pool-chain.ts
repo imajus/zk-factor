@@ -39,6 +39,7 @@ export interface OnChainPoolState {
   meta: OnChainPoolMeta;
   totalContributed: bigint;
   isClosed: boolean;
+  isSettled: boolean;
   voteCount: number;
   /** null = no offer submitted yet */
   pendingOffer: OnChainPendingOffer | null;
@@ -227,6 +228,7 @@ export async function fetchPoolState(
     meta,
     totalContribRaw,
     isClosedRaw,
+    settledInvoiceRaw,
     voteCountRaw,
     pendingOffer,
     proceedsRaw,
@@ -235,6 +237,7 @@ export async function fetchPoolState(
     fetchPoolMeta(invoiceHash),
     safeGet(client, "pool_contributions", invoiceHash),
     safeGet(client, "pool_closed", invoiceHash),
+    safeGet(client, "settled_invoices", invoiceHash),
     safeGet(client, "pool_vote_count", invoiceHash),
     fetchPendingOffer(invoiceHash),
     safeGet(client, "pool_proceeds", invoiceHash),
@@ -249,6 +252,9 @@ export async function fetchPoolState(
       stripSuffix(totalContribRaw?.trim() ?? "0") || "0",
     ),
     isClosed: isClosedRaw?.trim() === "true",
+    isSettled:
+      !!settledInvoiceRaw &&
+      parseField(settledInvoiceRaw, "is_settled") === "true",
     voteCount: parseInt(stripSuffix(voteCountRaw?.trim() ?? "0") || "0", 10),
     pendingOffer,
     proceeds: proceedsRaw
@@ -314,6 +320,7 @@ export interface PoolStats {
   remainingMicro: bigint;
   percentFunded: number;
   isFullyFunded: boolean;
+  isFullyDistributed: boolean;
   hasPendingOffer: boolean;
   isApproved: boolean;
   isExecuted: boolean;
@@ -332,12 +339,17 @@ export function computePoolStats(
   const threshold = computeVoteThreshold(activeFactorCount);
   const isApproved = pool.voteCount >= threshold;
   const isExecuted = pool.pendingOffer?.isExecuted ?? false;
+  const isFullyDistributed =
+    pool.proceeds !== null &&
+    pool.proceeds > 0n &&
+    pool.distributed >= pool.proceeds;
 
   return {
     raisedMicro,
     remainingMicro,
     percentFunded,
     isFullyFunded: true, // Range pools accept contributions at any level
+    isFullyDistributed,
     hasPendingOffer: pool.pendingOffer !== null && !isExecuted,
     isApproved,
     isExecuted,

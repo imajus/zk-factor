@@ -22,23 +22,18 @@ import type { WalletName } from "@provablehq/aleo-wallet-standard";
 export type UserRole = "business" | "factor" | null;
 
 const roleStorageKey = (address: string) => `zk_factor_role_${address}`;
-const approvedAddressStorageKey = "zk_factor_approved_wallet_address";
 
 interface AppWalletContextType {
   isConnected: boolean;
   isInitializing: boolean;
   address: string | null;
-  pendingAddress: string | null;
   network: Network | null;
   connecting: boolean;
   reconnecting: boolean;
-  accountSwitchPending: boolean;
   wallets: Wallet[];
   selectWallet: (name: WalletName) => void;
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
-  confirmAccountSwitch: () => void;
-  rejectAccountSwitch: () => Promise<void>;
   executeTransaction: (
     options: TransactionOptions,
   ) => Promise<{ transactionId: string } | undefined>;
@@ -63,16 +58,6 @@ const AppWalletContext = createContext<AppWalletContextType | undefined>(
 function WalletContextInner({ children }: { children: ReactNode }) {
   const [activeRole, setActiveRoleState] = useState<UserRole>(null);
   const adapter = useAdapterWallet();
-  const [confirmedAddress, setConfirmedAddress] = useState<string | null>(() => {
-    return sessionStorage.getItem(approvedAddressStorageKey);
-  });
-  const [pendingAddress, setPendingAddress] = useState<string | null>(null);
-
-  const accountSwitchPending =
-    adapter.connected && !!adapter.address && !!pendingAddress;
-  const effectiveAddress = accountSwitchPending
-    ? confirmedAddress
-    : (adapter.address ?? null);
   // Track which address we've finished resolving — derive resolvingRole
   // synchronously during render so child effects (e.g. WalletConnect) see
   // it immediately, avoiding a race where navigation fires before the role
@@ -108,33 +93,10 @@ function WalletContextInner({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!adapter.connected || !adapter.address) {
-      setPendingAddress(null);
-      return;
-    }
-
-    if (!confirmedAddress) {
-      setConfirmedAddress(adapter.address);
-      sessionStorage.setItem(approvedAddressStorageKey, adapter.address);
-      return;
-    }
-
-    if (adapter.address !== confirmedAddress) {
-      setPendingAddress(adapter.address);
-    } else {
-      setPendingAddress(null);
-    }
-  }, [adapter.connected, adapter.address, confirmedAddress]);
-
-  useEffect(() => {
-    if (!adapter.connected || !adapter.address) {
       if (!adapter.connected) {
         setActiveRoleState(null);
         setResolvedAddress(null);
       }
-      return;
-    }
-
-    if (accountSwitchPending) {
       return;
     }
 
@@ -159,7 +121,7 @@ function WalletContextInner({ children }: { children: ReactNode }) {
       .finally(() => {
         setResolvedAddress(adapter.address!);
       });
-  }, [adapter.connected, adapter.address, accountSwitchPending]);
+  }, [adapter.connected, adapter.address]);
 
   const connect = useCallback(async () => {
     if (adapter.wallets.length > 0 && !adapter.wallet) {
@@ -190,25 +152,6 @@ function WalletContextInner({ children }: { children: ReactNode }) {
   const disconnect = useCallback(async () => {
     await adapter.disconnect();
     setActiveRoleState(null);
-    setPendingAddress(null);
-    setConfirmedAddress(null);
-    sessionStorage.removeItem(approvedAddressStorageKey);
-  }, [adapter]);
-
-  const confirmAccountSwitch = useCallback(() => {
-    if (!adapter.address) return;
-    setConfirmedAddress(adapter.address);
-    sessionStorage.setItem(approvedAddressStorageKey, adapter.address);
-    setPendingAddress(null);
-    setActiveRoleState(null);
-    setResolvedAddress(null);
-  }, [adapter.address]);
-
-  const rejectAccountSwitch = useCallback(async () => {
-    setPendingAddress(null);
-    setActiveRoleState(null);
-    setResolvedAddress(null);
-    await adapter.disconnect();
   }, [adapter]);
 
   const setActiveRole = useCallback(
@@ -233,20 +176,16 @@ function WalletContextInner({ children }: { children: ReactNode }) {
   return (
     <AppWalletContext.Provider
       value={{
-        isConnected: adapter.connected && !accountSwitchPending,
-        pendingAddress,
+        isConnected: adapter.connected,
         isInitializing,
-        address: effectiveAddress,
+        address: adapter.address,
         network: adapter.network,
         connecting: adapter.connecting,
         reconnecting: adapter.reconnecting,
-        accountSwitchPending,
         wallets: adapter.wallets,
         selectWallet: adapter.selectWallet,
         connect,
         disconnect,
-        confirmAccountSwitch,
-        rejectAccountSwitch,
         executeTransaction: adapter.executeTransaction,
         transactionStatus: adapter.transactionStatus,
         requestRecords: adapter.requestRecords,
