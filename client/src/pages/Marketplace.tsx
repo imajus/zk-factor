@@ -11,8 +11,6 @@ import {
   Layers,
   Copy,
   Check,
-  Vote,
-  Zap,
   Info,
   Send,
 } from "lucide-react";
@@ -56,8 +54,6 @@ import { type FactorInfo, fetchActiveFactors } from "@/lib/aleo-factors";
 import {
   buildPoolContributeInputs,
   buildPoolSubmitInvoiceInputs,
-  buildPoolVoteInputs,
-  buildExecuteApprovedPoolInputs,
   buildClaimPoolProceedsInputs,
   computePoolPayout,
   computePoolStats,
@@ -555,43 +551,6 @@ export default function Marketplace() {
     });
   };
 
-  // ── action: factor votes to approve ───────────────────────────────
-  const handleVote = async (invoiceHash: string) => {
-    pendingActionRef.current = "vote-pool";
-    await execute({
-      program: PROGRAM_ID,
-      function: "pool_vote",
-      inputs: buildPoolVoteInputs(invoiceHash),
-      fee: 50_000,
-      privateFee: false,
-    });
-  };
-
-  // ── action: execute approved pool ─────────────────────────────────
-  const handleExecutePool = async (pool: OnChainPoolState) => {
-    const offer = pool.pendingOffer;
-    if (!offer || offer.isExecuted) return;
-    if (!PROGRAM_ADDRESS) {
-      toast.error("PROGRAM_ADDRESS is not set.");
-      return;
-    }
-    pendingActionRef.current = "execute-pool";
-    await execute({
-      program: PROGRAM_ID,
-      function: "execute_approved_pool",
-      inputs: buildExecuteApprovedPoolInputs(
-        pool.meta.invoiceHash,
-        offer.originalCreditor,
-        offer.debtor,
-        offer.advanceAmount,
-        offer.amount,
-        offer.dueDate,
-      ),
-      fee: 100_000,
-      privateFee: false,
-    });
-  };
-
   // ── action: withdraw pool proceeds ────────────────────────────────
   const handleWithdraw = async (pool: OnChainPoolState) => {
     const invoiceHash = pool.meta.invoiceHash;
@@ -831,15 +790,14 @@ export default function Marketplace() {
                 <Button
                   size="sm"
                   variant="outline"
-                  className="w-full gap-1.5 text-amber-800 border-amber-300 hover:bg-amber-50"
+                  className="w-full gap-1.5"
                   onClick={(e) => {
                     e.stopPropagation();
-                    handleVote(pool.meta.invoiceHash);
+                    navigate("/pools");
                   }}
-                  disabled={isWorking}
                 >
-                  <Vote className="h-3.5 w-3.5" />
-                  Vote Approve
+                  <ArrowRight className="h-3.5 w-3.5" />
+                  Go to Pools Voting
                 </Button>
               )}
               {stats.hasPendingOffer && stats.isApproved && (
@@ -848,12 +806,11 @@ export default function Marketplace() {
                   className="w-full gap-1.5"
                   onClick={(e) => {
                     e.stopPropagation();
-                    handleExecutePool(pool);
+                    navigate("/pools");
                   }}
-                  disabled={isWorking}
                 >
-                  <Zap className="h-3.5 w-3.5" />
-                  Execute Approved Pool
+                  <ArrowRight className="h-3.5 w-3.5" />
+                  Go to Pools Execution
                 </Button>
               )}
             </div>
@@ -1078,14 +1035,14 @@ export default function Marketplace() {
           {isFactor && stats.hasPendingOffer && !stats.isApproved && (
             <Button
               variant="outline"
-              className="w-full text-amber-800 border-amber-300 hover:bg-amber-50"
-              onClick={() => handleVote(pool.meta.invoiceHash)}
-              disabled={isWorking}
+              className="w-full"
+              onClick={() => {
+                setPoolDetailOpen(false);
+                navigate("/pools");
+              }}
             >
-              <Vote className="h-4 w-4 mr-2" />
-              {isWorking && pendingActionRef.current === "vote-pool"
-                ? "Voting…"
-                : "Vote to Approve"}
+              <ArrowRight className="h-4 w-4 mr-2" />
+              Go to Pools Voting
             </Button>
           )}
 
@@ -1093,13 +1050,13 @@ export default function Marketplace() {
           {isFactor && stats.hasPendingOffer && stats.isApproved && (
             <Button
               className="w-full"
-              onClick={() => handleExecutePool(pool)}
-              disabled={isWorking}
+              onClick={() => {
+                setPoolDetailOpen(false);
+                navigate("/pools");
+              }}
             >
-              <Zap className="h-4 w-4 mr-2" />
-              {isWorking && pendingActionRef.current === "execute-pool"
-                ? "Executing…"
-                : "Execute Approved Pool"}
+              <ArrowRight className="h-4 w-4 mr-2" />
+              Go to Pools Execution
             </Button>
           )}
 
@@ -1129,7 +1086,7 @@ export default function Marketplace() {
         </h1>
         <p className="text-muted-foreground">
           {isFactor
-            ? "Register, contribute to pools, or vote on pending offers."
+            ? "Register, contribute to pools, and manage voting from the Pools page."
             : "Find factors and join on-chain pools — no account needed to browse."}
         </p>
       </div>
