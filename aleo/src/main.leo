@@ -1,40 +1,148 @@
 // ZK-Factor: Confidential invoice factoring platform on Aleo blockchain
 // Cryptographically prevents double-factoring fraud while maintaining complete privacy
+// Leo 4.0 — all finalization logic uses inline `final { }` blocks per the 3.5→4.0 migration guide.
 import credits.aleo;
 import test_usdcx_stablecoin.aleo;
 
-program zk_factor_12250.aleo {
-    // Simple admin-controlled upgradable constructor for MVP
-    // Can be upgraded to multi-sig governance later
-    // IMPORTANT: Replace with actual admin address before deployment
-    // See aleo/docs/deployment.md for admin key management
+// ─────────────────────────────────────────────────────────────────────────────
+// MODULE-LEVEL STRUCTS
+// Plain structs (no owner field) live outside program {} in Leo 4.0.
+// Records (with owner field) stay inside the program block.
+// ─────────────────────────────────────────────────────────────────────────────
+
+struct FactorInfo {
+    is_active: bool,
+    min_advance_rate: u16,
+    max_advance_rate: u16,
+    total_factored: u64,
+    registration_date: u64,
+}
+
+// BREAKING CHANGE: amount field added in a prior version. Fresh deployment required.
+struct SettlementInfo {
+    is_settled: bool,
+    settlement_date: u64,
+    factor: address,
+    amount: u64,
+}
+
+// On-chain metadata for an ownerless pool. Stored in pool_meta mapping.
+struct PoolMeta {
+    name_u128: u128,         // ASCII pool name encoded as u128 (max 16 chars)
+    target_amount: u64,      // equals expected advance_amount (invoice × rate / 10000)
+    min_contribution: u64,   // enforced >= 5_000_000 (5 ALEO in microcredits)
+    created_at: u64,
+}
+
+// Submitted by business once pool is fully funded. Awaits factor multisig votes.
+struct PendingPoolOffer {
+    original_creditor: address,
+    debtor: address,
+    amount: u64,
+    advance_rate: u16,
+    advance_amount: u64,
+    due_date: u64,
+    nonce: field,
+    is_executed: bool,
+}
+
+// Composite key used to prevent a factor from voting twice on the same pool.
+// Hashed via Poseidon2 and stored in pool_voter_cast mapping.
+struct VoteId {
+    invoice_hash: field,
+    voter: address,
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SHARED FINAL FN HELPERS
+//
+// `final fn` bodies are inlined at compile time into the caller's `final { }`
+// block. Use these to deduplicate finalization logic shared across entry points.
+// All `final fn` definitions live outside `program {}`.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Assert the address is a currently-active registered factor.
+// Called from any final { } block that gate-checks factor status.
+final fn verify_factor_active(factor: address) {
+    let factor_info: FactorInfo = Mapping::get(active_factors, factor);
+    assert(factor_info.is_active);
+}
+
+// Increment protocol_stats[1] and this factor's total_factored count.
+// Asserts factor is active — safe to call as the sole active-check.
+final fn update_factor_stats(factor: address) {
+    let factor_info: FactorInfo = Mapping::get(active_factors, factor);
+    assert(factor_info.is_active);
+    let total_factored: u64 = Mapping::get_or_use(protocol_stats, 1u8, 0u64);
+    Mapping::set(protocol_stats, 1u8, total_factored + 1u64);
+    Mapping::set(active_factors, factor, FactorInfo {
+        is_active:         factor_info.is_active,
+        min_advance_rate:  factor_info.min_advance_rate,
+        max_advance_rate:  factor_info.max_advance_rate,
+        total_factored:    factor_info.total_factored + 1u64,
+        registration_date: factor_info.registration_date,
+    });
+}
+
+// Write a SettlementInfo entry and bump protocol_stats[2].
+// Asserts the invoice has not already been settled.
+final fn record_settlement(invoice_hash: field, factor: address, amount: u64) {
+    assert(!Mapping::contains(settled_invoices, invoice_hash));
+    Mapping::set(settled_invoices, invoice_hash, SettlementInfo {
+        is_settled:       true,
+        settlement_date:  (block.timestamp as u64),
+        factor:           factor,
+        amount:           amount,
+    });
+    let total_settled: u64 = Mapping::get_or_use(protocol_stats, 2u8, 0u64);
+    Mapping::set(protocol_stats, 2u8, total_settled + 1u64);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PROGRAM
+// ─────────────────────────────────────────────────────────────────────────────
+
+program zk_factor_12251.aleo {
+    // IMPORTANT: Replace with actual admin address before deployment.
+    // See aleo/docs/deployment.md for admin key management.
     @admin(address="aleo19rn544c49da9z2vz52q5f7lm7nsjhp890ahmre6cz94qawdscgps6kq3cu")
-    async constructor() {}
+    constructor() {}
 
-    // Public mappings for factor registry and settlement tracking
-    mapping active_factors: address => FactorInfo;
-    mapping settled_invoices: field => SettlementInfo;
-    mapping protocol_stats: u8 => u64;
+    // ── Core protocol mappings ───────────────────────────────────────────────
+    mapping active_factors:    address => FactorInfo;
+    mapping settled_invoices:  field   => SettlementInfo;
+    mapping protocol_stats:    u8      => u64;
 
-    // Recourse claim tracking: invoice_hash => claimed (true = recourse initiated, false = settled/cleared)
+    // ── Recourse ─────────────────────────────────────────────────────────────
+    // invoice_hash => claimed (true = recourse active, false = settled/cleared)
     mapping recourse_claims: field => bool;
 
-    // Pool state mappings — keyed by invoice_hash
-    mapping pool_contributions: field => u64;   // total credits contributed to this pool
-    mapping pool_owners: field => address;       // who created the pool
-    mapping pool_closed: field => bool;          // true after execute_pool_factoring is called
+    // ── Legacy pool mappings (owner-based) ───────────────────────────────────
+    mapping pool_contributions: field   => u64;      // total contributed to this pool
+    mapping pool_owners:        field   => address;  // who created the pool
+    mapping pool_closed:        field   => bool;     // true after pool is executed/closed
+    mapping pool_proceeds:      field   => u64;      // settlement.amount (set by open_pool_distribution)
+    mapping pool_distributed:   field   => u64;      // running total of proceeds already paid out
 
-    // Payout accounting — set once after invoice settled, then drained by contributor claims
-    // pool_proceeds[invoice_hash] = settlement.amount (set by open_pool_distribution)
-    // pool_distributed[invoice_hash] = running total of proceeds already paid out
-    mapping pool_proceeds: field => u64;
-    mapping pool_distributed: field => u64;
+    // ── Ownerless pool mappings ──────────────────────────────────────────────
+    mapping pool_meta:          field   => PoolMeta;         // on-chain pool metadata
+    mapping pool_pending_offer: field   => PendingPoolOffer; // business-submitted offer awaiting votes
+    mapping pool_vote_count:    field   => u8;               // total approvals so far
+    mapping pool_voter_cast:    field   => bool;             // Poseidon2(VoteId) => voted?
+    mapping pool_executor:      field   => address;          // recorded after execute_approved_pool
+    // Running count of active factors — used to compute majority threshold.
+    // Key: false => count.
+    mapping active_factor_count: bool => u32;
 
-    // Enumerable list of all registered factor addresses (includes deregistered)
-    // Compiles to: factor_addresses__ (u32 => address) and factor_addresses__len__ (bool => u32)
+    // ── Storage arrays ───────────────────────────────────────────────────────
+    // All registered factor addresses (includes deregistered).
     storage factor_addresses: [address];
+    // All ownerless pool hashes — readable by anyone on-chain.
+    storage pool_registry: [field];
 
-    // Invoice record owned by business (consumed during factoring)
+    // ── Records ──────────────────────────────────────────────────────────────
+
+    // Owned by business; consumed on factoring to prevent double-factoring.
     record Invoice {
         owner: address,
         debtor: address,
@@ -43,15 +151,13 @@ program zk_factor_12250.aleo {
         invoice_hash: field,
         nonce: field,
         metadata: u128,
-        // IPFS CID encoded as a field element.
-        // 0field = no document attached.
+        // IPFS CID encoded as a field element. 0field = no document.
         // Non-zero = cidToField(cid) from src/lib/ipfs.ts
-        // The full CID string must be stored off-chain — this field only
-        // proves a document exists and hasn't been tampered with.
+        // Full CID string stored off-chain; this field proves existence + integrity.
         document_cid: field,
     }
 
-    // FactoredInvoice record owned by factor after purchase
+    // Owned by factor after purchasing an invoice.
     record FactoredInvoice {
         owner: address,
         original_creditor: address,
@@ -65,42 +171,41 @@ program zk_factor_12250.aleo {
         recourse: bool,
     }
 
+    // Owned by factor; accepted to execute the two-step factoring handshake.
     record FactoringOffer {
-        owner: address,              // Factor
-        original_creditor: address,  // Business that created the original invoice
-        debtor: address,             // Customer who owes payment
-        amount: u64,                 // Full invoice amount in microcredits
-        due_date: u64,               // Original invoice due date (Unix timestamp)
-        advance_rate: u16,           // Agreed rate in basis points (e.g. 9500 = 95%)
-        invoice_hash: field,         // Links back to the original off-chain invoice
-        nonce: field,                // Carried over from Invoice for record uniqueness
-        metadata: u128,              // Carried over from Invoice (invoice number, flags)
-        use_token: bool,             // true = USDCx, false = native credits
-        recourse: bool,              // true = factor can initiate recourse if debtor defaults
+        owner: address,
+        original_creditor: address,
+        debtor: address,
+        amount: u64,
+        due_date: u64,
+        advance_rate: u16,
+        invoice_hash: field,
+        nonce: field,
+        metadata: u128,
+        use_token: bool,
+        recourse: bool,
     }
 
-    // Private record sent to debtor — only their wallet can read it
-    // No public data exposed on-chain
+    // Private record sent to debtor — only their wallet can read it.
     record PaymentNotice {
-        owner: address,    // debtor
+        owner: address,
         factor: address,
         amount: u64,
         due_date: u64,
         invoice_hash: field,
     }
 
-    // Sent to the original_creditor (business) when factor initiates recourse.
-    // Business must call settle_recourse to repay the advance and close the claim.
+    // Sent to business when factor initiates recourse.
+    // Business calls settle_recourse to repay the advance.
     record RecourseNotice {
-        owner: address,        // original_creditor (business)
-        factor: address,       // factor who advanced funds and is owed repayment
-        advance_amount: u64,   // amount the business must repay
+        owner: address,
+        factor: address,
+        advance_amount: u64,
         invoice_hash: field,
     }
 
-    // Pool metadata record owned by pool creator.
-    // total_contributed is a snapshot at creation time (0u64);
-    // the live total is always pool_contributions[invoice_hash] on-chain.
+    // Pool metadata owned by the legacy pool creator.
+    // total_contributed is a snapshot at creation (0u64); live total is in pool_contributions.
     record FactorPool {
         owner: address,
         invoice_hash: field,
@@ -109,185 +214,159 @@ program zk_factor_12250.aleo {
         is_closed: bool,
     }
 
-    // Proof of a factor's contribution to a pool.
-    // Consumed when the contributor calls claim_pool_proceeds.
-    // total_pool is a snapshot at contribution time — display only, not used for payout math.
-    // Payout uses pool_contributions[invoice_hash] (authoritative on-chain total).
+    // Proof of contribution to a pool; consumed when calling claim_pool_proceeds.
+    // total_pool is a snapshot at contribution time — display only.
+    // Payout math uses pool_contributions[invoice_hash] (authoritative on-chain total).
     record PoolShare {
         owner: address,
-        pool_id: field,       // = invoice_hash (pool identifier)
+        pool_id: field,
         invoice_hash: field,
         contributed: u64,
-        total_pool: u64,      // snapshot of pool total at time of this contribution
+        total_pool: u64,
     }
 
-    // Factor registration and statistics
-    struct FactorInfo {
-        is_active: bool,
-        min_advance_rate: u16,
-        max_advance_rate: u16,
-        total_factored: u64,
-        registration_date: u64,
-    }
-
-    // Settlement tracking information
-    // BREAKING CHANGE: amount field added. Existing entries lack this field
-    // and will read amount as 0u64. Requires fresh deployment or migration.
-    struct SettlementInfo {
-        is_settled: bool,
-        settlement_date: u64,
-        factor: address,
-        amount: u64,   // full invoice amount settled (debtor payment or factor settlement)
+    // Sent to debtor when execute_approved_pool succeeds (ownerless pool path).
+    record PoolPaymentNotice {
+        owner: address,
+        invoice_hash: field,
+        amount: u64,
+        due_date: u64,
     }
 
     // ─────────────────────────────────────────────────────────────
     // INVOICE
     // ─────────────────────────────────────────────────────────────
 
-    // Create an invoice record with validation
+    // Create an invoice record with validation.
     // document_cid: pass 0field if no document, or cidToField(cid) from src/lib/ipfs.ts
-    async transition mint_invoice(
+    fn mint_invoice(
         debtor: address,
         amount: u64,
         due_date: u64,
         invoice_hash: field,
         metadata: u128,
         document_cid: field,
-    ) -> (Invoice, Future) {
+    ) -> (Invoice, Final) {
         assert(amount > 0u64);
         assert(debtor != self.caller);
         let nonce: field = Poseidon2::hash_to_field(invoice_hash);
         let invoice: Invoice = Invoice {
-            owner: self.caller,
-            debtor: debtor,
-            amount: amount,
-            due_date: due_date,
+            owner:        self.caller,
+            debtor:       debtor,
+            amount:       amount,
+            due_date:     due_date,
             invoice_hash: invoice_hash,
-            nonce: nonce,
-            metadata: metadata,
+            nonce:        nonce,
+            metadata:     metadata,
             document_cid: document_cid,
         };
-        return (invoice, finalize_mint_invoice(due_date));
-    }
-
-    async function finalize_mint_invoice(due_date: u64) {
-        assert(due_date > (block.timestamp as u64));
+        return (invoice, final {
+            assert(due_date > (block.timestamp as u64));
+        });
     }
 
     // ─────────────────────────────────────────────────────────────
     // FACTOR REGISTRY
     // ─────────────────────────────────────────────────────────────
 
-    // Register as a factoring company
-    async transition register_factor(
+    // Register the caller as a factoring company.
+    fn register_factor(
         min_advance_rate: u16,
-        max_advance_rate: u16
-    ) -> Future {
+        max_advance_rate: u16,
+    ) -> Final {
         assert(min_advance_rate <= max_advance_rate);
         assert(min_advance_rate >= 5000u16 && min_advance_rate <= 9900u16);
         assert(max_advance_rate >= 5000u16 && max_advance_rate <= 9900u16);
-        return finalize_register_factor(self.caller, min_advance_rate, max_advance_rate);
-    }
-
-    async function finalize_register_factor(
-        factor: address,
-        min_rate: u16,
-        max_rate: u16
-    ) {
-        let existing_factor: FactorInfo = Mapping::get_or_use(active_factors, factor, FactorInfo {
-            is_active: false,
-            min_advance_rate: 0u16,
-            max_advance_rate: 0u16,
-            total_factored: 0u64,
-            registration_date: 0u64,
-        });
-        assert(!existing_factor.is_active);
-        factor_addresses.push(factor);
-        let new_factor: FactorInfo = FactorInfo {
-            is_active: true,
-            min_advance_rate: min_rate,
-            max_advance_rate: max_rate,
-            total_factored: 0u64,
-            registration_date: (block.timestamp as u64),
+        let caller: address = self.caller;
+        return final {
+            let existing: FactorInfo = Mapping::get_or_use(active_factors, caller, FactorInfo {
+                is_active:         false,
+                min_advance_rate:  0u16,
+                max_advance_rate:  0u16,
+                total_factored:    0u64,
+                registration_date: 0u64,
+            });
+            assert(!existing.is_active);
+            factor_addresses.push(caller);
+            Mapping::set(active_factors, caller, FactorInfo {
+                is_active:         true,
+                min_advance_rate:  min_advance_rate,
+                max_advance_rate:  max_advance_rate,
+                total_factored:    0u64,
+                registration_date: (block.timestamp as u64),
+            });
+            // Track active count for multisig threshold computation.
+            let active_count: u32 = Mapping::get_or_use(active_factor_count, false, 0u32);
+            Mapping::set(active_factor_count, false, active_count + 1u32);
         };
-        Mapping::set(active_factors, factor, new_factor);
     }
 
-    // Deregister as a factoring company
-    async transition deregister_factor() -> Future {
-        return finalize_deregister_factor(self.caller);
-    }
-
-    async function finalize_deregister_factor(factor: address) {
-        let factor_info: FactorInfo = Mapping::get(active_factors, factor);
-        let updated_info: FactorInfo = FactorInfo {
-            is_active: false,
-            min_advance_rate: factor_info.min_advance_rate,
-            max_advance_rate: factor_info.max_advance_rate,
-            total_factored: factor_info.total_factored,
-            registration_date: factor_info.registration_date,
+    // Deregister the caller as a factoring company.
+    fn deregister_factor() -> Final {
+        let caller: address = self.caller;
+        return final {
+            let factor_info: FactorInfo = Mapping::get(active_factors, caller);
+            Mapping::set(active_factors, caller, FactorInfo {
+                is_active:         false,
+                min_advance_rate:  factor_info.min_advance_rate,
+                max_advance_rate:  factor_info.max_advance_rate,
+                total_factored:    factor_info.total_factored,
+                registration_date: factor_info.registration_date,
+            });
+            let active_count: u32 = Mapping::get_or_use(active_factor_count, false, 0u32);
+            if active_count > 0u32 {
+                Mapping::set(active_factor_count, false, active_count - 1u32);
+            }
         };
-        Mapping::set(active_factors, factor, updated_info);
     }
 
     // ─────────────────────────────────────────────────────────────
     // TWO-STEP FACTORING HANDSHAKE
     // ─────────────────────────────────────────────────────────────
 
-    // Called by: Business
-    // Inputs:    Invoice (owned by business), factor address, agreed rate, currency, recourse flag
-    // Outputs:   FactoringOffer (owned by factor)
-    //
-    // This is the business's commitment — once called, the Invoice is
-    // consumed and cannot be double-factored. The business cannot back out.
-    // The factor receives a FactoringOffer they can accept at any time.
-    async transition authorize_factoring(
+    // Step 1 — Called by: Business
+    // Consumes the Invoice (preventing double-factoring) and issues a
+    // FactoringOffer to the specified factor. The business cannot back out.
+    fn authorize_factoring(
         invoice: Invoice,
         factor: address,
         advance_rate: u16,
         use_token: bool,
         recourse: bool,
-    ) -> (FactoringOffer, Future) {
-
-        // Only the invoice owner (business) can initiate factoring
+    ) -> (FactoringOffer, Final) {
         assert(invoice.owner == self.caller);
-
-        // Enforce advance rate bounds: 50% (5000) to 99% (9900) basis points
         assert(advance_rate >= 5000u16 && advance_rate <= 9900u16);
 
         let offer: FactoringOffer = FactoringOffer {
-            owner: factor,                   // Factor receives and can act on this
-            original_creditor: self.caller,  // Business retains identity for payment routing
-            debtor: invoice.debtor,
-            amount: invoice.amount,
-            due_date: invoice.due_date,
-            advance_rate: advance_rate,
-            invoice_hash: invoice.invoice_hash,
-            nonce: invoice.nonce,
-            metadata: invoice.metadata,
-            use_token: use_token,
-            recourse: recourse,              // Passed through from business; consumed into FactoredInvoice
+            owner:              factor,
+            original_creditor:  self.caller,
+            debtor:             invoice.debtor,
+            amount:             invoice.amount,
+            due_date:           invoice.due_date,
+            advance_rate:       advance_rate,
+            invoice_hash:       invoice.invoice_hash,
+            nonce:              invoice.nonce,
+            metadata:           invoice.metadata,
+            use_token:          use_token,
+            recourse:           recourse,
         };
 
-        return (offer, finalize_authorize_factoring(factor, invoice.invoice_hash));
+        return (offer, final {
+            verify_factor_active(factor);
+        });
     }
 
-    // Called by: Business
-    // Inputs:    Invoice (owned by business), factor, partial amount, agreed rate, currency, recourse flag
-    // Outputs:   FactoringOffer (owned by factor), remaining Invoice (owned by business)
-    //
-    // This enables partial factoring in a single transaction:
-    // - factored portion is converted into a FactoringOffer for the factor
-    // - unfactored remainder is returned to the creditor as a new Invoice record
-    async transition authorize_partial_factoring(
+    // Step 1 (partial) — Called by: Business
+    // Factors a portion of the invoice. Returns a FactoringOffer for the sold
+    // portion and a new Invoice record for the unfactored remainder.
+    fn authorize_partial_factoring(
         invoice: Invoice,
         factor: address,
         factoring_amount: u64,
         advance_rate: u16,
         use_token: bool,
         recourse: bool,
-    ) -> (FactoringOffer, Invoice, Future) {
-
+    ) -> (FactoringOffer, Invoice, Final) {
         assert(invoice.owner == self.caller);
         assert(factoring_amount > 0u64);
         assert(factoring_amount < invoice.amount);
@@ -295,190 +374,117 @@ program zk_factor_12250.aleo {
 
         let remaining_amount: u64 = invoice.amount - factoring_amount;
 
-        // Derive a deterministic child hash/nonce so the retained remainder can be
-        // independently managed and settled without colliding with the sold portion.
+        // Deterministic child hash so the remainder can be independently managed.
         let remaining_invoice_hash: field = Poseidon2::hash_to_field(
             invoice.invoice_hash + (factoring_amount as field)
         );
         let remaining_nonce: field = Poseidon2::hash_to_field(remaining_invoice_hash);
 
         let offer: FactoringOffer = FactoringOffer {
-            owner: factor,
-            original_creditor: self.caller,
-            debtor: invoice.debtor,
-            amount: factoring_amount,
-            due_date: invoice.due_date,
-            advance_rate: advance_rate,
-            invoice_hash: invoice.invoice_hash,
-            nonce: invoice.nonce,
-            metadata: invoice.metadata,
-            use_token: use_token,
-            recourse: recourse,
+            owner:              factor,
+            original_creditor:  self.caller,
+            debtor:             invoice.debtor,
+            amount:             factoring_amount,
+            due_date:           invoice.due_date,
+            advance_rate:       advance_rate,
+            invoice_hash:       invoice.invoice_hash,
+            nonce:              invoice.nonce,
+            metadata:           invoice.metadata,
+            use_token:          use_token,
+            recourse:           recourse,
         };
 
         let remaining: Invoice = Invoice {
-            owner: self.caller,
-            debtor: invoice.debtor,
-            amount: remaining_amount,
-            due_date: invoice.due_date,
+            owner:        self.caller,
+            debtor:       invoice.debtor,
+            amount:       remaining_amount,
+            due_date:     invoice.due_date,
             invoice_hash: remaining_invoice_hash,
-            nonce: remaining_nonce,
-            metadata: invoice.metadata,
+            nonce:        remaining_nonce,
+            metadata:     invoice.metadata,
             document_cid: invoice.document_cid,
         };
 
-        return (offer, remaining, finalize_authorize_factoring(factor, invoice.invoice_hash));
+        return (offer, remaining, final {
+            verify_factor_active(factor);
+        });
     }
 
-    async function finalize_authorize_factoring(factor: address, invoice_hash: field) {
-        // Verify the chosen factor is registered and active in the protocol.
-        // Mapping::get panics if the key doesn't exist — unregistered factors
-        // will cause this to fail, blocking the whole transaction.
-        let factor_info: FactorInfo = Mapping::get(active_factors, factor);
-        assert(factor_info.is_active);
-    }
-
-    // Called by: Factor (native credits path)
-    // Inputs:    FactoringOffer (owned by factor), credits (owned by factor)
-    // Outputs:   FactoredInvoice (owned by factor), payment to business, change
-    //
-    // Because the factor is self.caller, they legally own both inputs.
-    // This is what makes the payment routing correct — the factor's own
-    // credits are transferred to the business, not the business's credits
-    // going back to themselves.
-    async transition execute_factoring(
+    // Step 2 — Called by: Factor (native credits path)
+    // Transfers the advance to the business and mints a FactoredInvoice.
+    // Factor must own both the FactoringOffer and a sufficient credits record.
+    // For USDCx path use execute_factoring_token instead.
+    fn execute_factoring(
         offer: FactoringOffer,
-        payment: credits.aleo/credits,
-    ) -> (FactoredInvoice, credits.aleo/credits, credits.aleo/credits, Future) {
-
-        // Only the factor (offer.owner) can execute — prevents anyone else
-        // from accepting an offer intended for a specific factor
+        payment: credits.aleo::credits,
+    ) -> (FactoredInvoice, credits.aleo::credits, credits.aleo::credits, Final) {
+        // Only the factor named in the offer can execute.
         assert(offer.owner == self.caller);
-
-        // Guard: this transition is only for native credits.
-        // If the offer was authorized with use_token=true, the factor must
-        // call execute_factoring_token instead — prevents silent wrong-path execution.
         assert(!offer.use_token);
 
-        // Safe multiplication using u128 to prevent overflow before dividing
-        // back down to u64. Mirrors the advance rate calculation from the old code.
         let product: u128 = (offer.amount as u128) * (offer.advance_rate as u128);
         let advance_amount: u64 = (product / 10000u128) as u64;
-
-        // Factor must provide enough credits to cover the advance payment
         assert(payment.microcredits >= advance_amount);
 
-        // Build the FactoredInvoice — factor owns this as proof of purchase.
-        // They will present this record later when the debtor pays (settle_invoice).
         let factored: FactoredInvoice = FactoredInvoice {
-            owner: self.caller,                   // Factor holds this as their asset
-            original_creditor: offer.original_creditor,
-            debtor: offer.debtor,
-            amount: offer.amount,
-            advance_amount: advance_amount,
-            due_date: offer.due_date,
-            factoring_date: 0u64,                 // block.timestamp not available in transition scope
-            advance_rate: offer.advance_rate,
-            invoice_hash: offer.invoice_hash,
-            recourse: offer.recourse,             // Carry through from offer (set by business in authorize_factoring)
+            owner:              self.caller,
+            original_creditor:  offer.original_creditor,
+            debtor:             offer.debtor,
+            amount:             offer.amount,
+            advance_amount:     advance_amount,
+            due_date:           offer.due_date,
+            factoring_date:     0u64,   // block.timestamp unavailable in proof context
+            advance_rate:       offer.advance_rate,
+            invoice_hash:       offer.invoice_hash,
+            recourse:           offer.recourse,
         };
 
-        // Factor (self.caller) owns `payment`, transfers advance_amount to business.
-        // `change` is the leftover credits returned to the factor.
-        let (business_payment, change): (credits.aleo/credits, credits.aleo/credits) =
-            credits.aleo/transfer_private(payment, offer.original_creditor, advance_amount);
+        // Factor's credits → business. Remainder returned as change.
+        let (business_payment, change): (credits.aleo::credits, credits.aleo::credits) =
+            credits.aleo::transfer_private(payment, offer.original_creditor, advance_amount);
 
-        return (factored, business_payment, change, finalize_execute_factoring(self.caller, offer.invoice_hash));
+        let factor: address = self.caller;
+        return (factored, business_payment, change, final {
+            update_factor_stats(factor);
+        });
     }
 
-    async function finalize_execute_factoring(factor: address, invoice_hash: field) {
-        // Re-verify factor is still active at execution time.
-        // Protects against a factor being deregistered between Step 1 and Step 2.
-        let factor_info: FactorInfo = Mapping::get(active_factors, factor);
-        assert(factor_info.is_active);
-
-        // Increment global protocol counter (key 1 = total factored)
-        let total_factored: u64 = Mapping::get_or_use(protocol_stats, 1u8, 0u64);
-        Mapping::set(protocol_stats, 1u8, total_factored + 1u64);
-
-        // Update this factor's personal total_factored count
-        let updated_factor: FactorInfo = FactorInfo {
-            is_active: factor_info.is_active,
-            min_advance_rate: factor_info.min_advance_rate,
-            max_advance_rate: factor_info.max_advance_rate,
-            total_factored: factor_info.total_factored + 1u64,
-            registration_date: factor_info.registration_date,
-        };
-        Mapping::set(active_factors, factor, updated_factor);
-    }
-
-    // Called by: Factor (USDCx stablecoin path)
-    // Inputs:    FactoringOffer (owned by factor)
-    // Outputs:   FactoredInvoice (owned by factor)
-    //
-    // PREREQUISITE: Factor must first call test_usdcx_stablecoin.aleo/approve_public
-    //               to approve this program as spender for at least the advance amount.
-    //               This is a separate transaction (approve + execute pattern).
-    //
-    // USDCx uses ARC-20 public balances — no private record is passed in.
-    // The program calls transfer_from_public to move tokens from the factor's
-    // balance to the business's balance, using the pre-approved allowance.
-    //
-    // Both credits.aleo microcredits and USDCx use 6 decimal places, so
-    // advance_amount in microcredits == advance_amount in USDCx micro-units (1:1 scale).
-    // Adjust if the deployed USDCx program uses a different denomination.
-    async transition execute_factoring_token(
+    // Step 2 — Called by: Factor (USDCx stablecoin path)
+    // PREREQUISITE: Factor must first call test_usdcx_stablecoin.aleo::approve_public
+    //   to approve this program as spender for at least advance_amount.
+    // USDCx and credits.aleo both use 6 decimal places (1:1 scale for advance_amount).
+    fn execute_factoring_token(
         offer: FactoringOffer,
-    ) -> (FactoredInvoice, Future) {
-
-        // Only the factor (offer.owner) can execute
+    ) -> (FactoredInvoice, Final) {
         assert(offer.owner == self.caller);
-
-        // Guard: this transition is only for USDCx.
-        // If the offer was authorized with use_token=false, the factor must
-        // call execute_factoring instead.
         assert(offer.use_token);
 
-        // Safe multiplication using u128 to prevent overflow before dividing
-        // back down to u64.
         let product: u128 = (offer.amount as u128) * (offer.advance_rate as u128);
         let advance_amount: u64 = (product / 10000u128) as u64;
 
         let factored: FactoredInvoice = FactoredInvoice {
-            owner: self.caller,
-            original_creditor: offer.original_creditor,
-            debtor: offer.debtor,
-            amount: offer.amount,
-            advance_amount: advance_amount,
-            due_date: offer.due_date,
-            factoring_date: 0u64,
-            advance_rate: offer.advance_rate,
-            invoice_hash: offer.invoice_hash,
-            recourse: offer.recourse,    // Carry through from offer
+            owner:              self.caller,
+            original_creditor:  offer.original_creditor,
+            debtor:             offer.debtor,
+            amount:             offer.amount,
+            advance_amount:     advance_amount,
+            due_date:           offer.due_date,
+            factoring_date:     0u64,
+            advance_rate:       offer.advance_rate,
+            invoice_hash:       offer.invoice_hash,
+            recourse:           offer.recourse,
         };
 
-        let transfer_future: Future = test_usdcx_stablecoin.aleo/transfer_from_public(self.caller, offer.original_creditor, advance_amount as u128);
+        // Cross-program call returns a Final — composed into this entry point's final block.
+        let transfer_final: Final = test_usdcx_stablecoin.aleo::transfer_from_public(
+            self.caller, offer.original_creditor, advance_amount as u128
+        );
 
-        return (factored, finalize_exec_factoring_token(self.caller, offer.invoice_hash, transfer_future));
-    }
-
-    async function finalize_exec_factoring_token(factor: address, invoice_hash: field, transfer_future: Future) {
-        transfer_future.await();
-
-        let factor_info: FactorInfo = Mapping::get(active_factors, factor);
-        assert(factor_info.is_active);
-
-        let total_factored: u64 = Mapping::get_or_use(protocol_stats, 1u8, 0u64);
-        Mapping::set(protocol_stats, 1u8, total_factored + 1u64);
-
-        let updated_factor: FactorInfo = FactorInfo {
-            is_active: factor_info.is_active,
-            min_advance_rate: factor_info.min_advance_rate,
-            max_advance_rate: factor_info.max_advance_rate,
-            total_factored: factor_info.total_factored + 1u64,
-            registration_date: factor_info.registration_date,
-        };
-        Mapping::set(active_factors, factor, updated_factor);
+        let factor: address = self.caller;
+        return (factored, final {
+            transfer_final.run();
+            update_factor_stats(factor);
+        });
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -486,51 +492,44 @@ program zk_factor_12250.aleo {
     // ─────────────────────────────────────────────────────────────
 
     // Called by factor to manually mark invoice settled (e.g. debtor paid off-chain).
-    // Records factored.amount as the settlement amount for downstream payout accounting.
-    async transition settle_invoice(
+    // Records factored.amount as the settlement amount for downstream pool payouts.
+    fn settle_invoice(
         factored: FactoredInvoice,
-    ) -> Future {
+    ) -> Final {
         assert(factored.owner == self.caller);
-        return finalize_settle_invoice(factored.invoice_hash, self.caller, factored.amount);
-    }
-
-    async function finalize_settle_invoice(invoice_hash: field, factor: address, amount: u64) {
-        let is_settled: bool = Mapping::contains(settled_invoices, invoice_hash);
-        assert(!is_settled);
-        let settlement: SettlementInfo = SettlementInfo {
-            is_settled: true,
-            settlement_date: (block.timestamp as u64),
-            factor: factor,
-            amount: amount,
+        let invoice_hash: field = factored.invoice_hash;
+        let factor: address = self.caller;
+        let amount: u64 = factored.amount;
+        return final {
+            record_settlement(invoice_hash, factor, amount);
         };
-        Mapping::set(settled_invoices, invoice_hash, settlement);
-        let total_settled: u64 = Mapping::get_or_use(protocol_stats, 2u8, 0u64);
-        Mapping::set(protocol_stats, 2u8, total_settled + 1u64);
     }
 
-    transition create_payment_request(
+    // Re-issue payment notice to debtor. Factor retains their FactoredInvoice.
+    // Pure proof-context transition — no on-chain state change.
+    fn create_payment_request(
         factored: FactoredInvoice,
     ) -> (FactoredInvoice, PaymentNotice) {
         assert(factored.owner == self.caller);
 
         let same: FactoredInvoice = FactoredInvoice {
-            owner: factored.owner,
-            original_creditor: factored.original_creditor,
-            debtor: factored.debtor,
-            amount: factored.amount,
-            advance_amount: factored.advance_amount,
-            due_date: factored.due_date,
-            factoring_date: factored.factoring_date,
-            advance_rate: factored.advance_rate,
-            invoice_hash: factored.invoice_hash,
-            recourse: factored.recourse,
+            owner:              factored.owner,
+            original_creditor:  factored.original_creditor,
+            debtor:             factored.debtor,
+            amount:             factored.amount,
+            advance_amount:     factored.advance_amount,
+            due_date:           factored.due_date,
+            factoring_date:     factored.factoring_date,
+            advance_rate:       factored.advance_rate,
+            invoice_hash:       factored.invoice_hash,
+            recourse:           factored.recourse,
         };
 
         let notice: PaymentNotice = PaymentNotice {
-            owner: factored.debtor,
-            factor: self.caller,
-            amount: factored.amount,
-            due_date: factored.due_date,
+            owner:        factored.debtor,
+            factor:       self.caller,
+            amount:       factored.amount,
+            due_date:     factored.due_date,
             invoice_hash: factored.invoice_hash,
         };
 
@@ -538,42 +537,23 @@ program zk_factor_12250.aleo {
     }
 
     // Atomically transfers payment from debtor's public balance to factor AND marks settled.
-    // Uses transfer_public_as_signer so the debit comes from the transaction signer (debtor),
-    // not from the program's own balance. Replaces the prior racy two-tx client pattern.
-    async transition pay_invoice(
+    // Uses transfer_public_as_signer so the debit comes from the signer (debtor),
+    // not from the program's escrow. Eliminates the prior racy two-tx pattern.
+    fn pay_invoice(
         notice: PaymentNotice,
         factor: address,
-    ) -> Future {
+    ) -> Final {
         assert(notice.owner == self.caller);
         assert(notice.factor == factor);
 
-        let f_pay: Future = credits.aleo/transfer_public_as_signer(factor, notice.amount);
+        let f_pay: Final = credits.aleo::transfer_public_as_signer(factor, notice.amount);
 
-        return finalize_pay_invoice(notice.invoice_hash, self.caller, notice.amount, factor, f_pay);
-    }
-
-    async function finalize_pay_invoice(
-        invoice_hash: field,
-        debtor: address,
-        amount: u64,
-        factor: address,
-        f_pay: Future,
-    ) {
-        let is_settled: bool = Mapping::contains(settled_invoices, invoice_hash);
-        assert(!is_settled);
-
-        let settlement: SettlementInfo = SettlementInfo {
-            is_settled: true,
-            settlement_date: (block.timestamp as u64),
-            factor: factor,
-            amount: amount,
+        let invoice_hash: field = notice.invoice_hash;
+        let amount: u64 = notice.amount;
+        return final {
+            record_settlement(invoice_hash, factor, amount);
+            f_pay.run();
         };
-        Mapping::set(settled_invoices, invoice_hash, settlement);
-
-        let total_settled: u64 = Mapping::get_or_use(protocol_stats, 2u8, 0u64);
-        Mapping::set(protocol_stats, 2u8, total_settled + 1u64);
-
-        f_pay.await();
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -581,367 +561,541 @@ program zk_factor_12250.aleo {
     // ─────────────────────────────────────────────────────────────
 
     // Called by: Factor
-    // When: Debtor has not paid past due_date and the FactoredInvoice has recourse=true.
-    // Effect: Burns the FactoredInvoice, emits a RecourseNotice to the original_creditor,
-    //         and sets recourse_claims[invoice_hash] = true.
-    // Finalize guards: invoice must NOT be settled, must NOT already have a live claim.
-    async transition initiate_recourse(
+    // When: Debtor has not paid past due_date and FactoredInvoice.recourse == true.
+    // Effect: Burns FactoredInvoice, emits RecourseNotice to business,
+    //         sets recourse_claims[invoice_hash] = true.
+    fn initiate_recourse(
         factored: FactoredInvoice,
-    ) -> (RecourseNotice, Future) {
+    ) -> (RecourseNotice, Final) {
         assert(factored.owner == self.caller);
-
-        // Only recourse-eligible invoices can trigger this path
         assert(factored.recourse);
 
-        // Emit notice to business — they must now repay the advance
         let notice: RecourseNotice = RecourseNotice {
-            owner: factored.original_creditor,
-            factor: self.caller,
+            owner:          factored.original_creditor,
+            factor:         self.caller,
             advance_amount: factored.advance_amount,
-            invoice_hash: factored.invoice_hash,
+            invoice_hash:   factored.invoice_hash,
         };
 
-        return (notice, finalize_initiate_recourse(factored.invoice_hash, factored.due_date));
-    }
-
-    async function finalize_initiate_recourse(invoice_hash: field, due_date: u64) {
-        // Invoice must be overdue — block timestamp must be past due_date
-        assert((block.timestamp as u64) > due_date);
-
-        // Invoice must NOT already be settled by the debtor
-        let is_settled: bool = Mapping::contains(settled_invoices, invoice_hash);
-        assert(!is_settled);
-
-        // Must not already have an active recourse claim
-        let already_claimed: bool = Mapping::get_or_use(recourse_claims, invoice_hash, false);
-        assert(!already_claimed);
-
-        Mapping::set(recourse_claims, invoice_hash, true);
+        let invoice_hash: field = factored.invoice_hash;
+        let due_date: u64 = factored.due_date;
+        return (notice, final {
+            assert((block.timestamp as u64) > due_date);
+            assert(!Mapping::contains(settled_invoices, invoice_hash));
+            let already_claimed: bool = Mapping::get_or_use(recourse_claims, invoice_hash, false);
+            assert(!already_claimed);
+            Mapping::set(recourse_claims, invoice_hash, true);
+        });
     }
 
     // Called by: Business (RecourseNotice.owner)
-    // When: Business has received a RecourseNotice and wants to repay the factor.
-    // Effect: Transfers advance_amount from business credits to factor. Clears recourse claim.
-    async transition settle_recourse(
+    // Repays the advance to the factor and clears the recourse claim.
+    fn settle_recourse(
         notice: RecourseNotice,
-        payment: credits.aleo/credits,
-    ) -> (credits.aleo/credits, credits.aleo/credits, Future) {
+        payment: credits.aleo::credits,
+    ) -> (credits.aleo::credits, credits.aleo::credits, Final) {
         assert(notice.owner == self.caller);
         assert(payment.microcredits >= notice.advance_amount);
 
-        // Transfer advance_amount to factor; change is returned to business (self.caller)
-        let (factor_payment, change): (credits.aleo/credits, credits.aleo/credits) =
-            credits.aleo/transfer_private(payment, notice.factor, notice.advance_amount);
+        let (factor_payment, change): (credits.aleo::credits, credits.aleo::credits) =
+            credits.aleo::transfer_private(payment, notice.factor, notice.advance_amount);
 
-        return (factor_payment, change, finalize_settle_recourse(notice.invoice_hash));
-    }
-
-    async function finalize_settle_recourse(invoice_hash: field) {
-        // Claim must be active before it can be settled
-        let is_claimed: bool = Mapping::get(recourse_claims, invoice_hash);
-        assert(is_claimed);
-
-        // Clear the recourse claim
-        Mapping::set(recourse_claims, invoice_hash, false);
+        let invoice_hash: field = notice.invoice_hash;
+        return (factor_payment, change, final {
+            let is_claimed: bool = Mapping::get(recourse_claims, invoice_hash);
+            assert(is_claimed);
+            Mapping::set(recourse_claims, invoice_hash, false);
+        });
     }
 
     // ─────────────────────────────────────────────────────────────
-    // FACTOR POOLS
+    // LEGACY FACTOR POOLS (owner-based — kept for backwards compat)
     // ─────────────────────────────────────────────────────────────
 
-    // Called by: Any registered factor
-    // Creates a pool for a specific invoice. Pool state is tracked in mappings.
-    // The Pool record returned is metadata owned by the creator.
-    async transition create_pool(
+    // Called by: Any registered factor.
+    // Creates a pool for a specific invoice. Pool creator is the designated owner.
+    fn create_pool(
         invoice_hash: field,
         target_amount: u64,
-    ) -> (FactorPool, Future) {
+    ) -> (FactorPool, Final) {
         assert(target_amount > 0u64);
 
         let pool: FactorPool = FactorPool {
-            owner: self.caller,
-            invoice_hash: invoice_hash,
-            target_amount: target_amount,
-            total_contributed: 0u64, // live total tracked in pool_contributions mapping
-            is_closed: false,
+            owner:             self.caller,
+            invoice_hash:      invoice_hash,
+            target_amount:     target_amount,
+            total_contributed: 0u64,
+            is_closed:         false,
         };
 
-        return (pool, finalize_create_pool(self.caller, invoice_hash, target_amount));
+        let creator: address = self.caller;
+        return (pool, final {
+            verify_factor_active(creator);
+            assert(!Mapping::contains(pool_contributions, invoice_hash));
+            Mapping::set(pool_contributions, invoice_hash, 0u64);
+            Mapping::set(pool_owners,        invoice_hash, creator);
+            Mapping::set(pool_closed,        invoice_hash, false);
+        });
     }
 
-    async function finalize_create_pool(
-        creator: address,
-        invoice_hash: field,
-        target_amount: u64,
-    ) {
-        let factor_info: FactorInfo = Mapping::get(active_factors, creator);
-        assert(factor_info.is_active);
-
-        // Pool must not already exist for this invoice
-        assert(!Mapping::contains(pool_contributions, invoice_hash));
-
-        Mapping::set(pool_contributions, invoice_hash, 0u64);
-        Mapping::set(pool_owners, invoice_hash, creator);
-        Mapping::set(pool_closed, invoice_hash, false);
-    }
-
-    // Called by: Any registered factor
-    // Contributes credits to a pool identified by invoice_hash.
-    // Credits are transferred to the pool owner (who will execute the factoring).
-    // Contributor receives a PoolShare as proof of their proportional ownership.
+    // Called by: Any registered factor.
+    // Contributes credits to a pool. Credits transfer to the pool owner (who executes).
+    // Contributor receives a PoolShare as proof of proportional ownership.
     //
-    // pool_owner: must match pool_owners[invoice_hash] — verified in finalize.
+    // pool_owner:     must match pool_owners[invoice_hash] — verified on-chain.
     // existing_total: read pool_contributions[invoice_hash] off-chain before calling;
-    //                 used to snapshot total_pool in the PoolShare record.
-    async transition contribute_to_pool(
+    //                 used only to snapshot total_pool in the returned PoolShare.
+    fn contribute_to_pool(
         invoice_hash: field,
         pool_owner: address,
         existing_total: u64,
-        payment: credits.aleo/credits,
+        payment: credits.aleo::credits,
         contribution: u64,
-    ) -> (PoolShare, credits.aleo/credits, credits.aleo/credits, Future) {
+    ) -> (PoolShare, credits.aleo::credits, credits.aleo::credits, Final) {
         assert(contribution > 0u64);
         assert(payment.microcredits >= contribution);
 
-        // Transfer contribution to pool owner; change returned to contributor (self.caller)
-        let (pool_payment, change): (credits.aleo/credits, credits.aleo/credits) =
-            credits.aleo/transfer_private(payment, pool_owner, contribution);
+        let (pool_payment, change): (credits.aleo::credits, credits.aleo::credits) =
+            credits.aleo::transfer_private(payment, pool_owner, contribution);
 
-        let new_total: u64 = existing_total + contribution;
-
-        // Pool share basis points: contributed * 10000 / total_pool (avoids floats)
-        // total_pool snapshot is taken at contribution time — used for proportional payout later
         let share: PoolShare = PoolShare {
-            owner: self.caller,
-            pool_id: invoice_hash,
+            owner:        self.caller,
+            pool_id:      invoice_hash,
             invoice_hash: invoice_hash,
-            contributed: contribution,
-            total_pool: new_total,
+            contributed:  contribution,
+            total_pool:   existing_total + contribution,
         };
 
-        return (share, pool_payment, change, finalize_contribute_to_pool(invoice_hash, pool_owner, contribution));
+        return (share, pool_payment, change, final {
+            assert(Mapping::contains(pool_contributions, invoice_hash));
+            let is_closed: bool = Mapping::get_or_use(pool_closed, invoice_hash, false);
+            assert(!is_closed);
+            let registered_owner: address = Mapping::get(pool_owners, invoice_hash);
+            assert(registered_owner == pool_owner);
+            let current_total: u64 = Mapping::get(pool_contributions, invoice_hash);
+            Mapping::set(pool_contributions, invoice_hash, current_total + contribution);
+        });
     }
 
-    async function finalize_contribute_to_pool(
-        invoice_hash: field,
-        pool_owner: address,
-        contribution: u64,
-    ) {
-        // Pool must exist and not be closed
-        assert(Mapping::contains(pool_contributions, invoice_hash));
-        let is_closed: bool = Mapping::get_or_use(pool_closed, invoice_hash, false);
-        assert(!is_closed);
-
-        // Verify pool_owner param matches the registered pool creator
-        let registered_owner: address = Mapping::get(pool_owners, invoice_hash);
-        assert(registered_owner == pool_owner);
-
-        let current_total: u64 = Mapping::get(pool_contributions, invoice_hash);
-        Mapping::set(pool_contributions, invoice_hash, current_total + contribution);
-    }
-
-    // Called by: Pool owner (factor who created the pool)
-    // Executes factoring once sufficient contributions have been collected.
+    // Called by: Pool owner.
+    // Executes factoring once the pool has met its funding target.
     // Transfers the advance to the business; closes the pool.
-    // Only supports native credits (use execute_factoring_token for USDCx deals).
-    async transition execute_pool_factoring(
+    // Only supports native credits — use execute_factoring_token for USDCx deals.
+    fn execute_pool_factoring(
         offer: FactoringOffer,
         pool: FactorPool,
-        payment: credits.aleo/credits,
-    ) -> (FactoredInvoice, credits.aleo/credits, credits.aleo/credits, Future) {
+        payment: credits.aleo::credits,
+    ) -> (FactoredInvoice, credits.aleo::credits, credits.aleo::credits, Final) {
         assert(offer.owner == self.caller);
         assert(pool.owner == self.caller);
         assert(!pool.is_closed);
         assert(pool.invoice_hash == offer.invoice_hash);
-
-        // Pool factoring currently supports native credits only
         assert(!offer.use_token);
 
         let product: u128 = (offer.amount as u128) * (offer.advance_rate as u128);
         let advance_amount: u64 = (product / 10000u128) as u64;
-
         assert(payment.microcredits >= advance_amount);
 
         let factored: FactoredInvoice = FactoredInvoice {
-            owner: self.caller,
-            original_creditor: offer.original_creditor,
-            debtor: offer.debtor,
-            amount: offer.amount,
-            advance_amount: advance_amount,
-            due_date: offer.due_date,
-            factoring_date: 0u64,
-            advance_rate: offer.advance_rate,
-            invoice_hash: offer.invoice_hash,
-            recourse: offer.recourse,
+            owner:              self.caller,
+            original_creditor:  offer.original_creditor,
+            debtor:             offer.debtor,
+            amount:             offer.amount,
+            advance_amount:     advance_amount,
+            due_date:           offer.due_date,
+            factoring_date:     0u64,
+            advance_rate:       offer.advance_rate,
+            invoice_hash:       offer.invoice_hash,
+            recourse:           offer.recourse,
         };
 
-        let (business_payment, change): (credits.aleo/credits, credits.aleo/credits) =
-            credits.aleo/transfer_private(payment, offer.original_creditor, advance_amount);
+        let (business_payment, change): (credits.aleo::credits, credits.aleo::credits) =
+            credits.aleo::transfer_private(payment, offer.original_creditor, advance_amount);
 
-        return (factored, business_payment, change, finalize_exec_pool_factoring(self.caller, offer.invoice_hash, pool.target_amount, advance_amount));
+        let factor: address = self.caller;
+        let invoice_hash: field = offer.invoice_hash;
+        let target_amount: u64 = pool.target_amount;
+        return (factored, business_payment, change, final {
+            // update_factor_stats also asserts factor is active.
+            let total_contributed: u64 = Mapping::get(pool_contributions, invoice_hash);
+            assert(total_contributed >= target_amount);
+            let is_closed: bool = Mapping::get_or_use(pool_closed, invoice_hash, false);
+            assert(!is_closed);
+            Mapping::set(pool_closed, invoice_hash, true);
+            update_factor_stats(factor);
+        });
     }
 
-    async function finalize_exec_pool_factoring(
-        factor: address,
-        invoice_hash: field,
-        target_amount: u64,
-        advance_amount: u64,
-    ) {
-        let factor_info: FactorInfo = Mapping::get(active_factors, factor);
-        assert(factor_info.is_active);
-
-        // Verify pool has met its target
-        let total_contributed: u64 = Mapping::get(pool_contributions, invoice_hash);
-        assert(total_contributed >= target_amount);
-
-        // Verify pool is not already closed
-        let is_closed: bool = Mapping::get_or_use(pool_closed, invoice_hash, false);
-        assert(!is_closed);
-
-        // Close the pool
-        Mapping::set(pool_closed, invoice_hash, true);
-
-        let total_factored: u64 = Mapping::get_or_use(protocol_stats, 1u8, 0u64);
-        Mapping::set(protocol_stats, 1u8, total_factored + 1u64);
-
-        let updated_factor: FactorInfo = FactorInfo {
-            is_active: factor_info.is_active,
-            min_advance_rate: factor_info.min_advance_rate,
-            max_advance_rate: factor_info.max_advance_rate,
-            total_factored: factor_info.total_factored + 1u64,
-            registration_date: factor_info.registration_date,
-        };
-        Mapping::set(active_factors, factor, updated_factor);
-    }
-
-    // Called by: Pool owner
+    // Called by: Pool owner.
     // Recovery path for pools that reached target but cannot execute via
     // execute_pool_factoring (e.g. offer was consumed outside pool flow).
-    // This only closes the pool after invoice settlement so contributors can claim.
-    async transition recover_pool_close(
+    // Closes the pool after invoice settlement so contributors can claim.
+    fn recover_pool_close(
         pool: FactorPool,
-    ) -> Future {
+    ) -> Final {
         assert(pool.owner == self.caller);
         assert(!pool.is_closed);
-        return finalize_recover_pool_close(self.caller, pool.invoice_hash, pool.target_amount);
+        let owner: address = self.caller;
+        let invoice_hash: field = pool.invoice_hash;
+        let target_amount: u64 = pool.target_amount;
+        return final {
+            verify_factor_active(owner);
+            let registered_owner: address = Mapping::get(pool_owners, invoice_hash);
+            assert(registered_owner == owner);
+            let total_contributed: u64 = Mapping::get(pool_contributions, invoice_hash);
+            assert(total_contributed >= target_amount);
+            // Recovery close only allowed after the debtor has settled.
+            let settlement: SettlementInfo = Mapping::get(settled_invoices, invoice_hash);
+            assert(settlement.is_settled);
+            let is_closed: bool = Mapping::get_or_use(pool_closed, invoice_hash, false);
+            assert(!is_closed);
+            Mapping::set(pool_closed, invoice_hash, true);
+        };
     }
 
-    async function finalize_recover_pool_close(
-        owner: address,
-        invoice_hash: field,
-        target_amount: u64,
-    ) {
-        let factor_info: FactorInfo = Mapping::get(active_factors, owner);
-        assert(factor_info.is_active);
-
-        let registered_owner: address = Mapping::get(pool_owners, invoice_hash);
-        assert(registered_owner == owner);
-
-        // Pool must have reached target before it can be recovered/closed.
-        let total_contributed: u64 = Mapping::get(pool_contributions, invoice_hash);
-        assert(total_contributed >= target_amount);
-
-        // Only allow recovery close once debtor payment has been settled.
-        let settlement: SettlementInfo = Mapping::get(settled_invoices, invoice_hash);
-        assert(settlement.is_settled);
-
-        let is_closed: bool = Mapping::get_or_use(pool_closed, invoice_hash, false);
-        assert(!is_closed);
-
-        Mapping::set(pool_closed, invoice_hash, true);
-    }
-
-    // Called by: Pool owner
-    // Step 1: transfer settlement.amount credits to PROGRAM_ADDRESS via
-    //   credits.aleo/transfer_public(PROGRAM_ADDRESS, amount)
-    // Step 2: call this transition to register proceeds on-chain.
+    // Called by: Pool owner.
+    // Step 1: Transfer settlement.amount credits to PROGRAM_ADDRESS via
+    //   credits.aleo::transfer_public(PROGRAM_ADDRESS, amount)
+    // Step 2: Call this transition to register the proceeds on-chain.
     // Can only be called once per pool (idempotency guard).
-    async transition open_pool_distribution(
+    fn open_pool_distribution(
         invoice_hash: field,
-    ) -> Future {
-        return finalize_open_pool_distribution(self.caller, invoice_hash);
+    ) -> Final {
+        let caller: address = self.caller;
+        return final {
+            let registered_owner: address = Mapping::get(pool_owners, invoice_hash);
+            assert(registered_owner == caller);
+            let settlement: SettlementInfo = Mapping::get(settled_invoices, invoice_hash);
+            assert(settlement.is_settled);
+            assert(settlement.amount > 0u64);
+            let is_closed: bool = Mapping::get_or_use(pool_closed, invoice_hash, false);
+            assert(is_closed);
+            // Idempotency — can only open once.
+            assert(!Mapping::contains(pool_proceeds, invoice_hash));
+            Mapping::set(pool_proceeds, invoice_hash, settlement.amount);
+            Mapping::set(pool_distributed, invoice_hash, 0u64);
+        };
     }
 
-    async function finalize_open_pool_distribution(
-        caller: address,
-        invoice_hash: field,
-    ) {
-        // Must be the registered pool owner
-        let registered_owner: address = Mapping::get(pool_owners, invoice_hash);
-        assert(registered_owner == caller);
-
-        // Invoice must be settled and amount recorded
-        let settlement: SettlementInfo = Mapping::get(settled_invoices, invoice_hash);
-        assert(settlement.is_settled);
-        assert(settlement.amount > 0u64);
-
-        // Pool must be closed
-        let is_closed: bool = Mapping::get_or_use(pool_closed, invoice_hash, false);
-        assert(is_closed);
-
-        // Idempotency guard — can only open once
-        assert(!Mapping::contains(pool_proceeds, invoice_hash));
-
-        Mapping::set(pool_proceeds, invoice_hash, settlement.amount);
-        Mapping::set(pool_distributed, invoice_hash, 0u64);
-    }
-
-    // Called by: Contributor (PoolShare owner)
-    // Payout = floor(pool_proceeds * contributed / pool_contributions) — derived and
-    // verified entirely on-chain. Caller supplies expected_payout computed off-chain;
+    // Called by: Contributor (PoolShare owner) — shared by legacy and ownerless pools.
+    // Payout = floor(pool_proceeds * contributed / pool_contributions).
+    // Derived entirely on-chain — caller supplies expected_payout computed off-chain;
     // finalize re-derives and asserts equality. No manipulation possible.
-    // Burns the PoolShare record, preventing double-claim.
-    // Pays from the program's public escrow balance (funded by open_pool_distribution).
-    async transition claim_pool_proceeds(
+    // Burns the PoolShare record (preventing double-claim).
+    // Pays from the program's public escrow (funded by open/pool_open_distribution).
+    fn claim_pool_proceeds(
         share: PoolShare,
         expected_payout: u64,
-    ) -> (credits.aleo/credits, Future) {
+    ) -> (credits.aleo::credits, Final) {
         assert(expected_payout > 0u64);
         assert(share.contributed > 0u64);
 
-        // Pay from program's public balance to contributor's private record
-        let (payout_record, f_pay): (credits.aleo/credits, Future) =
-            credits.aleo/transfer_public_to_private(share.owner, expected_payout);
+        let (payout_record, f_pay): (credits.aleo::credits, Final) =
+            credits.aleo::transfer_public_to_private(share.owner, expected_payout);
 
-        return (payout_record, finalize_claim_pool_proceeds(
-            share.invoice_hash,
-            share.contributed,
-            expected_payout,
-            f_pay,
-        ));
+        let invoice_hash: field = share.invoice_hash;
+        let contributed: u64 = share.contributed;
+        return (payout_record, final {
+            let settlement: SettlementInfo = Mapping::get(settled_invoices, invoice_hash);
+            assert(settlement.is_settled);
+            let is_closed: bool = Mapping::get_or_use(pool_closed, invoice_hash, false);
+            assert(is_closed);
+            let proceeds: u64 = Mapping::get(pool_proceeds, invoice_hash);
+            assert(proceeds > 0u64);
+            // Use authoritative on-chain total — not the snapshot in the share record.
+            let total: u64 = Mapping::get(pool_contributions, invoice_hash);
+            assert(total > 0u64);
+            // Re-derive payout on-chain; reverts if caller passed a manipulated value.
+            let expected: u64 = (((proceeds as u128) * (contributed as u128)) / (total as u128)) as u64;
+            assert(expected_payout == expected);
+            // Over-distribution guard.
+            let distributed: u64 = Mapping::get_or_use(pool_distributed, invoice_hash, 0u64);
+            assert(distributed + expected_payout <= proceeds);
+            Mapping::set(pool_distributed, invoice_hash, distributed + expected_payout);
+            f_pay.run();
+        });
     }
 
-    async function finalize_claim_pool_proceeds(
+    // ─────────────────────────────────────────────────────────────
+    // OWNERLESS POOL — CREATE
+    // ─────────────────────────────────────────────────────────────
+    // Any active factor creates a pool. No single owner — the program address
+    // acts as trustless escrow for all contributed credits.
+    //
+    // name_u128: ASCII pool name encoded as u128 (max 16 chars).
+    //            Use encodePoolName() from src/lib/pool-chain.ts.
+    // target_amount: must equal the expected advance_amount
+    //                (invoice_amount × advance_rate / 10000).
+    //                Pool will not accept contributions past this cap.
+    // min_contribution: enforced >= 5_000_000 (5 ALEO in microcredits).
+
+    fn create_ownerless_pool(
         invoice_hash: field,
-        contributed: u64,
-        payout: u64,
-        f_pay: Future,
-    ) {
-        // Invoice must be settled
-        let settlement: SettlementInfo = Mapping::get(settled_invoices, invoice_hash);
-        assert(settlement.is_settled);
+        name_u128: u128,
+        target_amount: u64,
+        min_contribution: u64,
+    ) -> Final {
+        assert(target_amount > 0u64);
+        assert(min_contribution >= 5_000_000u64);
+        assert(min_contribution <= target_amount);
+        let creator: address = self.caller;
+        return final {
+            verify_factor_active(creator);
+            // Pool for this invoice hash must not already exist.
+            assert(!Mapping::contains(pool_meta, invoice_hash));
+            assert(!Mapping::contains(pool_contributions, invoice_hash));
+            pool_registry.push(invoice_hash);
+            Mapping::set(pool_meta, invoice_hash, PoolMeta {
+                name_u128:        name_u128,
+                target_amount:    target_amount,
+                min_contribution: min_contribution,
+                created_at:       (block.timestamp as u64),
+            });
+            Mapping::set(pool_contributions, invoice_hash, 0u64);
+            Mapping::set(pool_closed,        invoice_hash, false);
+            Mapping::set(pool_vote_count,    invoice_hash, 0u8);
+        };
+    }
 
-        // Pool must be closed
-        let is_closed: bool = Mapping::get_or_use(pool_closed, invoice_hash, false);
-        assert(is_closed);
+    // ─────────────────────────────────────────────────────────────
+    // OWNERLESS POOL — CONTRIBUTE
+    // ─────────────────────────────────────────────────────────────
+    // Pulls from the caller's PUBLIC credits balance into the program's
+    // PUBLIC escrow balance. No private record is consumed.
+    //
+    // PREREQUISITE: Caller must have a public credits balance >= contribution.
+    //   If only holding private records, first call:
+    //   credits.aleo::transfer_private_to_public(self, amount)
+    //
+    // program_addr:   VITE_PROGRAM_ADDRESS — verified on-chain via self.address.
+    // existing_total: read pool_contributions[invoice_hash] from chain before
+    //                 calling — used only to snapshot total_pool in PoolShare.
 
-        // Distribution must be opened
-        let proceeds: u64 = Mapping::get(pool_proceeds, invoice_hash);
-        assert(proceeds > 0u64);
+    fn pool_contribute(
+        invoice_hash: field,
+        program_addr: address,
+        contribution: u64,
+        existing_total: u64,
+    ) -> (PoolShare, Final) {
+        assert(contribution > 0u64);
 
-        // Authoritative total — not the snapshot in the share record
-        let total: u64 = Mapping::get(pool_contributions, invoice_hash);
-        assert(total > 0u64);
+        let f: Final = credits.aleo::transfer_public_as_signer(program_addr, contribution);
 
-        // Re-derive payout on-chain; revert if caller passed a manipulated value
-        let expected: u64 = (((proceeds as u128) * (contributed as u128)) / (total as u128)) as u64;
-        assert(payout == expected);
+        let share: PoolShare = PoolShare {
+            owner:        self.caller,
+            pool_id:      invoice_hash,
+            invoice_hash: invoice_hash,
+            contributed:  contribution,
+            total_pool:   existing_total + contribution,
+        };
 
-        // Over-distribution guard
-        let distributed: u64 = Mapping::get_or_use(pool_distributed, invoice_hash, 0u64);
-        assert(distributed + payout <= proceeds);
-        Mapping::set(pool_distributed, invoice_hash, distributed + payout);
+        let contributor: address = self.caller;
+        return (share, final {
+            assert(program_addr == self.address);
+            verify_factor_active(contributor);
+            let meta: PoolMeta = Mapping::get(pool_meta, invoice_hash);
+            let is_closed: bool = Mapping::get_or_use(pool_closed, invoice_hash, false);
+            assert(!is_closed);
+            assert(contribution >= meta.min_contribution);
+            let current: u64 = Mapping::get_or_use(pool_contributions, invoice_hash, 0u64);
+            let new_total: u64 = current + contribution;
+            assert(new_total <= meta.target_amount);
+            Mapping::set(pool_contributions, invoice_hash, new_total);
+            f.run();
+        });
+    }
 
-        f_pay.await();
+    // ─────────────────────────────────────────────────────────────
+    // OWNERLESS POOL — BUSINESS SUBMITS INVOICE
+    // ─────────────────────────────────────────────────────────────
+    // Called by the business (Invoice.owner) once the pool is fully funded.
+    // Consumes the Invoice record — prevents double-factoring.
+    // Creates a public PendingPoolOffer that any factor can vote to approve.
+    //
+    // The advance_rate must produce an advance_amount that exactly equals
+    // the pool's target_amount. Verified on-chain in the final block.
+
+    fn pool_submit_invoice(
+        invoice: Invoice,
+        pool_hash: field,
+        advance_rate: u16,
+    ) -> Final {
+        assert(invoice.owner == self.caller);
+        assert(invoice.invoice_hash == pool_hash);
+        assert(advance_rate >= 5000u16 && advance_rate <= 9900u16);
+
+        let product: u128 = (invoice.amount as u128) * (advance_rate as u128);
+        let advance_amount: u64 = (product / 10000u128) as u64;
+
+        let creditor: address = self.caller;
+        let debtor: address = invoice.debtor;
+        let amount: u64 = invoice.amount;
+        let due_date: u64 = invoice.due_date;
+        let nonce: field = invoice.nonce;
+        return final {
+            let meta: PoolMeta = Mapping::get(pool_meta, pool_hash);
+            let is_closed: bool = Mapping::get_or_use(pool_closed, pool_hash, false);
+            assert(!is_closed);
+            assert(!Mapping::contains(pool_pending_offer, pool_hash));
+            let total_contributed: u64 = Mapping::get(pool_contributions, pool_hash);
+            assert(total_contributed >= meta.target_amount);
+            // Advance amount must exactly match the pool's funding target.
+            assert(advance_amount == meta.target_amount);
+            Mapping::set(pool_pending_offer, pool_hash, PendingPoolOffer {
+                original_creditor: creditor,
+                debtor:            debtor,
+                amount:            amount,
+                advance_rate:      advance_rate,
+                advance_amount:    advance_amount,
+                due_date:          due_date,
+                nonce:             nonce,
+                is_executed:       false,
+            });
+        };
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // OWNERLESS POOL — MULTISIG VOTE
+    // ─────────────────────────────────────────────────────────────
+    // Any active factor votes to approve a pending pool offer.
+    // Threshold = floor(active_factor_count / 2) + 1 (simple majority).
+    // Once vote_count >= threshold, any factor can call execute_approved_pool.
+
+    fn pool_vote(invoice_hash: field) -> Final {
+        let voter: address = self.caller;
+        return final {
+            verify_factor_active(voter);
+            let offer: PendingPoolOffer = Mapping::get(pool_pending_offer, invoice_hash);
+            assert(!offer.is_executed);
+            // Composite key prevents double-voting.
+            let vote_id: field = Poseidon2::hash_to_field(VoteId {
+                invoice_hash: invoice_hash,
+                voter:        voter,
+            });
+            let already_voted: bool = Mapping::get_or_use(pool_voter_cast, vote_id, false);
+            assert(!already_voted);
+            Mapping::set(pool_voter_cast, vote_id, true);
+            let count: u8 = Mapping::get_or_use(pool_vote_count, invoice_hash, 0u8);
+            Mapping::set(pool_vote_count, invoice_hash, count + 1u8);
+        };
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // OWNERLESS POOL — EXECUTE APPROVED OFFER
+    // ─────────────────────────────────────────────────────────────
+    // Called by any active factor once vote_count >= majority threshold.
+    // Pays advance_amount from the program's public escrow to the business.
+    // Emits a PoolPaymentNotice to the debtor. Closes the pool.
+    //
+    // Caller must read pool_pending_offer[invoice_hash] off-chain and pass
+    // the values as params — all verified against the mapping on-chain.
+
+    fn execute_approved_pool(
+        invoice_hash: field,
+        business_addr: address,
+        debtor_addr: address,
+        advance_amount: u64,
+        invoice_amount: u64,
+        due_date: u64,
+    ) -> (PoolPaymentNotice, Final) {
+        assert(advance_amount > 0u64);
+
+        let f_pay: Final = credits.aleo::transfer_public(business_addr, advance_amount);
+
+        let notice: PoolPaymentNotice = PoolPaymentNotice {
+            owner:        debtor_addr,
+            invoice_hash: invoice_hash,
+            amount:       invoice_amount,
+            due_date:     due_date,
+        };
+
+        let executor: address = self.caller;
+        return (notice, final {
+            // update_factor_stats also asserts executor is active.
+            let offer: PendingPoolOffer = Mapping::get(pool_pending_offer, invoice_hash);
+            assert(!offer.is_executed);
+            assert(offer.original_creditor == business_addr);
+            assert(offer.debtor            == debtor_addr);
+            assert(offer.advance_amount    == advance_amount);
+            assert(offer.amount            == invoice_amount);
+            // Majority threshold: floor(active_count / 2) + 1.
+            // Defaults to 1 during bootstrapping (single factor can execute).
+            let vote_count: u8   = Mapping::get_or_use(pool_vote_count, invoice_hash, 0u8);
+            let active_count: u32 = Mapping::get_or_use(active_factor_count, false, 1u32);
+            let threshold: u8    = ((active_count / 2u32) + 1u32) as u8;
+            assert(vote_count >= threshold);
+            Mapping::set(pool_pending_offer, invoice_hash, PendingPoolOffer {
+                original_creditor: offer.original_creditor,
+                debtor:            offer.debtor,
+                amount:            offer.amount,
+                advance_rate:      offer.advance_rate,
+                advance_amount:    offer.advance_amount,
+                due_date:          offer.due_date,
+                nonce:             offer.nonce,
+                is_executed:       true,
+            });
+            Mapping::set(pool_closed,   invoice_hash, true);
+            Mapping::set(pool_executor, invoice_hash, executor);
+            update_factor_stats(executor);
+            f_pay.run();
+        });
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // OWNERLESS POOL — DEBTOR PAYS
+    // ─────────────────────────────────────────────────────────────
+    // Debtor sends the full invoice amount to the program escrow.
+    // Triggers settlement so contributors can call claim_pool_proceeds.
+
+    fn pay_pool_invoice(
+        notice: PoolPaymentNotice,
+        program_addr: address,
+    ) -> Final {
+        assert(notice.owner == self.caller);
+        let f_pay: Final = credits.aleo::transfer_public_as_signer(program_addr, notice.amount);
+        let invoice_hash: field = notice.invoice_hash;
+        let amount: u64 = notice.amount;
+        return final {
+            assert(program_addr == self.address);
+            assert(!Mapping::contains(settled_invoices, invoice_hash));
+            let is_closed: bool = Mapping::get_or_use(pool_closed, invoice_hash, false);
+            assert(is_closed);
+            let offer: PendingPoolOffer = Mapping::get(pool_pending_offer, invoice_hash);
+            assert(offer.is_executed);
+            assert(amount == offer.amount);
+            let executor: address = Mapping::get(pool_executor, invoice_hash);
+            Mapping::set(settled_invoices, invoice_hash, SettlementInfo {
+                is_settled:      true,
+                settlement_date: (block.timestamp as u64),
+                factor:          executor,
+                amount:          amount,
+            });
+            let total_settled: u64 = Mapping::get_or_use(protocol_stats, 2u8, 0u64);
+            Mapping::set(protocol_stats, 2u8, total_settled + 1u64);
+            f_pay.run();
+        };
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // OWNERLESS POOL — OPEN DISTRIBUTION (permissionless)
+    // ─────────────────────────────────────────────────────────────
+    // Unlike the legacy open_pool_distribution (requires pool owner),
+    // this version can be called by anyone once the invoice is settled.
+    // Credits are already in the program escrow — no external transfer needed.
+    // claim_pool_proceeds is then available to all PoolShare holders.
+
+    fn pool_open_distribution(invoice_hash: field) -> Final {
+        return final {
+            assert(Mapping::contains(pool_meta, invoice_hash));
+            let settlement: SettlementInfo = Mapping::get(settled_invoices, invoice_hash);
+            assert(settlement.is_settled);
+            assert(settlement.amount > 0u64);
+            let is_closed: bool = Mapping::get_or_use(pool_closed, invoice_hash, false);
+            assert(is_closed);
+            // Idempotency — only open once.
+            assert(!Mapping::contains(pool_proceeds, invoice_hash));
+            Mapping::set(pool_proceeds,    invoice_hash, settlement.amount);
+            Mapping::set(pool_distributed, invoice_hash, 0u64);
+        };
     }
 }
