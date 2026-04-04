@@ -414,11 +414,13 @@ program test_zk_factor.aleo {
         assert(!(!already_open));
     }
 
-    // 16.3: pool_proceeds is set to settlement.amount exactly
+    // 16.3: ownerless pool proceeds include escrow carry plus settlement repayment
     @test
-    script test_proceeds_equals_settlement_amount() {
-        let settlement_amount: u64 = 750000u64;
-        let pool_proceeds_value: u64 = settlement_amount;
-        assert_eq(pool_proceeds_value, 750000u64);
+    script test_pool_true_proceeds_formula() {
+        let total_contributed: u64 = 5000000u64;
+        let advance_amount: u64 = 1500000u64;
+        let settlement_amount: u64 = 2000000u64;
+        let pool_proceeds_value: u64 = total_contributed - advance_amount + settlement_amount;
+        assert_eq(pool_proceeds_value, 5500000u64);
     }
 }
