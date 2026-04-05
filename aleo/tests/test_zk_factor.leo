@@ -1,5 +1,5 @@
 // Comprehensive test suite for ZK-Factor contract
-import zk_factor_12250.aleo;
+import zk_factor_12251.aleo;
 import credits.aleo;
 
 program test_zk_factor.aleo {
@@ -19,8 +19,8 @@ program test_zk_factor.aleo {
     @test
     script test_valid_invoice_creation() {
         let debtor: address = aleo1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq3ljyzc;
-        let (invoice, f): (zk_factor_12250.aleo/Invoice, Future) =
-            zk_factor_12250.aleo/mint_invoice(debtor, 100000u64, 1800000000u64, 12345field, 0u128, 0field);
+        let (invoice, f): (zk_factor_12251.aleo/Invoice, Future) =
+            zk_factor_12251.aleo/mint_invoice(debtor, 100000u64, 1800000000u64, 12345field, 0u128, 0field);
         assert_eq(invoice.amount, 100000u64);
         assert_eq(invoice.debtor, debtor);
     }
@@ -30,8 +30,8 @@ program test_zk_factor.aleo {
     @should_fail
     script test_zero_amount_invoice() {
         let debtor: address = aleo1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq3ljyzc;
-        let (invoice, f): (zk_factor_12250.aleo/Invoice, Future) =
-            zk_factor_12250.aleo/mint_invoice(debtor, 0u64, 1800000000u64, 12345field, 0u128, 0field);
+        let (invoice, f): (zk_factor_12251.aleo/Invoice, Future) =
+            zk_factor_12251.aleo/mint_invoice(debtor, 0u64, 1800000000u64, 12345field, 0u128, 0field);
     }
 
     // 6.3: Past due date invoice must fail (timestamp checked in finalize)
@@ -39,35 +39,35 @@ program test_zk_factor.aleo {
     @should_fail
     script test_past_due_date_invoice() {
         let debtor: address = aleo1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq3ljyzc;
-        let (invoice, f): (zk_factor_12250.aleo/Invoice, Future) =
-            zk_factor_12250.aleo/mint_invoice(debtor, 100000u64, 1000000000u64, 12345field, 0u128, 0field);
+        let (invoice, f): (zk_factor_12251.aleo/Invoice, Future) =
+            zk_factor_12251.aleo/mint_invoice(debtor, 100000u64, 1000000000u64, 12345field, 0u128, 0field);
         f.await();
     }
 
     // 6.5: Valid factor registration
     @test
     script test_valid_factor_registration() {
-        let f: Future = zk_factor_12250.aleo/register_factor(8000u16, 9500u16);
+        let f: Future = zk_factor_12251.aleo/register_factor(8000u16, 9500u16);
     }
 
     // 6.6: Invalid rate range (min > max) must fail
     @test
     @should_fail
     script test_invalid_rate_range() {
-        let f: Future = zk_factor_12250.aleo/register_factor(9500u16, 8000u16);
+        let f: Future = zk_factor_12251.aleo/register_factor(9500u16, 8000u16);
     }
 
     // 6.7: Out-of-bounds advance rates must fail
     @test
     @should_fail
     script test_out_of_bounds_min_rate() {
-        let f: Future = zk_factor_12250.aleo/register_factor(4000u16, 9000u16);
+        let f: Future = zk_factor_12251.aleo/register_factor(4000u16, 9000u16);
     }
 
     @test
     @should_fail
     script test_out_of_bounds_max_rate() {
-        let f: Future = zk_factor_12250.aleo/register_factor(7000u16, 10000u16);
+        let f: Future = zk_factor_12251.aleo/register_factor(7000u16, 10000u16);
     }
 
     // 6.8: Valid invoice creation path (partner addition — preserved)
@@ -75,8 +75,8 @@ program test_zk_factor.aleo {
     @test
     script test_valid_factoring_logic() {
         let debtor: address = aleo1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq3ljyzc;
-        let (invoice, f): (zk_factor_12250.aleo/Invoice, Future) =
-            zk_factor_12250.aleo/mint_invoice(debtor, 100000u64, 1800000000u64, 12345field, 67890u128, 0field);
+        let (invoice, f): (zk_factor_12251.aleo/Invoice, Future) =
+            zk_factor_12251.aleo/mint_invoice(debtor, 100000u64, 1800000000u64, 12345field, 67890u128, 0field);
         assert_eq(invoice.amount, 100000u64);
     }
 
@@ -104,7 +104,7 @@ program test_zk_factor.aleo {
     //        lifecycle test with await is in test_deregistered_factor_state)
     @test
     script test_factor_deregistration() {
-        let f: Future = zk_factor_12250.aleo/deregister_factor();
+        let f: Future = zk_factor_12251.aleo/deregister_factor();
     }
 
     // 6.16: Protocol stats increment logic
@@ -118,10 +118,10 @@ program test_zk_factor.aleo {
     @test
     script test_full_invoice_lifecycle() {
         let debtor: address = aleo1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq3ljyzc;
-        let f1: Future = zk_factor_12250.aleo/register_factor(8000u16, 9500u16);
+        let f1: Future = zk_factor_12251.aleo/register_factor(8000u16, 9500u16);
         f1.await();
-        let (invoice, f2): (zk_factor_12250.aleo/Invoice, Future) =
-            zk_factor_12250.aleo/mint_invoice(debtor, 150000u64, 1800000000u64, 77777field, 0u128, 0field);
+        let (invoice, f2): (zk_factor_12251.aleo/Invoice, Future) =
+            zk_factor_12251.aleo/mint_invoice(debtor, 150000u64, 1800000000u64, 77777field, 0u128, 0field);
         f2.await();
         assert_eq(invoice.amount, 150000u64);
         assert_eq(invoice.debtor, debtor);
@@ -135,9 +135,9 @@ program test_zk_factor.aleo {
     @test
     @should_fail
     script test_double_settle_prevent() {
-        let f1: Future = zk_factor_12250.aleo/register_factor(8500u16, 9200u16);
+        let f1: Future = zk_factor_12251.aleo/register_factor(8500u16, 9200u16);
         f1.await();
-        let f2: Future = zk_factor_12250.aleo/register_factor(8500u16, 9200u16);
+        let f2: Future = zk_factor_12251.aleo/register_factor(8500u16, 9200u16);
         f2.await();
     }
 
@@ -147,7 +147,7 @@ program test_zk_factor.aleo {
     @test
     @should_fail
     script test_factor_guard_unregistered() {
-        let f: Future = zk_factor_12250.aleo/deregister_factor();
+        let f: Future = zk_factor_12251.aleo/deregister_factor();
         f.await();
     }
 
@@ -156,11 +156,11 @@ program test_zk_factor.aleo {
     // Re-registration only succeeds if deregistration wrote is_active=false.
     @test
     script test_deregistered_factor_state() {
-        let f1: Future = zk_factor_12250.aleo/register_factor(7000u16, 9000u16);
+        let f1: Future = zk_factor_12251.aleo/register_factor(7000u16, 9000u16);
         f1.await();
-        let f2: Future = zk_factor_12250.aleo/deregister_factor();
+        let f2: Future = zk_factor_12251.aleo/deregister_factor();
         f2.await();
-        let f3: Future = zk_factor_12250.aleo/register_factor(9000u16, 9800u16);
+        let f3: Future = zk_factor_12251.aleo/register_factor(9000u16, 9800u16);
         f3.await();
     }
 
@@ -414,11 +414,11 @@ program test_zk_factor.aleo {
         assert(!(!already_open));
     }
 
-    // 16.3: pool_proceeds is set to settlement.amount exactly
+    // 16.3: ownerless pool proceeds equal debtor settlement amount
     @test
-    script test_proceeds_equals_settlement_amount() {
-        let settlement_amount: u64 = 750000u64;
+    script test_pool_settlement_only_proceeds_formula() {
+        let settlement_amount: u64 = 2000000u64;
         let pool_proceeds_value: u64 = settlement_amount;
-        assert_eq(pool_proceeds_value, 750000u64);
+        assert_eq(pool_proceeds_value, 2000000u64);
     }
 }
