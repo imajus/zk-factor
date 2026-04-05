@@ -745,8 +745,6 @@ export default function Marketplace() {
             </div>
           </div>
 
-          <Progress value={stats.percentFunded} className="h-1.5" />
-
           {/* Business CTA */}
           {isBusiness && !pool.isClosed && (
             <>
@@ -892,7 +890,7 @@ export default function Marketplace() {
                 "Rate Range",
                 `${pool.meta.minAdvanceRate / 100}%-${pool.meta.maxAdvanceRate / 100}%`,
               ],
-              ["Total Raised", formatMicro(pool.totalContributed) + " ALEO"],
+              ["Current Funds", formatMicro(pool.totalContributed) + " ALEO"],
               ["Min/Contrib", formatMicro(pool.meta.minContribution) + " ALEO"],
             ].map(([label, value]) => (
               <div key={label} className="rounded-md border p-2 text-center">
@@ -1153,7 +1151,7 @@ export default function Marketplace() {
                 <p className="text-sm font-medium">On-Chain Pools</p>
                 <p className="text-xs text-muted-foreground">
                   Pools are public and ownerless — contributions are held in the
-                  protocol escrow. Minimum contribution: 5 ALEO.
+                  protocol escrow. Minimum contribution is defined by each pool.
                 </p>
               </div>
 
@@ -1506,7 +1504,7 @@ export default function Marketplace() {
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Total Raised</span>
+                  <span className="text-muted-foreground">Current Funds</span>
                   <span className="font-mono">
                     {formatMicro(contributePool.totalContributed)} ALEO
                   </span>
