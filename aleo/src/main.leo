@@ -103,7 +103,7 @@ final fn record_settlement(invoice_hash: field, factor: address, amount: u64) {
 // PROGRAM
 // ─────────────────────────────────────────────────────────────────────────────
 
-program zk_factor_12253.aleo {
+program zk_factor_12254.aleo {
     // IMPORTANT: Replace with actual admin address before deployment.
     // See aleo/docs/deployment.md for admin key management.
     @admin(address="aleo19rn544c49da9z2vz52q5f7lm7nsjhp890ahmre6cz94qawdscgps6kq3cu")
@@ -826,7 +826,7 @@ program zk_factor_12253.aleo {
     // name_u128: ASCII pool name encoded as u128 (max 16 chars).
     //            Use encodePoolName() from src/lib/pool-chain.ts.
     // min_advance_rate/max_advance_rate: accepted invoice pricing range (bps).
-    // min_contribution: enforced >= 5_000_000 (5 ALEO in microcredits).
+    // min_contribution: pool-defined minimum contribution in microcredits.
 
     fn create_ownerless_pool(
         invoice_hash: field,
@@ -838,7 +838,7 @@ program zk_factor_12253.aleo {
         assert(min_advance_rate >= 5000u16 && min_advance_rate <= 9900u16);
         assert(max_advance_rate >= 5000u16 && max_advance_rate <= 9900u16);
         assert(min_advance_rate <= max_advance_rate);
-        assert(min_contribution >= 5_000_000u64);
+        assert(min_contribution > 0u64);
         let creator: address = self.caller;
         return final {
             verify_factor_active(creator);
