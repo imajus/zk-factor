@@ -926,17 +926,12 @@ finalize pool_open_distribution:
     assert.eq r3 true;
     get.or_use pool_closed[r0] false into r4;
     assert.eq r4 true;
-    get pool_contributions[r0] into r5;
-    get pool_pending_offer[r0] into r6;
-    assert.eq r6.is_executed true;
-    gte r5 r6.advance_amount into r7;
+    get pool_pending_offer[r0] into r5;
+    assert.eq r5.is_executed true;
+    contains pool_proceeds[r0] into r6;
+    not r6 into r7;
     assert.eq r7 true;
-    sub r5 r6.advance_amount into r8;
-    add r8 r2.amount into r9;
-    contains pool_proceeds[r0] into r10;
-    not r10 into r11;
-    assert.eq r11 true;
-    set r9 into pool_proceeds[r0];
+    set r2.amount into pool_proceeds[r0];
     set 0u64 into pool_distributed[r0];
 
 constructor:
