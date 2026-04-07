@@ -11,6 +11,7 @@ import {
   Briefcase,
   ChevronDown,
   Loader2,
+  CircleHelp,
 } from "lucide-react";
 import { ALEO_EXPLORER } from "@/lib/config";
 import { Button } from "@/components/ui/button";
@@ -32,7 +33,7 @@ const navItems = [
   { label: "Dashboard", href: "/dashboard" },
   { label: "Marketplace", href: "/marketplace" },
   { label: "Transactions", href: "/transactions" },
-  { label: "Guide", href: "/docs/", external: true },
+  { label: "Pools", href: "/pools", factorOnly: true },
   { label: "Settings", href: "/settings" },
 ];
 
@@ -96,21 +97,9 @@ export function Header() {
         {/* Desktop Navigation */}
         <nav className="hidden md:flex items-center gap-1">
           {isConnected &&
-            navItems.map((item) => {
-              if (item.external) {
-                return (
-                  <a
-                    key={item.href}
-                    href={item.href}
-                    className={cn(
-                      "px-3 py-2 text-sm font-medium rounded-md transition-colors text-muted-foreground hover:text-foreground hover:bg-muted",
-                    )}
-                  >
-                    {item.label}
-                  </a>
-                );
-              }
-              return (
+            navItems
+              .filter((item) => !item.factorOnly || activeRole === "factor")
+              .map((item) => (
                 <Link
                   key={item.href}
                   to={item.href}
@@ -123,8 +112,7 @@ export function Header() {
                 >
                   {item.label}
                 </Link>
-              );
-            })}
+              ))}
         </nav>
 
         {/* Right Side Actions */}
@@ -184,11 +172,20 @@ export function Header() {
                 </DropdownMenu>
               )}
 
+              {/* Guide Link */}
+              <a
+                href="/docs/"
+                className="hidden sm:flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                title="Guide"
+              >
+                <CircleHelp className="h-4 w-4" />
+              </a>
+
               {/* Wallet Dropdown */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="gap-2">
-                    <Wallet className="h-4 w-4" />
+                  <Button variant="outline" size="sm" className="gap-1.5 h-7 px-2 text-xs">
+                    <Wallet className="h-3 w-3" />
                     <span className="hidden sm:inline">
                       {formatAddress(address || "")}
                     </span>
@@ -251,21 +248,9 @@ export function Header() {
       {mobileMenuOpen && isConnected && (
         <div className="md:hidden border-t border-border">
           <nav className="container py-4 flex flex-col gap-1">
-            {navItems.map((item) => {
-              if (item.external) {
-                return (
-                  <a
-                    key={item.href}
-                    href={item.href}
-                    className={cn(
-                      "px-3 py-2 text-sm font-medium rounded-md transition-colors text-muted-foreground hover:text-foreground hover:bg-muted",
-                    )}
-                  >
-                    {item.label}
-                  </a>
-                );
-              }
-              return (
+            {navItems
+              .filter((item) => !item.factorOnly || activeRole === "factor")
+              .map((item) => (
                 <Link
                   key={item.href}
                   to={item.href}
@@ -279,8 +264,14 @@ export function Header() {
                 >
                   {item.label}
                 </Link>
-              );
-            })}
+              ))}
+            <a
+              href="/docs/"
+              className="flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-colors text-muted-foreground hover:text-foreground hover:bg-muted"
+            >
+              <CircleHelp className="h-4 w-4" />
+              Guide
+            </a>
             {/* Mobile role switcher */}
             {roleLabel && (
               <>

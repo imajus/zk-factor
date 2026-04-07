@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from "react";
-import { Link } from "react-router-dom";
 import {
   Users,
   RefreshCw,
@@ -1921,12 +1920,6 @@ export default function Pools() {
               );
             }}
           />
-          <Button size="sm" asChild>
-            <Link to="/dashboard">
-              <ChevronRight className="h-4 w-4 rotate-180" />
-              Dashboard
-            </Link>
-          </Button>
         </div>
       </div>
 
