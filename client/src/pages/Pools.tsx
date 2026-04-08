@@ -1,5 +1,13 @@
 import { useState, useEffect, useRef } from "react";
-import { RefreshCw, AlertCircle, Plus, Info, Vote, Zap } from "lucide-react";
+import {
+  RefreshCw,
+  AlertCircle,
+  TrendingUp,
+  Plus,
+  Info,
+  Vote,
+  Zap,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -43,10 +51,13 @@ import {
 } from "@/lib/aleo-factors";
 import {
   buildCreateOwnerlessPoolInputs,
+  buildPoolContributeInputs,
   buildPoolVoteInputs,
   buildExecuteApprovedPoolInputs,
   computePoolStats,
   encodePoolName,
+  fetchPublicCreditsBalance,
+  fetchPublicTokenBalance,
   fetchActiveFactorCount,
   fetchAllPools,
   type OnChainPoolState,
@@ -370,6 +381,15 @@ export default function Pools() {
   const [pendingExecutionHash, setPendingExecutionHash] = useState<
     string | null
   >(null);
+  const [pendingDistributionHash, setPendingDistributionHash] = useState<
+    string | null
+  >(null);
+  const [contributeOpen, setContributeOpen] = useState(false);
+  const [contributePool, setContributePool] = useState<OnChainPoolState | null>(
+    null,
+  );
+  const [contributeAmount, setContributeAmount] = useState("");
+  const [publicBalance, setPublicBalance] = useState<bigint | null>(null);
   const [votedPoolHashes, setVotedPoolHashes] = useState<Set<string>>(
     () => new Set(),
   );
@@ -515,12 +535,22 @@ export default function Pools() {
       queryClient.invalidateQueries({ queryKey: ["all_pools"] });
       setClaimingShareId(null);
       setPendingExecutionHash(null);
+      setPendingDistributionHash(null);
+      setContributeOpen(false);
+      setContributePool(null);
+      setContributeAmount("");
+      setPublicBalance(null);
       reset();
     } else if (status === "failed") {
       setPendingVoteInvoiceHash(null);
       toast.error(txError || "Transaction failed", { id: "pool-op" });
       setClaimingShareId(null);
       setPendingExecutionHash(null);
+      setPendingDistributionHash(null);
+      setContributeOpen(false);
+      setContributePool(null);
+      setContributeAmount("");
+      setPublicBalance(null);
       reset();
     }
   }, [status, txError, queryClient, reset, pendingVoteInvoiceHash]);
@@ -542,6 +572,117 @@ export default function Pools() {
     queryClient.invalidateQueries({ queryKey: ["all_pools"] });
     reset();
   }, [status, pendingExecutionHash, onChainPools, queryClient, reset]);
+
+  useEffect(() => {
+    if (status !== "pending" || !pendingDistributionHash) return;
+
+    const pool = onChainPools.find(
+      (p) => p.meta.invoiceHash === pendingDistributionHash,
+    );
+    const distributionOpened =
+      !!pool && pool.proceeds !== null && pool.proceeds > 0n;
+
+    if (!distributionOpened) return;
+
+    toast.success("Distribution opened.", { id: "pool-op" });
+    setPendingDistributionHash(null);
+    queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
+    queryClient.invalidateQueries({ queryKey: ["all_pools"] });
+    reset();
+  }, [status, pendingDistributionHash, onChainPools, queryClient, reset]);
+
+  const formatCurrencyAmount = (
+    amount: bigint,
+    currency: "ALEO" | "USDCx",
+  ): string => {
+    return `${(Number(amount) / 1_000_000).toLocaleString(undefined, {
+      maximumFractionDigits: 6,
+    })} ${currency}`;
+  };
+
+  const openContribute = async (pool: OnChainPoolState) => {
+    setContributePool(pool);
+    setContributeAmount("");
+    setContributeOpen(true);
+    if (address) {
+      const balance =
+        pool.meta.currency === "USDCx"
+          ? await fetchPublicTokenBalance(address)
+          : await fetchPublicCreditsBalance(address);
+      setPublicBalance(balance);
+    }
+  };
+
+  const handleContribute = async () => {
+    if (!contributePool || !address) return;
+    const amountAleo = parseFloat(contributeAmount);
+    if (Number.isNaN(amountAleo) || amountAleo <= 0) {
+      toast.error("Enter a valid amount.");
+      return;
+    }
+
+    const contribution = BigInt(Math.round(amountAleo * 1_000_000));
+    const minContrib = contributePool.meta.minContribution;
+    if (contribution < minContrib) {
+      toast.error(
+        `Minimum contribution is ${formatCurrencyAmount(minContrib, contributePool.meta.currency)}.`,
+      );
+      return;
+    }
+
+    if (publicBalance !== null && contribution > publicBalance) {
+      toast.error(
+        `Insufficient public ${contributePool.meta.currency} balance (${formatCurrencyAmount(publicBalance, contributePool.meta.currency)}).`,
+      );
+      return;
+    }
+
+    if (!PROGRAM_ADDRESS) {
+      toast.error("PROGRAM_ADDRESS is not set.");
+      return;
+    }
+
+    const existingTotal = contributePool.totalContributed;
+
+    if (contributePool.meta.currency === "USDCx") {
+      await execute({
+        program: USDCX_PROGRAM_ID,
+        function: "approve_public",
+        inputs: [PROGRAM_ID, `${contribution}u128`],
+        fee: 50_000,
+        privateFee: false,
+      });
+    }
+
+    const contributeFunction =
+      contributePool.meta.currency === "USDCx"
+        ? "pool_contribute_token"
+        : "pool_contribute";
+
+    await execute({
+      program: PROGRAM_ID,
+      function: contributeFunction,
+      inputs: buildPoolContributeInputs(
+        contributePool.meta.invoiceHash,
+        PROGRAM_ADDRESS,
+        contribution,
+        existingTotal,
+      ),
+      fee: 80_000,
+      privateFee: false,
+    });
+  };
+
+  const handleOpenDistribution = async (invoiceHash: string) => {
+    setPendingDistributionHash(invoiceHash);
+    await execute({
+      program: PROGRAM_ID,
+      function: "pool_open_distribution",
+      inputs: [invoiceHash],
+      fee: 80_000,
+      privateFee: false,
+    });
+  };
 
   const handleVote = async (invoiceHash: string) => {
     if (
@@ -712,6 +853,8 @@ export default function Pools() {
         {visiblePools.map((pool: OnChainPoolState) => {
           const raisedAleo = Number(pool.totalContributed) / 1_000_000;
           const poolStatus = getPoolStatus(pool);
+          const canOpenDistributionFromCard =
+            pool.isSettled && pool.isClosed && pool.proceeds === null;
 
           return (
             <Card
@@ -754,6 +897,41 @@ export default function Pools() {
                     </span>
                   </div>
                 </div>
+
+                {!pool.isClosed && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openContribute(pool);
+                    }}
+                    disabled={status !== "idle"}
+                  >
+                    Contribute
+                  </Button>
+                )}
+
+                {canOpenDistributionFromCard && (
+                  <div className="space-y-1.5">
+                    <Button
+                      size="sm"
+                      className="w-full"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenDistribution(pool.meta.invoiceHash);
+                      }}
+                      disabled={status !== "idle"}
+                    >
+                      Open Distribution
+                    </Button>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      Permissionless — anyone can call this once debtor has
+                      paid.
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           );
@@ -1177,6 +1355,110 @@ export default function Pools() {
           </p>
         </TabsContent>
       </Tabs>
+
+      <Dialog
+        open={contributeOpen}
+        onOpenChange={(open) => {
+          setContributeOpen(open);
+          if (!open) {
+            setContributePool(null);
+            setContributeAmount("");
+            setPublicBalance(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-blue-500" />
+              Contribute to Pool
+            </DialogTitle>
+            <DialogDescription>
+              Contributions go to protocol escrow in the pool's currency, and
+              you receive a PoolShare record.
+            </DialogDescription>
+          </DialogHeader>
+
+          {contributePool && (
+            <div className="space-y-4 py-2">
+              <div className="bg-muted rounded-lg p-3 text-sm space-y-1.5">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Pool</span>
+                  <span className="font-medium">
+                    {contributePool.meta.name}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Total Raised</span>
+                  <span className="font-mono">
+                    {(
+                      Number(contributePool.totalContributed) / 1_000_000
+                    ).toLocaleString(undefined, {
+                      maximumFractionDigits: 6,
+                    })}{" "}
+                    {contributePool.meta.currency}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">
+                    Min contribution
+                  </span>
+                  <span className="font-mono">
+                    {(
+                      Number(contributePool.meta.minContribution) / 1_000_000
+                    ).toLocaleString(undefined, {
+                      maximumFractionDigits: 6,
+                    })}{" "}
+                    {contributePool.meta.currency}
+                  </span>
+                </div>
+                {publicBalance !== null && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">
+                      Your public balance
+                    </span>
+                    <span className="font-mono">
+                      {(Number(publicBalance) / 1_000_000).toLocaleString(
+                        undefined,
+                        {
+                          maximumFractionDigits: 6,
+                        },
+                      )}{" "}
+                      {contributePool.meta.currency}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label>
+                  Contribution Amount ({contributePool.meta.currency})
+                </Label>
+                <Input
+                  type="number"
+                  min={Number(contributePool.meta.minContribution) / 1e6}
+                  step="0.000001"
+                  value={contributeAmount}
+                  onChange={(e) => setContributeAmount(e.target.value)}
+                  placeholder="e.g. 25"
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setContributeOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleContribute}
+              disabled={status !== "idle" || !contributeAmount}
+            >
+              {status !== "idle" ? "Contributing..." : "Contribute"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
