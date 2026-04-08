@@ -7,7 +7,7 @@ function resolveNetwork(value: string | undefined): Network {
 }
 
 export const PROGRAM_ID: string =
-  import.meta.env.VITE_ALEO_PROGRAM_ID ?? "zk_factor_12250.aleo";
+  import.meta.env.VITE_PROGRAM_ID ?? "zk_factor_12250.aleo";
 
 export const PROGRAM_ADDRESS: string =
   import.meta.env.VITE_PROGRAM_ADDRESS ??

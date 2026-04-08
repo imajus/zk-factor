@@ -23,7 +23,7 @@ Click a pool card to open the detail panel and see pending offers, vote status, 
 3. Enter a pool name, invoice hash (optional), advance rate range, and minimum contribution
 4. Click **Create**
 
-<!-- screenshot: create-pool.png — the create pool form -->
+![Create pool form](/img/factor-pools/create-pool.png)
 
 You must be a registered factor to create a pool.
 
@@ -35,6 +35,8 @@ You must be a registered factor to create a pool.
 4. Click **Contribute** — credits are sent to the program escrow and you receive a **Pool Share** record
 
 <!-- screenshot: contribute-pool.png — a pool card with contribute button -->
+<!-- ![Contribute to a pool](/img/factor-pools/contribute-pool.png) -->
+
 
 ## Voting on a Factoring Offer
 
