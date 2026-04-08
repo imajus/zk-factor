@@ -120,7 +120,6 @@ program zk_factor_12255.aleo {
 
     // ── Legacy pool mappings (owner-based) ───────────────────────────────────
     mapping pool_contributions: field   => u64;      // total contributed to this pool
-    mapping pool_owners:        field   => address;  // who created the pool
     mapping pool_closed:        field   => bool;     // true after pool is executed/closed
     mapping pool_proceeds:      field   => u64;      // settlement.amount (set by open_pool_distribution)
     mapping pool_distributed:   field   => u64;      // running total of proceeds already paid out
