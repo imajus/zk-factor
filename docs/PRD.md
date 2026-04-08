@@ -115,7 +115,7 @@ No central database needed. No trust required. Cryptographically impossible to d
 | **Stablecoin Payment Integration** | Accept and settle payments in USDCx stablecoin        |
 | **Partial Factoring**              | Sell 50% of invoice, keep 50%                         |
 | **Recourse Tracking**              | If debtor doesn't pay, track return to business       |
-| **Multi-Factor Syndication**       | Large invoices split across multiple factors          |
+| **Multi-Factor Syndication**       | Large invoices split across multiple factors via ownerless pools (`create_ownerless_pool()`, `pool_contribute()`, `execute_approved_pool()`) |
 | **Credit Scoring**                 | ZK proof of payment history without revealing details |
 
 ### Nice to Have (Wave 5+):
@@ -186,7 +186,9 @@ Implemented core Leo transitions:
 - `pay_invoice()` consumes PaymentNotice and marks invoice settled on-chain
 - `settle_invoice()` allows factor to finalize after debtor payment
 
-Used public mappings for factor registration (`active_factors`) and settlement tracking (`settled_invoices`) while keeping all sensitive data in encrypted records.
+Used public mappings for factor registration (`active_factors`), settlement tracking (`settled_invoices`), and ownerless pool state (`pool_meta`, `pool_contributions`, `pool_votes`) while keeping all sensitive data in encrypted records.
+
+Multi-factor syndication uses an ownerless pool model: pools are stored in public on-chain mappings (globally discoverable), factors contribute credits to program escrow, vote to approve pending offers, and claim proportional proceeds after settlement — no single pool owner required.
 
 Built React frontend with Shield Wallet integration, proof generation progress tracking, and asynchronous record discovery.
 

@@ -361,54 +361,6 @@ export function computeExpectedPoolPayout(
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Build inputs for create_pool transition.
- */
-export function buildCreatePoolInputs(
-  invoiceHash: string,
-  targetAmount: bigint,
-): string[] {
-  return [invoiceHash, `${targetAmount}u64`];
-}
-
-/**
- * Build inputs for contribute_to_pool transition.
- * existingTotal: current pool_contributions[invoiceHash] read from chain before calling.
- */
-export function buildContributeToPoolInputs(
-  invoiceHash: string,
-  poolOwner: string,
-  existingTotal: bigint,
-  creditsRecord: string,
-  contribution: bigint,
-): string[] {
-  return [
-    invoiceHash,
-    poolOwner,
-    `${existingTotal}u64`,
-    creditsRecord,
-    `${contribution}u64`,
-  ];
-}
-
-/**
- * Build inputs for execute_pool_factoring transition.
- */
-export function buildExecutePoolFactoringInputs(
-  offer: string,
-  pool: string,
-  creditsRecord: string,
-): string[] {
-  return [offer, pool, creditsRecord];
-}
-
-/**
- * Build inputs for recover_pool_close transition.
- */
-export function buildRecoverPoolCloseInputs(pool: string): string[] {
-  return [pool];
-}
-
-/**
  * Build inputs for open_pool_distribution transition.
  *
  * IMPORTANT: The pool owner must separately transfer settlement.amount credits to the
