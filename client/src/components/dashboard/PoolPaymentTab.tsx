@@ -43,7 +43,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Layers } from "lucide-react";
 import { toast } from "sonner";
 import { useTransaction } from "@/hooks/use-transaction";
-import { PROGRAM_ID, PROGRAM_ADDRESS } from "@/lib/config";
+import { AleoNetworkClient } from "@provablehq/sdk";
+import { API_ENDPOINT, PROGRAM_ID, PROGRAM_ADDRESS } from "@/lib/config";
 import { type AleoRecord, getField } from "@/lib/aleo-records";
 import { buildPayPoolInvoiceInputs } from "@/lib/pool-chain";
 
@@ -68,9 +69,22 @@ export function PoolPaymentTab({ records, isLoading }: PoolPaymentTabProps) {
     const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
 
     try {
+      const client = new AleoNetworkClient(API_ENDPOINT);
+      let useTokenPool = false;
+      try {
+        const rawUseToken = await client.getProgramMappingValue(
+          PROGRAM_ID,
+          "pool_use_token",
+          invoiceHash,
+        );
+        useTokenPool = String(rawUseToken).includes("true");
+      } catch {
+        useTokenPool = false;
+      }
+
       await execute({
         program: PROGRAM_ID,
-        function: "pay_pool_invoice",
+        function: useTokenPool ? "pay_pool_invoice_token" : "pay_pool_invoice",
         inputs: buildPayPoolInvoiceInputs(
           record.recordPlaintext,
           PROGRAM_ADDRESS,

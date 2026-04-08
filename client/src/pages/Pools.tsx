@@ -1,12 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import {
-  RefreshCw,
-  AlertCircle,
-  Plus,
-  Info,
-  Vote,
-  Zap,
-} from "lucide-react";
+import { RefreshCw, AlertCircle, Plus, Info, Vote, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -26,12 +19,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { AddressDisplay } from "@/components/ui/address-display";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useWallet } from "@/contexts/WalletContext";
 import { useTransaction } from "@/hooks/use-transaction";
 import { toast } from "sonner";
-import { PROGRAM_ID, PROGRAM_ADDRESS } from "@/lib/config";
+import { PROGRAM_ID, PROGRAM_ADDRESS, USDCX_PROGRAM_ID } from "@/lib/config";
 import { type AleoRecord, getField, microToAleo } from "@/lib/aleo-records";
 import {
   computeExpectedPoolPayout,
@@ -69,6 +69,7 @@ function PoolCreateDialog({
   const [poolMinAdvanceRate, setPoolMinAdvanceRate] = useState("50");
   const [poolMaxAdvanceRate, setPoolMaxAdvanceRate] = useState("80");
   const [poolMinContribAleo, setPoolMinContribAleo] = useState("5");
+  const [poolCurrency, setPoolCurrency] = useState<"ALEO" | "USDCx">("ALEO");
   const queryClient = useQueryClient();
   const { activeRole } = useWallet();
   const { execute, status, error: txError, reset } = useTransaction();
@@ -97,6 +98,7 @@ function PoolCreateDialog({
       setPoolMinAdvanceRate("50");
       setPoolMaxAdvanceRate("80");
       setPoolMinContribAleo("5");
+      setPoolCurrency("ALEO");
       setCreating(false);
       queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
       queryClient.invalidateQueries({ queryKey: ["all_pools"] });
@@ -142,7 +144,9 @@ function PoolCreateDialog({
       return;
     }
     if (!Number.isFinite(minContrib) || minContrib <= 0) {
-      toast.error("Minimum contribution must be greater than 0 ALEO.");
+      toast.error(
+        `Minimum contribution must be greater than 0 ${poolCurrency}.`,
+      );
       return;
     }
 
@@ -162,6 +166,8 @@ function PoolCreateDialog({
           invoiceHash: poolId,
           nameU128: encodePoolName(trimmedName),
           name: trimmedName,
+          currency: poolCurrency,
+          useToken: poolCurrency === "USDCx",
           minAdvanceRate: minRateBps,
           maxAdvanceRate: maxRateBps,
           minContribution: minContribMicro,
@@ -184,6 +190,7 @@ function PoolCreateDialog({
           minRateBps,
           maxRateBps,
           minContribMicro,
+          poolCurrency === "USDCx",
         ),
         fee: 100_000,
         privateFee: false,
@@ -281,8 +288,28 @@ function PoolCreateDialog({
             </p>
           </div>
           <div className="space-y-2">
+            <Label>Pool Currency</Label>
+            <Select
+              value={poolCurrency}
+              onValueChange={(value) =>
+                setPoolCurrency(value as "ALEO" | "USDCx")
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Choose currency" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALEO">ALEO</SelectItem>
+                <SelectItem value="USDCx">USDCx</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Used for contribution, repayment, and payouts.
+            </p>
+          </div>
+          <div className="space-y-2">
             <Label htmlFor="pool-min-contrib">
-              Minimum Contribution (ALEO)
+              Minimum Contribution ({poolCurrency})
             </Label>
             <Input
               id="pool-min-contrib"
@@ -544,9 +571,14 @@ export default function Pools() {
     const offer = pool.pendingOffer;
     if (!offer || offer.isExecuted) return;
 
+    const executeFunction =
+      pool.meta.currency === "USDCx"
+        ? "execute_approved_pool_token"
+        : "execute_approved_pool";
+
     await execute({
       program: PROGRAM_ID,
-      function: "execute_approved_pool",
+      function: executeFunction,
       inputs: buildExecuteApprovedPoolInputs(
         pool.meta.invoiceHash,
         offer.originalCreditor,
@@ -624,10 +656,17 @@ export default function Pools() {
         share.recordPlaintext,
         expectedPayout,
       );
+      const ownerlessPool = onChainPools.find(
+        (pool) => pool.meta.invoiceHash === invoiceHash,
+      );
+      const claimFunction =
+        ownerlessPool?.meta.currency === "USDCx"
+          ? "claim_pool_proceeds_token"
+          : "claim_pool_proceeds";
 
       await execute({
         program: PROGRAM_ID,
-        function: "claim_pool_proceeds",
+        function: claimFunction,
         inputs,
         fee: 80_000,
         privateFee: false,
@@ -678,7 +717,11 @@ export default function Pools() {
             <Card
               key={`pool-${pool.meta.invoiceHash}`}
               className="cursor-pointer hover:border-primary/50 transition-colors"
-              onClick={() => navigate(`/pools/${pool.meta.invoiceHash.replace(/field$/, "")}`)}
+              onClick={() =>
+                navigate(
+                  `/pools/${pool.meta.invoiceHash.replace(/field$/, "")}`,
+                )
+              }
             >
               <CardContent className="pt-4 space-y-3">
                 <div className="flex items-start justify-between gap-2">
@@ -707,7 +750,7 @@ export default function Pools() {
                       {raisedAleo.toLocaleString(undefined, {
                         maximumFractionDigits: 2,
                       })}{" "}
-                      ALEO
+                      {pool.meta.currency}
                     </span>
                   </div>
                 </div>

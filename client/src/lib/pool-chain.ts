@@ -10,7 +10,8 @@
  */
 
 import { AleoNetworkClient } from "@provablehq/sdk";
-import { PROGRAM_ID, API_ENDPOINT } from "@/lib/config";
+import { PROGRAM_ID, API_ENDPOINT, USDCX_PROGRAM_ID } from "@/lib/config";
+import type { PaymentCurrency } from "@/lib/config";
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -19,6 +20,8 @@ export interface OnChainPoolMeta {
   nameU128: bigint;
   /** Human-readable name decoded from nameU128 */
   name: string;
+  currency: PaymentCurrency;
+  useToken: boolean;
   minAdvanceRate: number;
   maxAdvanceRate: number;
   minContribution: bigint;
@@ -144,8 +147,12 @@ export async function fetchPoolMeta(
   invoiceHash: string,
 ): Promise<OnChainPoolMeta | null> {
   const client = new AleoNetworkClient(API_ENDPOINT);
-  const raw = await safeGet(client, "pool_meta", invoiceHash);
+  const [raw, useTokenRaw] = await Promise.all([
+    safeGet(client, "pool_meta", invoiceHash),
+    safeGet(client, "pool_use_token", invoiceHash),
+  ]);
   if (!raw) return null;
+  const useToken = useTokenRaw?.trim() === "true";
 
   const nameU128Str = stripSuffix(parseField(raw, "name_u128"));
   const nameU128 = nameU128Str ? BigInt(nameU128Str) : 0n;
@@ -155,6 +162,8 @@ export async function fetchPoolMeta(
     invoiceHash,
     nameU128,
     name: decoded || `Pool ${invoiceHash.slice(0, 10)}…`,
+    currency: useToken ? "USDCx" : "ALEO",
+    useToken,
     minAdvanceRate: parseInt(
       stripSuffix(parseField(raw, "min_advance_rate")) || "5000",
       10,
@@ -295,6 +304,26 @@ export async function fetchPublicCreditsBalance(
   }
 }
 
+/**
+ * Check a caller's public USDCx balance.
+ * Returns 0n if the address has no public balance.
+ */
+export async function fetchPublicTokenBalance(
+  address: string,
+): Promise<bigint> {
+  const client = new AleoNetworkClient(API_ENDPOINT);
+  try {
+    const raw = await client.getProgramMappingValue(
+      USDCX_PROGRAM_ID,
+      "account",
+      address,
+    );
+    return BigInt(stripSuffix(String(raw).trim()) || "0");
+  } catch {
+    return 0n;
+  }
+}
+
 // ── Payout math ────────────────────────────────────────────────────────
 
 /**
@@ -366,6 +395,7 @@ export function buildCreateOwnerlessPoolInputs(
   minAdvanceRate: number,
   maxAdvanceRate: number,
   minContribution: bigint,
+  useToken: boolean,
 ): string[] {
   return [
     invoiceHash,
@@ -373,6 +403,7 @@ export function buildCreateOwnerlessPoolInputs(
     `${minAdvanceRate}u16`,
     `${maxAdvanceRate}u16`,
     `${minContribution}u64`,
+    `${useToken}`,
   ];
 }
 

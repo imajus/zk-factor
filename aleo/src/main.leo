@@ -103,7 +103,7 @@ final fn record_settlement(invoice_hash: field, factor: address, amount: u64) {
 // PROGRAM
 // ─────────────────────────────────────────────────────────────────────────────
 
-program zk_factor_12254.aleo {
+program zk_factor_12255.aleo {
     // IMPORTANT: Replace with actual admin address before deployment.
     // See aleo/docs/deployment.md for admin key management.
     @admin(address="aleo19rn544c49da9z2vz52q5f7lm7nsjhp890ahmre6cz94qawdscgps6kq3cu")
@@ -127,6 +127,7 @@ program zk_factor_12254.aleo {
 
     // ── Ownerless pool mappings ──────────────────────────────────────────────
     mapping pool_meta:          field   => PoolMeta;         // on-chain pool metadata
+    mapping pool_use_token:     field   => bool;             // false = ALEO, true = USDCx
     mapping pool_pending_offer: field   => PendingPoolOffer; // business-submitted offer awaiting votes
     mapping pool_vote_count:    field   => u8;               // total approvals so far
     mapping pool_voter_cast:    field   => bool;             // Poseidon2(VoteId) => voted?
@@ -663,7 +664,7 @@ program zk_factor_12254.aleo {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // OWNERLESS POOL — CREATE
+    // OWNERLESS POOL - CREATE
     // ─────────────────────────────────────────────────────────────
     // Any active factor creates a pool. No single owner — the program address
     // acts as trustless escrow for all contributed credits.
@@ -679,6 +680,7 @@ program zk_factor_12254.aleo {
         min_advance_rate: u16,
         max_advance_rate: u16,
         min_contribution: u64,
+        use_token: bool,
     ) -> Final {
         assert(min_advance_rate >= 5000u16 && min_advance_rate <= 9900u16);
         assert(max_advance_rate >= 5000u16 && max_advance_rate <= 9900u16);
@@ -698,6 +700,7 @@ program zk_factor_12254.aleo {
                 min_contribution: min_contribution,
                 created_at:       (block.timestamp as u64),
             });
+            Mapping::set(pool_use_token,   invoice_hash, use_token);
             Mapping::set(pool_contributions, invoice_hash, 0u64);
             Mapping::set(pool_closed,        invoice_hash, false);
             Mapping::set(pool_vote_count,    invoice_hash, 0u8);
@@ -726,7 +729,39 @@ program zk_factor_12254.aleo {
     ) -> (PoolShare, Final) {
         assert(contribution > 0u64);
 
+        let share: PoolShare = PoolShare {
+            owner:        self.caller,
+            pool_id:      invoice_hash,
+            invoice_hash: invoice_hash,
+            contributed:  contribution,
+            total_pool:   existing_total + contribution,
+        };
+
+        let contributor: address = self.caller;
         let f: Final = credits.aleo::transfer_public_as_signer(program_addr, contribution);
+        return (share, final {
+            let use_token: bool = Mapping::get_or_use(pool_use_token, invoice_hash, false);
+            assert(!use_token);
+            assert(program_addr == self.address);
+            verify_factor_active(contributor);
+            let meta: PoolMeta = Mapping::get(pool_meta, invoice_hash);
+            let is_closed: bool = Mapping::get_or_use(pool_closed, invoice_hash, false);
+            assert(!is_closed);
+            assert(contribution >= meta.min_contribution);
+            let current: u64 = Mapping::get_or_use(pool_contributions, invoice_hash, 0u64);
+            Mapping::set(pool_contributions, invoice_hash, current + contribution);
+            f.run();
+        });
+    }
+
+    // Token variant of pool_contribute for USDCx pools.
+    fn pool_contribute_token(
+        invoice_hash: field,
+        program_addr: address,
+        contribution: u64,
+        existing_total: u64,
+    ) -> (PoolShare, Final) {
+        assert(contribution > 0u64);
 
         let share: PoolShare = PoolShare {
             owner:        self.caller,
@@ -737,7 +772,14 @@ program zk_factor_12254.aleo {
         };
 
         let contributor: address = self.caller;
+        let f: Final = test_usdcx_stablecoin.aleo::transfer_from_public(
+            contributor,
+            program_addr,
+            contribution as u128,
+        );
         return (share, final {
+            let use_token: bool = Mapping::get_or_use(pool_use_token, invoice_hash, false);
+            assert(use_token);
             assert(program_addr == self.address);
             verify_factor_active(contributor);
             let meta: PoolMeta = Mapping::get(pool_meta, invoice_hash);
@@ -745,8 +787,7 @@ program zk_factor_12254.aleo {
             assert(!is_closed);
             assert(contribution >= meta.min_contribution);
             let current: u64 = Mapping::get_or_use(pool_contributions, invoice_hash, 0u64);
-            let new_total: u64 = current + contribution;
-            Mapping::set(pool_contributions, invoice_hash, new_total);
+            Mapping::set(pool_contributions, invoice_hash, current + contribution);
             f.run();
         });
     }
@@ -846,7 +887,55 @@ program zk_factor_12254.aleo {
     ) -> (PoolPaymentNotice, Final) {
         assert(advance_amount > 0u64);
 
+        let notice: PoolPaymentNotice = PoolPaymentNotice {
+            owner:        debtor_addr,
+            invoice_hash: invoice_hash,
+            amount:       invoice_amount,
+            due_date:     due_date,
+        };
+
+        let executor: address = self.caller;
         let f_pay: Final = credits.aleo::transfer_public(business_addr, advance_amount);
+        return (notice, final {
+            let use_token: bool = Mapping::get_or_use(pool_use_token, invoice_hash, false);
+            assert(!use_token);
+            let offer: PendingPoolOffer = Mapping::get(pool_pending_offer, invoice_hash);
+            assert(!offer.is_executed);
+            assert(offer.original_creditor == business_addr);
+            assert(offer.debtor            == debtor_addr);
+            assert(offer.advance_amount    == advance_amount);
+            assert(offer.amount            == invoice_amount);
+            let vote_count: u8   = Mapping::get_or_use(pool_vote_count, invoice_hash, 0u8);
+            let active_count: u32 = Mapping::get_or_use(active_factor_count, false, 1u32);
+            let threshold: u8    = ((active_count / 2u32) + 1u32) as u8;
+            assert(vote_count >= threshold);
+            Mapping::set(pool_pending_offer, invoice_hash, PendingPoolOffer {
+                original_creditor: offer.original_creditor,
+                debtor:            offer.debtor,
+                amount:            offer.amount,
+                advance_rate:      offer.advance_rate,
+                advance_amount:    offer.advance_amount,
+                due_date:          offer.due_date,
+                nonce:             offer.nonce,
+                is_executed:       true,
+            });
+            Mapping::set(pool_closed,   invoice_hash, true);
+            Mapping::set(pool_executor, invoice_hash, executor);
+            update_factor_stats(executor);
+            f_pay.run();
+        });
+    }
+
+    // Token variant of execute_approved_pool for USDCx pools.
+    fn execute_approved_pool_token(
+        invoice_hash: field,
+        business_addr: address,
+        debtor_addr: address,
+        advance_amount: u64,
+        invoice_amount: u64,
+        due_date: u64,
+    ) -> (PoolPaymentNotice, Final) {
+        assert(advance_amount > 0u64);
 
         let notice: PoolPaymentNotice = PoolPaymentNotice {
             owner:        debtor_addr,
@@ -856,16 +945,19 @@ program zk_factor_12254.aleo {
         };
 
         let executor: address = self.caller;
+        let f_pay: Final = test_usdcx_stablecoin.aleo::transfer_public(
+            business_addr,
+            advance_amount as u128,
+        );
         return (notice, final {
-            // update_factor_stats also asserts executor is active.
+            let use_token: bool = Mapping::get_or_use(pool_use_token, invoice_hash, false);
+            assert(use_token);
             let offer: PendingPoolOffer = Mapping::get(pool_pending_offer, invoice_hash);
             assert(!offer.is_executed);
             assert(offer.original_creditor == business_addr);
             assert(offer.debtor            == debtor_addr);
             assert(offer.advance_amount    == advance_amount);
             assert(offer.amount            == invoice_amount);
-            // Majority threshold: floor(active_count / 2) + 1.
-            // Defaults to 1 during bootstrapping (single factor can execute).
             let vote_count: u8   = Mapping::get_or_use(pool_vote_count, invoice_hash, 0u8);
             let active_count: u32 = Mapping::get_or_use(active_factor_count, false, 1u32);
             let threshold: u8    = ((active_count / 2u32) + 1u32) as u8;
@@ -902,6 +994,43 @@ program zk_factor_12254.aleo {
         let invoice_hash: field = notice.invoice_hash;
         let amount: u64 = notice.amount;
         return final {
+            let use_token: bool = Mapping::get_or_use(pool_use_token, invoice_hash, false);
+            assert(!use_token);
+            assert(program_addr == self.address);
+            assert(!Mapping::contains(settled_invoices, invoice_hash));
+            let is_closed: bool = Mapping::get_or_use(pool_closed, invoice_hash, false);
+            assert(is_closed);
+            let offer: PendingPoolOffer = Mapping::get(pool_pending_offer, invoice_hash);
+            assert(offer.is_executed);
+            assert(amount == offer.amount);
+            let executor: address = Mapping::get(pool_executor, invoice_hash);
+            Mapping::set(settled_invoices, invoice_hash, SettlementInfo {
+                is_settled:      true,
+                settlement_date: (block.timestamp as u64),
+                factor:          executor,
+                amount:          amount,
+            });
+            let total_settled: u64 = Mapping::get_or_use(protocol_stats, 2u8, 0u64);
+            Mapping::set(protocol_stats, 2u8, total_settled + 1u64);
+            f_pay.run();
+        };
+    }
+
+    // Token variant of pay_pool_invoice for USDCx pools.
+    fn pay_pool_invoice_token(
+        notice: PoolPaymentNotice,
+        program_addr: address,
+    ) -> Final {
+        assert(notice.owner == self.caller);
+        let f_pay: Final = test_usdcx_stablecoin.aleo::transfer_public_as_signer(
+            program_addr,
+            notice.amount as u128,
+        );
+        let invoice_hash: field = notice.invoice_hash;
+        let amount: u64 = notice.amount;
+        return final {
+            let use_token: bool = Mapping::get_or_use(pool_use_token, invoice_hash, false);
+            assert(use_token);
             assert(program_addr == self.address);
             assert(!Mapping::contains(settled_invoices, invoice_hash));
             let is_closed: bool = Mapping::get_or_use(pool_closed, invoice_hash, false);
@@ -948,5 +1077,49 @@ program zk_factor_12254.aleo {
             Mapping::set(pool_proceeds,    invoice_hash, pool_proceeds_value);
             Mapping::set(pool_distributed, invoice_hash, 0u64);
         };
+    }
+
+    // Called by: Contributor (PoolShare owner) — token pools only.
+    // Mirrors claim_pool_proceeds, but transfers USDCx from the program's
+    // public escrow into the caller's private token record.
+    fn claim_pool_proceeds_token(
+        share: PoolShare,
+        expected_payout: u64,
+    ) -> (
+        test_usdcx_stablecoin.aleo::ComplianceRecord,
+        test_usdcx_stablecoin.aleo::Token,
+        Final,
+    ) {
+        assert(expected_payout > 0u64);
+        assert(share.contributed > 0u64);
+
+        let (compliance_record, payout_record, f_pay): (
+            test_usdcx_stablecoin.aleo::ComplianceRecord,
+            test_usdcx_stablecoin.aleo::Token,
+            Final,
+        ) =
+            test_usdcx_stablecoin.aleo::transfer_public_to_private(
+                share.owner,
+                expected_payout as u128,
+            );
+
+        let invoice_hash: field = share.invoice_hash;
+        let contributed: u64 = share.contributed;
+        return (compliance_record, payout_record, final {
+            let settlement: SettlementInfo = Mapping::get(settled_invoices, invoice_hash);
+            assert(settlement.is_settled);
+            let is_closed: bool = Mapping::get_or_use(pool_closed, invoice_hash, false);
+            assert(is_closed);
+            let proceeds: u64 = Mapping::get(pool_proceeds, invoice_hash);
+            assert(proceeds > 0u64);
+            let total: u64 = Mapping::get(pool_contributions, invoice_hash);
+            assert(total > 0u64);
+            let expected: u64 = (((proceeds as u128) * (contributed as u128)) / (total as u128)) as u64;
+            assert(expected_payout == expected);
+            let distributed: u64 = Mapping::get_or_use(pool_distributed, invoice_hash, 0u64);
+            assert(distributed + expected_payout <= proceeds);
+            Mapping::set(pool_distributed, invoice_hash, distributed + expected_payout);
+            f_pay.run();
+        });
     }
 }
