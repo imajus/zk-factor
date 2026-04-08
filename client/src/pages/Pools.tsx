@@ -349,8 +349,9 @@ export default function Pools() {
     string | null
   >(null);
   const [contributeOpen, setContributeOpen] = useState(false);
-  const [contributePool, setContributePool] =
-    useState<OnChainPoolState | null>(null);
+  const [contributePool, setContributePool] = useState<OnChainPoolState | null>(
+    null,
+  );
   const [contributeAmount, setContributeAmount] = useState("");
   const [publicBalance, setPublicBalance] = useState<bigint | null>(null);
   const [votedPoolHashes, setVotedPoolHashes] = useState<Set<string>>(
@@ -414,7 +415,10 @@ export default function Pools() {
   useEffect(() => {
     if (!address) return;
     const storageKey = `voted-pools:${PROGRAM_ID}:${address}`;
-    localStorage.setItem(storageKey, JSON.stringify(Array.from(votedPoolHashes)));
+    localStorage.setItem(
+      storageKey,
+      JSON.stringify(Array.from(votedPoolHashes)),
+    );
   }, [address, votedPoolHashes]);
 
   useEffect(() => {
@@ -525,13 +529,7 @@ export default function Pools() {
       setPublicBalance(null);
       reset();
     }
-  }, [
-    status,
-    txError,
-    queryClient,
-    reset,
-    pendingVoteInvoiceHash,
-  ]);
+  }, [status, txError, queryClient, reset, pendingVoteInvoiceHash]);
 
   useEffect(() => {
     if (status !== "pending" || !pendingExecutionHash) return;
@@ -549,13 +547,7 @@ export default function Pools() {
     queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
     queryClient.invalidateQueries({ queryKey: ["all_pools"] });
     reset();
-  }, [
-    status,
-    pendingExecutionHash,
-    onChainPools,
-    queryClient,
-    reset,
-  ]);
+  }, [status, pendingExecutionHash, onChainPools, queryClient, reset]);
 
   useEffect(() => {
     if (status !== "pending" || !pendingDistributionHash) return;
@@ -573,13 +565,7 @@ export default function Pools() {
     queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
     queryClient.invalidateQueries({ queryKey: ["all_pools"] });
     reset();
-  }, [
-    status,
-    pendingDistributionHash,
-    onChainPools,
-    queryClient,
-    reset,
-  ]);
+  }, [status, pendingDistributionHash, onChainPools, queryClient, reset]);
 
   const openContribute = async (pool: OnChainPoolState) => {
     setContributePool(pool);
@@ -637,7 +623,10 @@ export default function Pools() {
   };
 
   const handleVote = async (invoiceHash: string) => {
-    if (votedPoolHashes.has(invoiceHash) || pendingVoteInvoiceHash === invoiceHash) {
+    if (
+      votedPoolHashes.has(invoiceHash) ||
+      pendingVoteInvoiceHash === invoiceHash
+    ) {
       return;
     }
 
@@ -808,9 +797,7 @@ export default function Pools() {
             <Card key={`pool-${pool.meta.invoiceHash}`}>
               <CardContent
                 className="pt-4 space-y-3 cursor-pointer"
-                onClick={() =>
-                  openPoolDetails(pool.meta.invoiceHash)
-                }
+                onClick={() => openPoolDetails(pool.meta.invoiceHash)}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div>
@@ -872,7 +859,8 @@ export default function Pools() {
                       Open Distribution
                     </Button>
                     <p className="text-[11px] text-muted-foreground leading-relaxed">
-                      Permissionless — anyone can call this once debtor has paid.
+                      Permissionless — anyone can call this once debtor has
+                      paid.
                     </p>
                   </div>
                 )}
@@ -986,7 +974,9 @@ export default function Pools() {
                     />
                   </div>
                   <div className="flex justify-between gap-2">
-                    <span className="text-muted-foreground">Invoice Amount</span>
+                    <span className="text-muted-foreground">
+                      Invoice Amount
+                    </span>
                     <span className="font-mono">
                       {(Number(offer.amount) / 1_000_000).toLocaleString(
                         undefined,
@@ -998,13 +988,17 @@ export default function Pools() {
                     </span>
                   </div>
                   <div className="flex justify-between gap-2">
-                    <span className="text-muted-foreground">Requested Rate</span>
+                    <span className="text-muted-foreground">
+                      Requested Rate
+                    </span>
                     <span className="font-mono">
                       {(offer.advanceRate / 100).toFixed(2)}%
                     </span>
                   </div>
                   <div className="flex justify-between gap-2">
-                    <span className="text-muted-foreground">Advance Payout</span>
+                    <span className="text-muted-foreground">
+                      Advance Payout
+                    </span>
                     <span className="font-mono">
                       {(Number(offer.advanceAmount) / 1_000_000).toLocaleString(
                         undefined,
@@ -1055,18 +1049,15 @@ export default function Pools() {
     );
   };
 
-  const selectedPool =
-    selectedPoolHash
-      ? (visiblePools.find(
-          (pool) => pool.meta.invoiceHash === selectedPoolHash,
-        ) ?? null)
-      : null;
+  const selectedPool = selectedPoolHash
+    ? (visiblePools.find(
+        (pool) => pool.meta.invoiceHash === selectedPoolHash,
+      ) ?? null)
+    : null;
   const selectedStats = selectedPool
     ? computePoolStats(selectedPool, activeFactorCount)
     : null;
-  const selectedStatus = selectedPool
-    ? getPoolStatus(selectedPool)
-    : null;
+  const selectedStatus = selectedPool ? getPoolStatus(selectedPool) : null;
   const canOpenSelectedDistribution =
     !!selectedPool &&
     selectedPool.isSettled &&
@@ -1081,16 +1072,17 @@ export default function Pools() {
 
     if (selectedPool.pendingOffer?.isExecuted) {
       if (selectedPool.proceeds && selectedPool.proceeds > 0n) {
-        const claimedPct = Number(
-          (selectedPool.distributed * 10000n) /
-            selectedPool.proceeds,
-        ) / 100;
+        const claimedPct =
+          Number((selectedPool.distributed * 10000n) / selectedPool.proceeds) /
+          100;
         return `${claimedPct.toFixed(1)}% claimed`;
       }
       return "0.0% claimed";
     }
 
-    return `${(Number(selectedPool.totalContributed) / 1_000_000).toLocaleString(undefined, {
+    return `${(
+      Number(selectedPool.totalContributed) / 1_000_000
+    ).toLocaleString(undefined, {
       maximumFractionDigits: 6,
     })} ALEO raised`;
   })();
@@ -1102,18 +1094,13 @@ export default function Pools() {
 
   const claimableShareCount = poolShareRecords.filter((record) => {
     const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
-    const pool = onChainPools.find(
-      (p) => p.meta.invoiceHash === invoiceHash,
-    );
-    return (
-      pool !== undefined &&
-      pool.proceeds !== null &&
-      pool.proceeds > 0n
-    );
+    const pool = onChainPools.find((p) => p.meta.invoiceHash === invoiceHash);
+    return pool !== undefined && pool.proceeds !== null && pool.proceeds > 0n;
   }).length;
 
   const pendingVotingCount = onChainPools.filter(
-    (pool) => !!pool.pendingOffer && !pool.pendingOffer.isExecuted && !pool.isClosed,
+    (pool) =>
+      !!pool.pendingOffer && !pool.pendingOffer.isExecuted && !pool.isClosed,
   ).length;
 
   const renderShareCards = () => {
@@ -1148,11 +1135,7 @@ export default function Pools() {
     const claimableShares = poolShareRecords.filter((record) => {
       const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
       const pool = poolByHash.get(invoiceHash);
-      return (
-        pool !== undefined &&
-        pool.proceeds !== null &&
-        pool.proceeds > 0n
-      );
+      return pool !== undefined && pool.proceeds !== null && pool.proceeds > 0n;
     });
 
     if (claimableShares.length === 0) {
@@ -1296,9 +1279,7 @@ export default function Pools() {
           <TabsTrigger value="discover">
             Discover Pools
             {!isLoading && totalPools > 0 && (
-              <span className="ml-1.5 text-xs opacity-70">
-                ({totalPools})
-              </span>
+              <span className="ml-1.5 text-xs opacity-70">({totalPools})</span>
             )}
           </TabsTrigger>
           <TabsTrigger value="voting">
@@ -1416,81 +1397,69 @@ export default function Pools() {
                           : "Pending offer not submitted"}
                       </p>
                     </div>
-
                   </div>
 
                   {selectedPool?.pendingOffer && (
-                      <div className="rounded-md border bg-muted/30 p-3 space-y-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge
-                            variant="secondary"
-                            className="text-[10px] uppercase tracking-wide"
-                          >
-                            Pending Offer
-                          </Badge>
-                          <Badge variant="outline" className="text-xs">
-                            {selectedStats?.voteCount ?? 0} /{" "}
-                            {selectedStats?.threshold ?? 0} votes
-                          </Badge>
+                    <div className="rounded-md border bg-muted/30 p-3 space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge
+                          variant="secondary"
+                          className="text-[10px] uppercase tracking-wide"
+                        >
+                          Pending Offer
+                        </Badge>
+                        <Badge variant="outline" className="text-xs">
+                          {selectedStats?.voteCount ?? 0} /{" "}
+                          {selectedStats?.threshold ?? 0} votes
+                        </Badge>
+                      </div>
+                      <div className="grid gap-2 sm:grid-cols-2 text-sm">
+                        <div className="flex justify-between gap-2">
+                          <span className="text-muted-foreground">
+                            Creditor
+                          </span>
+                          <AddressDisplay
+                            address={selectedPool.pendingOffer.originalCreditor}
+                            chars={5}
+                            showExplorer
+                          />
                         </div>
-                        <div className="grid gap-2 sm:grid-cols-2 text-sm">
-                          <div className="flex justify-between gap-2">
-                            <span className="text-muted-foreground">
-                              Creditor
-                            </span>
-                            <AddressDisplay
-                              address={
-                                selectedPool.pendingOffer
-                                  .originalCreditor
-                              }
-                              chars={5}
-                              showExplorer
-                            />
-                          </div>
-                          <div className="flex justify-between gap-2">
-                            <span className="text-muted-foreground">
-                              Debtor
-                            </span>
-                            <AddressDisplay
-                              address={
-                                selectedPool.pendingOffer.debtor
-                              }
-                              chars={5}
-                              showExplorer
-                            />
-                          </div>
-                          <div className="flex justify-between gap-2">
-                            <span className="text-muted-foreground">
-                              Advance Rate
-                            </span>
-                            <span className="font-mono">
-                              {(
-                                selectedPool.pendingOffer.advanceRate /
-                                100
-                              ).toFixed(2)}
-                              %
-                            </span>
-                          </div>
-                          <div className="flex justify-between gap-2">
-                            <span className="text-muted-foreground">
-                              Advance Amount
-                            </span>
-                            <span className="font-mono">
-                              {(
-                                Number(
-                                  selectedPool.pendingOffer
-                                    .advanceAmount,
-                                ) / 1_000_000
-                              ).toLocaleString(undefined, {
-                                maximumFractionDigits: 6,
-                              })}{" "}
-                              ALEO
-                            </span>
-                          </div>
+                        <div className="flex justify-between gap-2">
+                          <span className="text-muted-foreground">Debtor</span>
+                          <AddressDisplay
+                            address={selectedPool.pendingOffer.debtor}
+                            chars={5}
+                            showExplorer
+                          />
+                        </div>
+                        <div className="flex justify-between gap-2">
+                          <span className="text-muted-foreground">
+                            Advance Rate
+                          </span>
+                          <span className="font-mono">
+                            {(
+                              selectedPool.pendingOffer.advanceRate / 100
+                            ).toFixed(2)}
+                            %
+                          </span>
+                        </div>
+                        <div className="flex justify-between gap-2">
+                          <span className="text-muted-foreground">
+                            Advance Amount
+                          </span>
+                          <span className="font-mono">
+                            {(
+                              Number(selectedPool.pendingOffer.advanceAmount) /
+                              1_000_000
+                            ).toLocaleString(undefined, {
+                              maximumFractionDigits: 6,
+                            })}{" "}
+                            ALEO
+                          </span>
                         </div>
                       </div>
-                    )}
-
+                    </div>
+                  )}
                 </CardContent>
               </Card>
               <PoolTimeline
@@ -1505,16 +1474,15 @@ export default function Pools() {
                     <Button
                       className="w-full"
                       onClick={() =>
-                        handleOpenDistribution(
-                          selectedPool.meta.invoiceHash,
-                        )
+                        handleOpenDistribution(selectedPool.meta.invoiceHash)
                       }
                       disabled={status !== "idle"}
                     >
                       Open Distribution
                     </Button>
                     <p className="text-xs text-muted-foreground text-center">
-                      Permissionless — anyone can call this once debtor has paid.
+                      Permissionless — anyone can call this once debtor has
+                      paid.
                     </p>
                   </CardContent>
                 </Card>
@@ -1539,9 +1507,8 @@ export default function Pools() {
                         </span>
                         <span className="font-mono text-right">
                           {(
-                            Number(
-                              selectedPool.meta.minContribution,
-                            ) / 1_000_000
+                            Number(selectedPool.meta.minContribution) /
+                            1_000_000
                           ).toLocaleString(undefined, {
                             maximumFractionDigits: 6,
                           })}{" "}
@@ -1592,8 +1559,7 @@ export default function Pools() {
                   <span className="text-muted-foreground">Total Raised</span>
                   <span className="font-mono">
                     {(
-                      Number(contributePool.totalContributed) /
-                      1_000_000
+                      Number(contributePool.totalContributed) / 1_000_000
                     ).toLocaleString(undefined, {
                       maximumFractionDigits: 6,
                     })}{" "}
@@ -1606,8 +1572,7 @@ export default function Pools() {
                   </span>
                   <span className="font-mono">
                     {(
-                      Number(contributePool.meta.minContribution) /
-                      1_000_000
+                      Number(contributePool.meta.minContribution) / 1_000_000
                     ).toLocaleString(undefined, {
                       maximumFractionDigits: 6,
                     })}{" "}
@@ -1636,9 +1601,7 @@ export default function Pools() {
                 <Label>Contribution Amount (ALEO)</Label>
                 <Input
                   type="number"
-                  min={
-                    Number(contributePool.meta.minContribution) / 1e6
-                  }
+                  min={Number(contributePool.meta.minContribution) / 1e6}
                   step="0.000001"
                   value={contributeAmount}
                   onChange={(e) => setContributeAmount(e.target.value)}
@@ -1649,10 +1612,7 @@ export default function Pools() {
           )}
 
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setContributeOpen(false)}
-            >
+            <Button variant="outline" onClick={() => setContributeOpen(false)}>
               Cancel
             </Button>
             <Button
