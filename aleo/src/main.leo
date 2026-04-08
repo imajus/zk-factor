@@ -118,7 +118,7 @@ program zk_factor_12255.aleo {
     // invoice_hash => claimed (true = recourse active, false = settled/cleared)
     mapping recourse_claims: field => bool;
 
-    // ── Legacy pool mappings (owner-based) ───────────────────────────────────
+    // ── Shared pool payout mappings (used by ownerless pool flows) ───────────
     mapping pool_contributions: field   => u64;      // total contributed to this pool
     mapping pool_closed:        field   => bool;     // true after pool is executed/closed
     mapping pool_proceeds:      field   => u64;      // settlement.amount (set by open_pool_distribution)
@@ -622,6 +622,10 @@ program zk_factor_12255.aleo {
             Mapping::set(pool_distributed, invoice_hash, 0u64);
         };
     }
+
+    // ─────────────────────────────────────────────────────────────
+    // SHARED POOL PROCEEDS CLAIM LOGIC
+    // ─────────────────────────────────────────────────────────────
 
     // Called by: Contributor (PoolShare owner) — shared by legacy and ownerless pools.
     // Payout = floor(pool_proceeds * contributed / pool_contributions).
