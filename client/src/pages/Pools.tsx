@@ -2,9 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import {
   RefreshCw,
   AlertCircle,
-  TrendingUp,
   Plus,
-  Layers,
   Info,
   Vote,
   Zap,
@@ -29,6 +27,7 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { AddressDisplay } from "@/components/ui/address-display";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { useWallet } from "@/contexts/WalletContext";
 import { useTransaction } from "@/hooks/use-transaction";
 import { toast } from "sonner";
@@ -44,12 +43,10 @@ import {
 } from "@/lib/aleo-factors";
 import {
   buildCreateOwnerlessPoolInputs,
-  buildPoolContributeInputs,
   buildPoolVoteInputs,
   buildExecuteApprovedPoolInputs,
   computePoolStats,
   encodePoolName,
-  fetchPublicCreditsBalance,
   fetchActiveFactorCount,
   fetchAllPools,
   type OnChainPoolState,
@@ -338,6 +335,7 @@ function PoolCreateDialog({
 
 export default function Pools() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { isConnected, requestRecords, address, activeRole } = useWallet();
   const { execute, status, error: txError, reset } = useTransaction();
 
@@ -345,23 +343,12 @@ export default function Pools() {
   const [pendingExecutionHash, setPendingExecutionHash] = useState<
     string | null
   >(null);
-  const [pendingDistributionHash, setPendingDistributionHash] = useState<
-    string | null
-  >(null);
-  const [contributeOpen, setContributeOpen] = useState(false);
-  const [contributePool, setContributePool] = useState<OnChainPoolState | null>(
-    null,
-  );
-  const [contributeAmount, setContributeAmount] = useState("");
-  const [publicBalance, setPublicBalance] = useState<bigint | null>(null);
   const [votedPoolHashes, setVotedPoolHashes] = useState<Set<string>>(
     () => new Set(),
   );
   const [pendingVoteInvoiceHash, setPendingVoteInvoiceHash] = useState<
     string | null
   >(null);
-  const [poolDetailOpen, setPoolDetailOpen] = useState(false);
-  const [selectedPoolHash, setSelectedPoolHash] = useState<string | null>(null);
 
   const [optimisticPools, setOptimisticPools] = useState<OnChainPoolState[]>(
     [],
@@ -475,16 +462,6 @@ export default function Pools() {
     };
   };
 
-  const openPoolDetails = (invoiceHash: string) => {
-    setSelectedPoolHash(invoiceHash);
-    setPoolDetailOpen(true);
-  };
-
-  const closePoolDetails = () => {
-    setPoolDetailOpen(false);
-    setSelectedPoolHash(null);
-  };
-
   const totalPools = visiblePools.length;
   const poolShareRecords = ((records as AleoRecord[]) ?? []).filter(
     (r) => r.recordName === "PoolShare" && !r.spent,
@@ -511,22 +488,12 @@ export default function Pools() {
       queryClient.invalidateQueries({ queryKey: ["all_pools"] });
       setClaimingShareId(null);
       setPendingExecutionHash(null);
-      setPendingDistributionHash(null);
-      setContributeOpen(false);
-      setContributePool(null);
-      setContributeAmount("");
-      setPublicBalance(null);
       reset();
     } else if (status === "failed") {
       setPendingVoteInvoiceHash(null);
       toast.error(txError || "Transaction failed", { id: "pool-op" });
       setClaimingShareId(null);
       setPendingExecutionHash(null);
-      setPendingDistributionHash(null);
-      setContributeOpen(false);
-      setContributePool(null);
-      setContributeAmount("");
-      setPublicBalance(null);
       reset();
     }
   }, [status, txError, queryClient, reset, pendingVoteInvoiceHash]);
@@ -548,79 +515,6 @@ export default function Pools() {
     queryClient.invalidateQueries({ queryKey: ["all_pools"] });
     reset();
   }, [status, pendingExecutionHash, onChainPools, queryClient, reset]);
-
-  useEffect(() => {
-    if (status !== "pending" || !pendingDistributionHash) return;
-
-    const pool = onChainPools.find(
-      (p) => p.meta.invoiceHash === pendingDistributionHash,
-    );
-    const distributionOpened =
-      !!pool && pool.proceeds !== null && pool.proceeds > 0n;
-
-    if (!distributionOpened) return;
-
-    toast.success("Distribution opened.", { id: "pool-op" });
-    setPendingDistributionHash(null);
-    queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
-    queryClient.invalidateQueries({ queryKey: ["all_pools"] });
-    reset();
-  }, [status, pendingDistributionHash, onChainPools, queryClient, reset]);
-
-  const openContribute = async (pool: OnChainPoolState) => {
-    setContributePool(pool);
-    setContributeAmount("");
-    setContributeOpen(true);
-    if (address) {
-      const balance = await fetchPublicCreditsBalance(address);
-      setPublicBalance(balance);
-    }
-  };
-
-  const handleContribute = async () => {
-    if (!contributePool || !address) return;
-    const amountAleo = parseFloat(contributeAmount);
-    if (Number.isNaN(amountAleo) || amountAleo <= 0) {
-      toast.error("Enter a valid amount.");
-      return;
-    }
-
-    const contribution = BigInt(Math.round(amountAleo * 1_000_000));
-    const minContrib = contributePool.meta.minContribution;
-    if (contribution < minContrib) {
-      toast.error(
-        `Minimum contribution is ${(Number(minContrib) / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 6 })} ALEO.`,
-      );
-      return;
-    }
-
-    if (publicBalance !== null && contribution > publicBalance) {
-      toast.error(
-        `Insufficient public credits balance (${(Number(publicBalance) / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 6 })} ALEO).`,
-      );
-      return;
-    }
-
-    if (!PROGRAM_ADDRESS) {
-      toast.error("PROGRAM_ADDRESS is not set.");
-      return;
-    }
-
-    const existingTotal = contributePool.totalContributed;
-
-    await execute({
-      program: PROGRAM_ID,
-      function: "pool_contribute",
-      inputs: buildPoolContributeInputs(
-        contributePool.meta.invoiceHash,
-        PROGRAM_ADDRESS,
-        contribution,
-        existingTotal,
-      ),
-      fee: 80_000,
-      privateFee: false,
-    });
-  };
 
   const handleVote = async (invoiceHash: string) => {
     if (
@@ -662,17 +556,6 @@ export default function Pools() {
         offer.dueDate,
       ),
       fee: 120_000,
-      privateFee: false,
-    });
-  };
-
-  const handleOpenDistribution = async (invoiceHash: string) => {
-    setPendingDistributionHash(invoiceHash);
-    await execute({
-      program: PROGRAM_ID,
-      function: "pool_open_distribution",
-      inputs: [invoiceHash],
-      fee: 80_000,
       privateFee: false,
     });
   };
@@ -790,15 +673,14 @@ export default function Pools() {
         {visiblePools.map((pool: OnChainPoolState) => {
           const raisedAleo = Number(pool.totalContributed) / 1_000_000;
           const poolStatus = getPoolStatus(pool);
-          const canOpenDistributionFromCard =
-            pool.isSettled && pool.isClosed && pool.proceeds === null;
 
           return (
-            <Card key={`pool-${pool.meta.invoiceHash}`}>
-              <CardContent
-                className="pt-4 space-y-3 cursor-pointer"
-                onClick={() => openPoolDetails(pool.meta.invoiceHash)}
-              >
+            <Card
+              key={`pool-${pool.meta.invoiceHash}`}
+              className="cursor-pointer hover:border-primary/50 transition-colors"
+              onClick={() => navigate(`/pools/${pool.meta.invoiceHash}`)}
+            >
+              <CardContent className="pt-4 space-y-3">
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="text-sm font-medium">{pool.meta.name}</p>
@@ -829,41 +711,6 @@ export default function Pools() {
                     </span>
                   </div>
                 </div>
-
-                {!pool.isClosed && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="w-full"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openContribute(pool);
-                    }}
-                    disabled={status !== "idle"}
-                  >
-                    Contribute
-                  </Button>
-                )}
-
-                {canOpenDistributionFromCard && (
-                  <div className="space-y-1.5">
-                    <Button
-                      size="sm"
-                      className="w-full"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleOpenDistribution(pool.meta.invoiceHash);
-                      }}
-                      disabled={status !== "idle"}
-                    >
-                      Open Distribution
-                    </Button>
-                    <p className="text-[11px] text-muted-foreground leading-relaxed">
-                      Permissionless — anyone can call this once debtor has
-                      paid.
-                    </p>
-                  </div>
-                )}
               </CardContent>
             </Card>
           );
@@ -1048,45 +895,6 @@ export default function Pools() {
       </div>
     );
   };
-
-  const selectedPool = selectedPoolHash
-    ? (visiblePools.find(
-        (pool) => pool.meta.invoiceHash === selectedPoolHash,
-      ) ?? null)
-    : null;
-  const selectedStats = selectedPool
-    ? computePoolStats(selectedPool, activeFactorCount)
-    : null;
-  const selectedStatus = selectedPool ? getPoolStatus(selectedPool) : null;
-  const canOpenSelectedDistribution =
-    !!selectedPool &&
-    selectedPool.isSettled &&
-    selectedPool.isClosed &&
-    selectedPool.proceeds === null;
-  const selectedPercentText = (() => {
-    if (!selectedPool) return "Loading";
-
-    if (selectedStats?.isFullyDistributed) {
-      return "100% complete";
-    }
-
-    if (selectedPool.pendingOffer?.isExecuted) {
-      if (selectedPool.proceeds && selectedPool.proceeds > 0n) {
-        const claimedPct =
-          Number((selectedPool.distributed * 10000n) / selectedPool.proceeds) /
-          100;
-        return `${claimedPct.toFixed(1)}% claimed`;
-      }
-      return "0.0% claimed";
-    }
-
-    return `${(
-      Number(selectedPool.totalContributed) / 1_000_000
-    ).toLocaleString(undefined, {
-      maximumFractionDigits: 6,
-    })} ALEO raised`;
-  })();
-  const selectedPoolName = selectedPool?.meta.name ?? "Pool";
 
   const poolByHash = new Map(
     visiblePools.map((pool) => [pool.meta.invoiceHash, pool]),
@@ -1326,304 +1134,6 @@ export default function Pools() {
           </p>
         </TabsContent>
       </Tabs>
-
-      <Dialog
-        open={poolDetailOpen && !!selectedPoolHash}
-        onOpenChange={(open) => {
-          if (!open) closePoolDetails();
-        }}
-      >
-        <DialogContent className="max-w-3xl overflow-y-auto max-h-[85vh]">
-          <DialogHeader>
-            <div className="flex items-start justify-between gap-3 pr-10">
-              <div>
-                <DialogTitle className="flex items-center gap-2">
-                  <Layers className="h-5 w-5 text-primary" />
-                  Pool Details
-                </DialogTitle>
-                <DialogDescription>
-                  Snapshot of funds, rates, participants, and related wallet
-                  addresses.
-                </DialogDescription>
-              </div>
-              <div className="flex flex-wrap justify-end gap-2 max-w-[70%]">
-                <Badge
-                  variant="outline"
-                  className={selectedStatus?.className ?? "text-xs"}
-                >
-                  {selectedStatus?.label ?? "Loading"}
-                </Badge>
-              </div>
-            </div>
-          </DialogHeader>
-
-          {selectedPoolHash && (
-            <div className="space-y-4">
-              <Card>
-                <CardContent className="pt-4 space-y-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-medium">{selectedPoolName}</p>
-                      <p className="font-mono text-xs text-muted-foreground break-all">
-                        {selectedPoolHash}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    <div className="rounded-md border bg-muted/30 p-3">
-                      <p className="text-xs text-muted-foreground">
-                        Current Funds
-                      </p>
-                      <p className="mt-1 font-mono text-sm font-semibold">
-                        {`${(Number(selectedPool?.totalContributed ?? 0n) / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 6 })} ALEO`}
-                      </p>
-                    </div>
-
-                    <div className="rounded-md border bg-muted/30 p-3">
-                      <p className="text-xs text-muted-foreground">Percent</p>
-                      <p className="mt-1 font-mono text-sm font-semibold">
-                        {selectedPercentText}
-                      </p>
-                    </div>
-
-                    <div className="rounded-md border bg-muted/30 p-3">
-                      <p className="text-xs text-muted-foreground">
-                        Addresses Involved
-                      </p>
-                      <p className="mt-1 text-sm font-medium">
-                        {selectedPool?.pendingOffer
-                          ? "Creditor + debtor"
-                          : "Pending offer not submitted"}
-                      </p>
-                    </div>
-                  </div>
-
-                  {selectedPool?.pendingOffer && (
-                    <div className="rounded-md border bg-muted/30 p-3 space-y-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge
-                          variant="secondary"
-                          className="text-[10px] uppercase tracking-wide"
-                        >
-                          Pending Offer
-                        </Badge>
-                        <Badge variant="outline" className="text-xs">
-                          {selectedStats?.voteCount ?? 0} /{" "}
-                          {selectedStats?.threshold ?? 0} votes
-                        </Badge>
-                      </div>
-                      <div className="grid gap-2 sm:grid-cols-2 text-sm">
-                        <div className="flex justify-between gap-2">
-                          <span className="text-muted-foreground">
-                            Creditor
-                          </span>
-                          <AddressDisplay
-                            address={selectedPool.pendingOffer.originalCreditor}
-                            chars={5}
-                            showExplorer
-                          />
-                        </div>
-                        <div className="flex justify-between gap-2">
-                          <span className="text-muted-foreground">Debtor</span>
-                          <AddressDisplay
-                            address={selectedPool.pendingOffer.debtor}
-                            chars={5}
-                            showExplorer
-                          />
-                        </div>
-                        <div className="flex justify-between gap-2">
-                          <span className="text-muted-foreground">
-                            Advance Rate
-                          </span>
-                          <span className="font-mono">
-                            {(
-                              selectedPool.pendingOffer.advanceRate / 100
-                            ).toFixed(2)}
-                            %
-                          </span>
-                        </div>
-                        <div className="flex justify-between gap-2">
-                          <span className="text-muted-foreground">
-                            Advance Amount
-                          </span>
-                          <span className="font-mono">
-                            {(
-                              Number(selectedPool.pendingOffer.advanceAmount) /
-                              1_000_000
-                            ).toLocaleString(undefined, {
-                              maximumFractionDigits: 6,
-                            })}{" "}
-                            ALEO
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-              <PoolTimeline
-                pool={selectedPool}
-                activeFactorCount={activeFactorCount}
-                layout="horizontal"
-              />
-
-              {canOpenSelectedDistribution && (
-                <Card className="border-dashed">
-                  <CardContent className="pt-4 space-y-2">
-                    <Button
-                      className="w-full"
-                      onClick={() =>
-                        handleOpenDistribution(selectedPool.meta.invoiceHash)
-                      }
-                      disabled={status !== "idle"}
-                    >
-                      Open Distribution
-                    </Button>
-                    <p className="text-xs text-muted-foreground text-center">
-                      Permissionless — anyone can call this once debtor has
-                      paid.
-                    </p>
-                  </CardContent>
-                </Card>
-              )}
-
-              <Card className="border-dashed">
-                <CardContent className="pt-4 space-y-3 text-sm">
-                  {selectedPool && (
-                    <>
-                      <div className="flex items-start justify-between gap-3">
-                        <span className="text-muted-foreground">
-                          Advance Range
-                        </span>
-                        <span className="font-mono text-right">
-                          {selectedPool.meta.minAdvanceRate / 100}% -{" "}
-                          {selectedPool.meta.maxAdvanceRate / 100}%
-                        </span>
-                      </div>
-                      <div className="flex items-start justify-between gap-3">
-                        <span className="text-muted-foreground">
-                          Minimum Contribution
-                        </span>
-                        <span className="font-mono text-right">
-                          {(
-                            Number(selectedPool.meta.minContribution) /
-                            1_000_000
-                          ).toLocaleString(undefined, {
-                            maximumFractionDigits: 6,
-                          })}{" "}
-                          ALEO
-                        </span>
-                      </div>
-                    </>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={contributeOpen}
-        onOpenChange={(open) => {
-          setContributeOpen(open);
-          if (!open) {
-            setContributePool(null);
-            setContributeAmount("");
-            setPublicBalance(null);
-          }
-        }}
-      >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-blue-500" />
-              Contribute to Pool
-            </DialogTitle>
-            <DialogDescription>
-              Credits go to protocol escrow and you receive a PoolShare record.
-            </DialogDescription>
-          </DialogHeader>
-
-          {contributePool && (
-            <div className="space-y-4 py-2">
-              <div className="bg-muted rounded-lg p-3 text-sm space-y-1.5">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Pool</span>
-                  <span className="font-medium">
-                    {contributePool.meta.name}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Total Raised</span>
-                  <span className="font-mono">
-                    {(
-                      Number(contributePool.totalContributed) / 1_000_000
-                    ).toLocaleString(undefined, {
-                      maximumFractionDigits: 6,
-                    })}{" "}
-                    ALEO
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">
-                    Min contribution
-                  </span>
-                  <span className="font-mono">
-                    {(
-                      Number(contributePool.meta.minContribution) / 1_000_000
-                    ).toLocaleString(undefined, {
-                      maximumFractionDigits: 6,
-                    })}{" "}
-                    ALEO
-                  </span>
-                </div>
-                {publicBalance !== null && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">
-                      Your public balance
-                    </span>
-                    <span className="font-mono">
-                      {(Number(publicBalance) / 1_000_000).toLocaleString(
-                        undefined,
-                        {
-                          maximumFractionDigits: 6,
-                        },
-                      )}{" "}
-                      ALEO
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label>Contribution Amount (ALEO)</Label>
-                <Input
-                  type="number"
-                  min={Number(contributePool.meta.minContribution) / 1e6}
-                  step="0.000001"
-                  value={contributeAmount}
-                  onChange={(e) => setContributeAmount(e.target.value)}
-                  placeholder="e.g. 25"
-                />
-              </div>
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setContributeOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleContribute}
-              disabled={status !== "idle" || !contributeAmount}
-            >
-              {status !== "idle" ? "Contributing..." : "Contribute"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
