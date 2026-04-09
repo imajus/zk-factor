@@ -514,3 +514,14 @@ export function buildClaimPoolProceedsInputs(
 ): string[] {
   return [sharePlaintext, `${expectedPayout}u64`];
 }
+
+export function buildPoolWithdrawInputs(
+  sharePlaintext: string,
+  withdrawAmount: bigint,
+): string[] {
+  return [sharePlaintext, `${withdrawAmount}u64`];
+}
+
+export function buildPoolWithdrawAllInputs(sharePlaintext: string): string[] {
+  return [sharePlaintext];
+}

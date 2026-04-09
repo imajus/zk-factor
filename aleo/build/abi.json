@@ -1603,6 +1603,212 @@
       ]
     },
     {
+      "name": "pool_withdraw",
+      "is_final": true,
+      "inputs": [
+        {
+          "name": "share",
+          "ty": {
+            "Record": {
+              "path": [
+                "PoolShare"
+              ],
+              "program": "zk_factor_12255.aleo"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "withdraw_amount",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        }
+      ],
+      "outputs": [
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "PoolShare"
+              ],
+              "program": "zk_factor_12255.aleo"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "credits"
+              ],
+              "program": "credits.aleo"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "ty": "Final",
+          "mode": "None"
+        }
+      ]
+    },
+    {
+      "name": "pool_withdraw_all",
+      "is_final": true,
+      "inputs": [
+        {
+          "name": "share",
+          "ty": {
+            "Record": {
+              "path": [
+                "PoolShare"
+              ],
+              "program": "zk_factor_12255.aleo"
+            }
+          },
+          "mode": "None"
+        }
+      ],
+      "outputs": [
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "credits"
+              ],
+              "program": "credits.aleo"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "ty": "Final",
+          "mode": "None"
+        }
+      ]
+    },
+    {
+      "name": "pool_withdraw_token",
+      "is_final": true,
+      "inputs": [
+        {
+          "name": "share",
+          "ty": {
+            "Record": {
+              "path": [
+                "PoolShare"
+              ],
+              "program": "zk_factor_12255.aleo"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "withdraw_amount",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        }
+      ],
+      "outputs": [
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "PoolShare"
+              ],
+              "program": "zk_factor_12255.aleo"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "ComplianceRecord"
+              ],
+              "program": "test_usdcx_stablecoin.aleo"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "Token"
+              ],
+              "program": "test_usdcx_stablecoin.aleo"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "ty": "Final",
+          "mode": "None"
+        }
+      ]
+    },
+    {
+      "name": "pool_withdraw_all_token",
+      "is_final": true,
+      "inputs": [
+        {
+          "name": "share",
+          "ty": {
+            "Record": {
+              "path": [
+                "PoolShare"
+              ],
+              "program": "zk_factor_12255.aleo"
+            }
+          },
+          "mode": "None"
+        }
+      ],
+      "outputs": [
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "ComplianceRecord"
+              ],
+              "program": "test_usdcx_stablecoin.aleo"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "Token"
+              ],
+              "program": "test_usdcx_stablecoin.aleo"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "ty": "Final",
+          "mode": "None"
+        }
+      ]
+    },
+    {
       "name": "pool_submit_invoice",
       "is_final": true,
       "inputs": [

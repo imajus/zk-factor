@@ -180,6 +180,16 @@ export default function Pool() {
                 </div>
               </div>
 
+              {pool.totalContributed <= 0n && (
+                <div className="rounded-md border border-amber-300/60 bg-amber-950/5 p-3 text-xs text-amber-700 dark:text-amber-400 space-y-1">
+                  <p className="font-medium">Pool has no funds yet</p>
+                  <p>
+                    Invoice submissions will be rejected until contributors add
+                    liquidity to this pool.
+                  </p>
+                </div>
+              )}
+
               {pool.pendingOffer && (
                 <div className="rounded-md border bg-muted/20 p-3 space-y-2 text-sm">
                   <div className="flex flex-wrap items-center gap-2">
