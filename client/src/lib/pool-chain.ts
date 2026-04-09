@@ -10,7 +10,7 @@
  */
 
 import { AleoNetworkClient } from "@provablehq/sdk";
-import { PROGRAM_ID, API_ENDPOINT, USDCX_PROGRAM_ID } from "@/lib/config";
+import { API_ENDPOINT, POOL_PROGRAM_ID, USDCX_PROGRAM_ID } from "@/lib/config";
 import type { PaymentCurrency } from "@/lib/config";
 
 // ── Types ─────────────────────────────────────────────────────────────
@@ -111,7 +111,11 @@ async function safeGet(
   key: string,
 ): Promise<string | null> {
   try {
-    const v = await client.getProgramMappingValue(PROGRAM_ID, mapping, key);
+    const v = await client.getProgramMappingValue(
+      POOL_PROGRAM_ID,
+      mapping,
+      key,
+    );
     return v ? String(v) : null;
   } catch {
     return null;
@@ -136,7 +140,7 @@ export async function fetchPoolHashes(): Promise<string[]> {
   const results = await Promise.all(
     Array.from({ length: len }, (_, i) =>
       client
-        .getProgramMappingValue(PROGRAM_ID, "pool_registry__", `${i}u32`)
+        .getProgramMappingValue(POOL_PROGRAM_ID, "pool_registry__", `${i}u32`)
         .then((v) => String(v).trim())
         .catch(() => null),
     ),
@@ -513,15 +517,4 @@ export function buildClaimPoolProceedsInputs(
   expectedPayout: bigint,
 ): string[] {
   return [sharePlaintext, `${expectedPayout}u64`];
-}
-
-export function buildPoolWithdrawInputs(
-  sharePlaintext: string,
-  withdrawAmount: bigint,
-): string[] {
-  return [sharePlaintext, `${withdrawAmount}u64`];
-}
-
-export function buildPoolWithdrawAllInputs(sharePlaintext: string): string[] {
-  return [sharePlaintext];
 }

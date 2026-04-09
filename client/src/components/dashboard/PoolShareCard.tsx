@@ -33,7 +33,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { PROGRAM_ID, PROGRAM_ADDRESS, USDCX_PROGRAM_ID } from "@/lib/config";
+import {
+  POOL_PROGRAM_ID,
+  POOL_PROGRAM_ADDRESS,
+  USDCX_PROGRAM_ID,
+} from "@/lib/config";
 import { type AleoRecord, getField } from "@/lib/aleo-records";
 import {
   fetchPoolState,
@@ -45,8 +49,6 @@ import {
   buildPoolContributeInputs,
   buildPoolOpenDistributionInputs,
   buildClaimPoolProceedsInputs,
-  buildPoolWithdrawInputs,
-  buildPoolWithdrawAllInputs,
 } from "@/lib/pool-chain";
 import { fetchPoolContributions } from "@/lib/aleo-factors";
 
@@ -60,9 +62,6 @@ export function PoolShareCard({ record }: PoolShareCardProps) {
   const { execute, status } = useTransaction();
   const isWorking = status !== "idle";
   const [manageOpen, setManageOpen] = useState(false);
-  const [manageMode, setManageMode] = useState<"contribute" | "withdraw">(
-    "contribute",
-  );
   const [manageAmount, setManageAmount] = useState("");
   const [publicBalance, setPublicBalance] = useState<bigint | null>(null);
 
@@ -175,7 +174,7 @@ export function PoolShareCard({ record }: PoolShareCardProps) {
   const handleOpenDistribution = async () => {
     try {
       await execute({
-        program: PROGRAM_ID,
+        program: POOL_PROGRAM_ID,
         function: "pool_open_distribution",
         inputs: buildPoolOpenDistributionInputs(invoiceHash),
         fee: 50_000,
@@ -213,13 +212,13 @@ export function PoolShareCard({ record }: PoolShareCardProps) {
 
     try {
       await execute({
-        program: PROGRAM_ID,
+        program: POOL_PROGRAM_ID,
         function: "claim_pool_proceeds",
         inputs: buildClaimPoolProceedsInputs(record.recordPlaintext, payout),
         fee: 80_000,
         privateFee: false,
       });
-      queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
+      queryClient.invalidateQueries({ queryKey: ["records", POOL_PROGRAM_ID] });
       queryClient.invalidateQueries({ queryKey: ["pool_state", invoiceHash] });
       toast.success("Proceeds claimed!");
     } catch (err) {
@@ -227,17 +226,12 @@ export function PoolShareCard({ record }: PoolShareCardProps) {
     }
   };
 
-  const openManageDialog = (mode: "contribute" | "withdraw") => {
-    setManageMode(mode);
+  const openManageDialog = () => {
     setManageAmount("");
     setManageOpen(true);
   };
 
   const handleSetMax = () => {
-    if (manageMode === "withdraw") {
-      setManageAmount(formatInputAmount(contributed));
-      return;
-    }
     if (publicBalance !== null) {
       setManageAmount(formatInputAmount(publicBalance));
     }
@@ -255,109 +249,57 @@ export function PoolShareCard({ record }: PoolShareCardProps) {
       return;
     }
 
-    if (manageMode === "contribute") {
-      if (poolState.isClosed) {
-        toast.error("Pool is closed. Contributions are disabled.");
-        return;
-      }
-      if (!PROGRAM_ADDRESS) {
-        toast.error("PROGRAM_ADDRESS is not set.");
-        return;
-      }
-      if (publicBalance !== null && amountMicro > publicBalance) {
-        toast.error(
-          `Insufficient public ${shareCurrency} balance (${formatInputAmount(publicBalance)} ${shareCurrency}).`,
-        );
-        return;
-      }
-
-      try {
-        if (shareCurrency === "USDCx") {
-          await execute({
-            program: USDCX_PROGRAM_ID,
-            function: "approve_public",
-            inputs: [PROGRAM_ID, `${amountMicro}u128`],
-            fee: 50_000,
-            privateFee: false,
-          });
-        }
-
-        await execute({
-          program: PROGRAM_ID,
-          function:
-            shareCurrency === "USDCx"
-              ? "pool_contribute_token"
-              : "pool_contribute",
-          inputs: buildPoolContributeInputs(
-            invoiceHash,
-            PROGRAM_ADDRESS,
-            amountMicro,
-            poolState.totalContributed,
-          ),
-          fee: 80_000,
-          privateFee: false,
-        });
-
-        toast.success("Contribution added.");
-        setManageOpen(false);
-        setManageAmount("");
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Contribution failed");
-        return;
-      }
-    } else {
-      if (poolState.isClosed) {
-        toast.error("Pool is closed. Withdrawals are disabled.");
-        return;
-      }
-      if (poolState.pendingOffer && !poolState.pendingOffer.isExecuted) {
-        toast.error(
-          "Cannot withdraw while a pool offer is pending vote/execution.",
-        );
-        return;
-      }
-      if (amountMicro > contributed) {
-        toast.error("Withdrawal amount exceeds your current contribution.");
-        return;
-      }
-
-      const fullWithdraw = amountMicro === contributed;
-      const withdrawFunction =
-        shareCurrency === "USDCx"
-          ? fullWithdraw
-            ? "pool_withdraw_all_token"
-            : "pool_withdraw_token"
-          : fullWithdraw
-            ? "pool_withdraw_all"
-            : "pool_withdraw";
-
-      const withdrawInputs = fullWithdraw
-        ? buildPoolWithdrawAllInputs(record.recordPlaintext)
-        : buildPoolWithdrawInputs(record.recordPlaintext, amountMicro);
-
-      try {
-        await execute({
-          program: PROGRAM_ID,
-          function: withdrawFunction,
-          inputs: withdrawInputs,
-          fee: 80_000,
-          privateFee: false,
-        });
-
-        toast.success(
-          fullWithdraw
-            ? "Contribution fully withdrawn."
-            : "Partial withdrawal completed.",
-        );
-        setManageOpen(false);
-        setManageAmount("");
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Withdrawal failed");
-        return;
-      }
+    if (poolState.isClosed) {
+      toast.error("Pool is closed. Contributions are disabled.");
+      return;
+    }
+    if (!POOL_PROGRAM_ADDRESS) {
+      toast.error("POOL_PROGRAM_ADDRESS is not set.");
+      return;
+    }
+    if (publicBalance !== null && amountMicro > publicBalance) {
+      toast.error(
+        `Insufficient public ${shareCurrency} balance (${formatInputAmount(publicBalance)} ${shareCurrency}).`,
+      );
+      return;
     }
 
-    queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
+    try {
+      if (shareCurrency === "USDCx") {
+        await execute({
+          program: USDCX_PROGRAM_ID,
+          function: "approve_public",
+          inputs: [POOL_PROGRAM_ID, `${amountMicro}u128`],
+          fee: 50_000,
+          privateFee: false,
+        });
+      }
+
+      await execute({
+        program: POOL_PROGRAM_ID,
+        function:
+          shareCurrency === "USDCx"
+            ? "pool_contribute_token"
+            : "pool_contribute",
+        inputs: buildPoolContributeInputs(
+          invoiceHash,
+          POOL_PROGRAM_ADDRESS,
+          amountMicro,
+          poolState.totalContributed,
+        ),
+        fee: 80_000,
+        privateFee: false,
+      });
+
+      toast.success("Contribution added.");
+      setManageOpen(false);
+      setManageAmount("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Contribution failed");
+      return;
+    }
+
+    queryClient.invalidateQueries({ queryKey: ["records", POOL_PROGRAM_ID] });
     queryClient.invalidateQueries({ queryKey: ["pool_state", invoiceHash] });
     queryClient.invalidateQueries({ queryKey: ["all_pools"] });
   };
@@ -442,24 +384,14 @@ export function PoolShareCard({ record }: PoolShareCardProps) {
         )}
 
         {/* Manage contribution */}
-        <div className="grid grid-cols-2 gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => openManageDialog("contribute")}
-            disabled={isWorking || !poolState || poolState.isClosed}
-          >
-            Add Funds
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => openManageDialog("withdraw")}
-            disabled={isWorking || !poolState || poolState.isClosed}
-          >
-            Withdraw
-          </Button>
-        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={openManageDialog}
+          disabled={isWorking || !poolState || poolState.isClosed}
+        >
+          Add Funds
+        </Button>
 
         {/* Waiting state */}
         {!needsDistributionOpen &&
@@ -494,25 +426,6 @@ export function PoolShareCard({ record }: PoolShareCardProps) {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                type="button"
-                variant={manageMode === "contribute" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setManageMode("contribute")}
-              >
-                Contribute More
-              </Button>
-              <Button
-                type="button"
-                variant={manageMode === "withdraw" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setManageMode("withdraw")}
-              >
-                Withdraw
-              </Button>
-            </div>
-
             <div className="space-y-2">
               <Label htmlFor={`manage-amount-${invoiceHash}`}>
                 Amount ({shareCurrency})
@@ -532,7 +445,7 @@ export function PoolShareCard({ record }: PoolShareCardProps) {
                   Max
                 </Button>
               </div>
-              {manageMode === "contribute" && publicBalance !== null && (
+              {publicBalance !== null && (
                 <p className="text-xs text-muted-foreground">
                   Public balance: {formatInputAmount(publicBalance)}{" "}
                   {shareCurrency}
@@ -555,11 +468,7 @@ export function PoolShareCard({ record }: PoolShareCardProps) {
               onClick={handleManageSubmit}
               disabled={isWorking}
             >
-              {isWorking
-                ? "Submitting…"
-                : manageMode === "contribute"
-                  ? "Contribute"
-                  : "Withdraw"}
+              {isWorking ? "Submitting…" : "Contribute"}
             </Button>
           </DialogFooter>
         </DialogContent>

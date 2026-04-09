@@ -13,6 +13,12 @@ export const PROGRAM_ADDRESS: string =
   import.meta.env.VITE_PROGRAM_ADDRESS ??
   "aleo1s8hgprffm0tqdc9d4q5mshu90efwcg7qfvwzyr3r9wpangazrq8s5yfww6";
 
+export const POOL_PROGRAM_ID: string =
+  import.meta.env.VITE_POOL_PROGRAM_ID ?? PROGRAM_ID;
+
+export const POOL_PROGRAM_ADDRESS: string =
+  import.meta.env.VITE_POOL_PROGRAM_ADDRESS ?? PROGRAM_ADDRESS;
+
 export const NETWORK: Network = resolveNetwork(
   import.meta.env.VITE_ALEO_NETWORK ?? "testnet",
 );
@@ -32,6 +38,7 @@ export type PaymentCurrency = "ALEO" | "USDCx";
 
 export const WHITELISTED_PROGRAMS: string[] = [
   PROGRAM_ID,
+  POOL_PROGRAM_ID,
   "credits.aleo",
   USDCX_PROGRAM_ID,
 ];

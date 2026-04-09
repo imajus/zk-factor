@@ -102,8 +102,7 @@ final fn record_settlement(invoice_hash: field, factor: address, amount: u64) {
 // ─────────────────────────────────────────────────────────────────────────────
 // PROGRAM
 // ─────────────────────────────────────────────────────────────────────────────
-
-program zk_factor_12255.aleo {
+program zk_factor_12256.aleo {
     // IMPORTANT: Replace with actual admin address before deployment.
     // See aleo/docs/deployment.md for admin key management.
     @admin(address="aleo19rn544c49da9z2vz52q5f7lm7nsjhp890ahmre6cz94qawdscgps6kq3cu")
@@ -600,30 +599,6 @@ program zk_factor_12255.aleo {
         });
     }
 
-    // Called by: Pool owner.
-    // Step 1: Transfer settlement.amount credits to PROGRAM_ADDRESS via
-    //   credits.aleo::transfer_public(PROGRAM_ADDRESS, amount)
-    // Step 2: Call this transition to register the proceeds on-chain.
-    // Can only be called once per pool (idempotency guard).
-    fn open_pool_distribution(
-        invoice_hash: field,
-    ) -> Final {
-        let caller: address = self.caller;
-        return final {
-            let registered_owner: address = Mapping::get(pool_owners, invoice_hash);
-            assert(registered_owner == caller);
-            let settlement: SettlementInfo = Mapping::get(settled_invoices, invoice_hash);
-            assert(settlement.is_settled);
-            assert(settlement.amount > 0u64);
-            let is_closed: bool = Mapping::get_or_use(pool_closed, invoice_hash, false);
-            assert(is_closed);
-            // Idempotency — can only open once.
-            assert(!Mapping::contains(pool_proceeds, invoice_hash));
-            Mapping::set(pool_proceeds, invoice_hash, settlement.amount);
-            Mapping::set(pool_distributed, invoice_hash, 0u64);
-        };
-    }
-
     // ─────────────────────────────────────────────────────────────
     // SHARED POOL PROCEEDS CLAIM LOGIC
     // ─────────────────────────────────────────────────────────────
@@ -797,184 +772,7 @@ program zk_factor_12255.aleo {
         });
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // OWNERLESS POOL — WITHDRAW CONTRIBUTION
-    // ─────────────────────────────────────────────────────────────
-    // Burns an existing PoolShare and withdraws funds from program escrow.
-    // Partial withdraw mints a replacement PoolShare for remaining amount.
-    // Full withdraw returns all contributed funds and mints no replacement share.
-    // Withdrawals are blocked while an active (not-yet-executed) offer exists.
 
-    fn pool_withdraw(
-        share: PoolShare,
-        withdraw_amount: u64,
-    ) -> (PoolShare, credits.aleo::credits, Final) {
-        assert(withdraw_amount > 0u64);
-        assert(withdraw_amount < share.contributed);
-        assert(share.owner == self.caller);
-
-        let remaining: u64 = share.contributed - withdraw_amount;
-        let updated_share: PoolShare = PoolShare {
-            owner:        share.owner,
-            pool_id:      share.pool_id,
-            invoice_hash: share.invoice_hash,
-            contributed:  remaining,
-            total_pool:   share.total_pool,
-        };
-
-        let invoice_hash: field = share.invoice_hash;
-        let (withdraw_record, f_withdraw): (credits.aleo::credits, Final) =
-            credits.aleo::transfer_public_to_private(share.owner, withdraw_amount);
-
-        return (updated_share, withdraw_record, final {
-            let use_token: bool = Mapping::get_or_use(pool_use_token, invoice_hash, false);
-            assert(!use_token);
-
-            let is_closed: bool = Mapping::get_or_use(pool_closed, invoice_hash, false);
-            assert(!is_closed);
-
-            let has_offer: bool = Mapping::contains(pool_pending_offer, invoice_hash);
-            if has_offer {
-                let offer: PendingPoolOffer = Mapping::get(pool_pending_offer, invoice_hash);
-                assert(offer.is_executed);
-            }
-
-            let current: u64 = Mapping::get_or_use(pool_contributions, invoice_hash, 0u64);
-            assert(current >= withdraw_amount);
-            Mapping::set(pool_contributions, invoice_hash, current - withdraw_amount);
-
-            f_withdraw.run();
-        });
-    }
-
-    fn pool_withdraw_all(
-        share: PoolShare,
-    ) -> (credits.aleo::credits, Final) {
-        assert(share.contributed > 0u64);
-        assert(share.owner == self.caller);
-
-        let invoice_hash: field = share.invoice_hash;
-        let withdraw_amount: u64 = share.contributed;
-        let (withdraw_record, f_withdraw): (credits.aleo::credits, Final) =
-            credits.aleo::transfer_public_to_private(share.owner, withdraw_amount);
-
-        return (withdraw_record, final {
-            let use_token: bool = Mapping::get_or_use(pool_use_token, invoice_hash, false);
-            assert(!use_token);
-
-            let is_closed: bool = Mapping::get_or_use(pool_closed, invoice_hash, false);
-            assert(!is_closed);
-
-            let has_offer: bool = Mapping::contains(pool_pending_offer, invoice_hash);
-            if has_offer {
-                let offer: PendingPoolOffer = Mapping::get(pool_pending_offer, invoice_hash);
-                assert(offer.is_executed);
-            }
-
-            let current: u64 = Mapping::get_or_use(pool_contributions, invoice_hash, 0u64);
-            assert(current >= withdraw_amount);
-            Mapping::set(pool_contributions, invoice_hash, current - withdraw_amount);
-
-            f_withdraw.run();
-        });
-    }
-
-    fn pool_withdraw_token(
-        share: PoolShare,
-        withdraw_amount: u64,
-    ) -> (
-        PoolShare,
-        test_usdcx_stablecoin.aleo::ComplianceRecord,
-        test_usdcx_stablecoin.aleo::Token,
-        Final,
-    ) {
-        assert(withdraw_amount > 0u64);
-        assert(withdraw_amount < share.contributed);
-        assert(share.owner == self.caller);
-
-        let remaining: u64 = share.contributed - withdraw_amount;
-        let updated_share: PoolShare = PoolShare {
-            owner:        share.owner,
-            pool_id:      share.pool_id,
-            invoice_hash: share.invoice_hash,
-            contributed:  remaining,
-            total_pool:   share.total_pool,
-        };
-
-        let invoice_hash: field = share.invoice_hash;
-        let (compliance_record, withdraw_record, f_withdraw): (
-            test_usdcx_stablecoin.aleo::ComplianceRecord,
-            test_usdcx_stablecoin.aleo::Token,
-            Final,
-        ) =
-            test_usdcx_stablecoin.aleo::transfer_public_to_private(
-                share.owner,
-                withdraw_amount as u128,
-            );
-
-        return (updated_share, compliance_record, withdraw_record, final {
-            let use_token: bool = Mapping::get_or_use(pool_use_token, invoice_hash, false);
-            assert(use_token);
-
-            let is_closed: bool = Mapping::get_or_use(pool_closed, invoice_hash, false);
-            assert(!is_closed);
-
-            let has_offer: bool = Mapping::contains(pool_pending_offer, invoice_hash);
-            if has_offer {
-                let offer: PendingPoolOffer = Mapping::get(pool_pending_offer, invoice_hash);
-                assert(offer.is_executed);
-            }
-
-            let current: u64 = Mapping::get_or_use(pool_contributions, invoice_hash, 0u64);
-            assert(current >= withdraw_amount);
-            Mapping::set(pool_contributions, invoice_hash, current - withdraw_amount);
-
-            f_withdraw.run();
-        });
-    }
-
-    fn pool_withdraw_all_token(
-        share: PoolShare,
-    ) -> (
-        test_usdcx_stablecoin.aleo::ComplianceRecord,
-        test_usdcx_stablecoin.aleo::Token,
-        Final,
-    ) {
-        assert(share.contributed > 0u64);
-        assert(share.owner == self.caller);
-
-        let invoice_hash: field = share.invoice_hash;
-        let withdraw_amount: u64 = share.contributed;
-        let (compliance_record, withdraw_record, f_withdraw): (
-            test_usdcx_stablecoin.aleo::ComplianceRecord,
-            test_usdcx_stablecoin.aleo::Token,
-            Final,
-        ) =
-            test_usdcx_stablecoin.aleo::transfer_public_to_private(
-                share.owner,
-                withdraw_amount as u128,
-            );
-
-        return (compliance_record, withdraw_record, final {
-            let use_token: bool = Mapping::get_or_use(pool_use_token, invoice_hash, false);
-            assert(use_token);
-
-            let is_closed: bool = Mapping::get_or_use(pool_closed, invoice_hash, false);
-            assert(!is_closed);
-
-            let has_offer: bool = Mapping::contains(pool_pending_offer, invoice_hash);
-            if has_offer {
-                let offer: PendingPoolOffer = Mapping::get(pool_pending_offer, invoice_hash);
-                assert(offer.is_executed);
-            }
-
-            let current: u64 = Mapping::get_or_use(pool_contributions, invoice_hash, 0u64);
-            assert(current >= withdraw_amount);
-            Mapping::set(pool_contributions, invoice_hash, current - withdraw_amount);
-
-            f_withdraw.run();
-        });
-    }
 
     // ─────────────────────────────────────────────────────────────
     // OWNERLESS POOL — BUSINESS SUBMITS INVOICE

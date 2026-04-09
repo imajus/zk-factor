@@ -1,5 +1,5 @@
 {
-  "program": "zk_factor_12254.aleo",
+  "program": "zk_factor_12256.aleo",
   "structs": [
     {
       "path": [
@@ -621,7 +621,7 @@
           "path": [
             "FactorInfo"
           ],
-          "program": "zk_factor_12254.aleo"
+          "program": "zk_factor_12256.aleo"
         }
       }
     },
@@ -635,7 +635,7 @@
           "path": [
             "SettlementInfo"
           ],
-          "program": "zk_factor_12254.aleo"
+          "program": "zk_factor_12256.aleo"
         }
       }
     },
@@ -670,15 +670,6 @@
         "Primitive": {
           "UInt": "U64"
         }
-      }
-    },
-    {
-      "name": "pool_owners",
-      "key": {
-        "Primitive": "Field"
-      },
-      "value": {
-        "Primitive": "Address"
       }
     },
     {
@@ -722,8 +713,17 @@
           "path": [
             "PoolMeta"
           ],
-          "program": "zk_factor_12254.aleo"
+          "program": "zk_factor_12256.aleo"
         }
+      }
+    },
+    {
+      "name": "pool_use_token",
+      "key": {
+        "Primitive": "Field"
+      },
+      "value": {
+        "Primitive": "Boolean"
       }
     },
     {
@@ -736,7 +736,7 @@
           "path": [
             "PendingPoolOffer"
           ],
-          "program": "zk_factor_12254.aleo"
+          "program": "zk_factor_12256.aleo"
         }
       }
     },
@@ -887,7 +887,7 @@
               "path": [
                 "Invoice"
               ],
-              "program": "zk_factor_12254.aleo"
+              "program": "zk_factor_12256.aleo"
             }
           },
           "mode": "None"
@@ -954,7 +954,7 @@
               "path": [
                 "Invoice"
               ],
-              "program": "zk_factor_12254.aleo"
+              "program": "zk_factor_12256.aleo"
             }
           },
           "mode": "None"
@@ -1005,7 +1005,7 @@
               "path": [
                 "FactoringOffer"
               ],
-              "program": "zk_factor_12254.aleo"
+              "program": "zk_factor_12256.aleo"
             }
           },
           "mode": "None"
@@ -1027,7 +1027,7 @@
               "path": [
                 "Invoice"
               ],
-              "program": "zk_factor_12254.aleo"
+              "program": "zk_factor_12256.aleo"
             }
           },
           "mode": "None"
@@ -1089,7 +1089,7 @@
               "path": [
                 "FactoringOffer"
               ],
-              "program": "zk_factor_12254.aleo"
+              "program": "zk_factor_12256.aleo"
             }
           },
           "mode": "None"
@@ -1100,7 +1100,7 @@
               "path": [
                 "Invoice"
               ],
-              "program": "zk_factor_12254.aleo"
+              "program": "zk_factor_12256.aleo"
             }
           },
           "mode": "None"
@@ -1122,7 +1122,7 @@
               "path": [
                 "FactoringOffer"
               ],
-              "program": "zk_factor_12254.aleo"
+              "program": "zk_factor_12256.aleo"
             }
           },
           "mode": "None"
@@ -1147,7 +1147,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_12254.aleo"
+              "program": "zk_factor_12256.aleo"
             }
           },
           "mode": "None"
@@ -1191,7 +1191,7 @@
               "path": [
                 "FactoringOffer"
               ],
-              "program": "zk_factor_12254.aleo"
+              "program": "zk_factor_12256.aleo"
             }
           },
           "mode": "None"
@@ -1204,7 +1204,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_12254.aleo"
+              "program": "zk_factor_12256.aleo"
             }
           },
           "mode": "None"
@@ -1226,7 +1226,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_12254.aleo"
+              "program": "zk_factor_12256.aleo"
             }
           },
           "mode": "None"
@@ -1250,7 +1250,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_12254.aleo"
+              "program": "zk_factor_12256.aleo"
             }
           },
           "mode": "None"
@@ -1263,7 +1263,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_12254.aleo"
+              "program": "zk_factor_12256.aleo"
             }
           },
           "mode": "None"
@@ -1274,7 +1274,7 @@
               "path": [
                 "PaymentNotice"
               ],
-              "program": "zk_factor_12254.aleo"
+              "program": "zk_factor_12256.aleo"
             }
           },
           "mode": "None"
@@ -1292,7 +1292,7 @@
               "path": [
                 "PaymentNotice"
               ],
-              "program": "zk_factor_12254.aleo"
+              "program": "zk_factor_12256.aleo"
             }
           },
           "mode": "None"
@@ -1325,7 +1325,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_12254.aleo"
+              "program": "zk_factor_12256.aleo"
             }
           },
           "mode": "None"
@@ -1338,7 +1338,7 @@
               "path": [
                 "RecourseNotice"
               ],
-              "program": "zk_factor_12254.aleo"
+              "program": "zk_factor_12256.aleo"
             }
           },
           "mode": "None"
@@ -1360,7 +1360,7 @@
               "path": [
                 "RecourseNotice"
               ],
-              "program": "zk_factor_12254.aleo"
+              "program": "zk_factor_12256.aleo"
             }
           },
           "mode": "None"
@@ -1408,27 +1408,6 @@
       ]
     },
     {
-      "name": "open_pool_distribution",
-      "is_final": true,
-      "inputs": [
-        {
-          "name": "invoice_hash",
-          "ty": {
-            "Plaintext": {
-              "Primitive": "Field"
-            }
-          },
-          "mode": "None"
-        }
-      ],
-      "outputs": [
-        {
-          "ty": "Final",
-          "mode": "None"
-        }
-      ]
-    },
-    {
       "name": "claim_pool_proceeds",
       "is_final": true,
       "inputs": [
@@ -1439,7 +1418,7 @@
               "path": [
                 "PoolShare"
               ],
-              "program": "zk_factor_12254.aleo"
+              "program": "zk_factor_12256.aleo"
             }
           },
           "mode": "None"
@@ -1530,6 +1509,15 @@
             }
           },
           "mode": "None"
+        },
+        {
+          "name": "use_token",
+          "ty": {
+            "Plaintext": {
+              "Primitive": "Boolean"
+            }
+          },
+          "mode": "None"
         }
       ],
       "outputs": [
@@ -1591,7 +1579,7 @@
               "path": [
                 "PoolShare"
               ],
-              "program": "zk_factor_12254.aleo"
+              "program": "zk_factor_12256.aleo"
             }
           },
           "mode": "None"
@@ -1603,23 +1591,40 @@
       ]
     },
     {
-      "name": "pool_withdraw",
+      "name": "pool_contribute_token",
       "is_final": true,
       "inputs": [
         {
-          "name": "share",
+          "name": "invoice_hash",
           "ty": {
-            "Record": {
-              "path": [
-                "PoolShare"
-              ],
-              "program": "zk_factor_12255.aleo"
+            "Plaintext": {
+              "Primitive": "Field"
             }
           },
           "mode": "None"
         },
         {
-          "name": "withdraw_amount",
+          "name": "program_addr",
+          "ty": {
+            "Plaintext": {
+              "Primitive": "Address"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "contribution",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "existing_total",
           "ty": {
             "Plaintext": {
               "Primitive": {
@@ -1637,167 +1642,7 @@
               "path": [
                 "PoolShare"
               ],
-              "program": "zk_factor_12255.aleo"
-            }
-          },
-          "mode": "None"
-        },
-        {
-          "ty": {
-            "Record": {
-              "path": [
-                "credits"
-              ],
-              "program": "credits.aleo"
-            }
-          },
-          "mode": "None"
-        },
-        {
-          "ty": "Final",
-          "mode": "None"
-        }
-      ]
-    },
-    {
-      "name": "pool_withdraw_all",
-      "is_final": true,
-      "inputs": [
-        {
-          "name": "share",
-          "ty": {
-            "Record": {
-              "path": [
-                "PoolShare"
-              ],
-              "program": "zk_factor_12255.aleo"
-            }
-          },
-          "mode": "None"
-        }
-      ],
-      "outputs": [
-        {
-          "ty": {
-            "Record": {
-              "path": [
-                "credits"
-              ],
-              "program": "credits.aleo"
-            }
-          },
-          "mode": "None"
-        },
-        {
-          "ty": "Final",
-          "mode": "None"
-        }
-      ]
-    },
-    {
-      "name": "pool_withdraw_token",
-      "is_final": true,
-      "inputs": [
-        {
-          "name": "share",
-          "ty": {
-            "Record": {
-              "path": [
-                "PoolShare"
-              ],
-              "program": "zk_factor_12255.aleo"
-            }
-          },
-          "mode": "None"
-        },
-        {
-          "name": "withdraw_amount",
-          "ty": {
-            "Plaintext": {
-              "Primitive": {
-                "UInt": "U64"
-              }
-            }
-          },
-          "mode": "None"
-        }
-      ],
-      "outputs": [
-        {
-          "ty": {
-            "Record": {
-              "path": [
-                "PoolShare"
-              ],
-              "program": "zk_factor_12255.aleo"
-            }
-          },
-          "mode": "None"
-        },
-        {
-          "ty": {
-            "Record": {
-              "path": [
-                "ComplianceRecord"
-              ],
-              "program": "test_usdcx_stablecoin.aleo"
-            }
-          },
-          "mode": "None"
-        },
-        {
-          "ty": {
-            "Record": {
-              "path": [
-                "Token"
-              ],
-              "program": "test_usdcx_stablecoin.aleo"
-            }
-          },
-          "mode": "None"
-        },
-        {
-          "ty": "Final",
-          "mode": "None"
-        }
-      ]
-    },
-    {
-      "name": "pool_withdraw_all_token",
-      "is_final": true,
-      "inputs": [
-        {
-          "name": "share",
-          "ty": {
-            "Record": {
-              "path": [
-                "PoolShare"
-              ],
-              "program": "zk_factor_12255.aleo"
-            }
-          },
-          "mode": "None"
-        }
-      ],
-      "outputs": [
-        {
-          "ty": {
-            "Record": {
-              "path": [
-                "ComplianceRecord"
-              ],
-              "program": "test_usdcx_stablecoin.aleo"
-            }
-          },
-          "mode": "None"
-        },
-        {
-          "ty": {
-            "Record": {
-              "path": [
-                "Token"
-              ],
-              "program": "test_usdcx_stablecoin.aleo"
+              "program": "zk_factor_12256.aleo"
             }
           },
           "mode": "None"
@@ -1819,7 +1664,7 @@
               "path": [
                 "Invoice"
               ],
-              "program": "zk_factor_12254.aleo"
+              "program": "zk_factor_12256.aleo"
             }
           },
           "mode": "None"
@@ -1987,7 +1832,90 @@
               "path": [
                 "PoolPaymentNotice"
               ],
-              "program": "zk_factor_12254.aleo"
+              "program": "zk_factor_12256.aleo"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "ty": "Final",
+          "mode": "None"
+        }
+      ]
+    },
+    {
+      "name": "execute_approved_pool_token",
+      "is_final": true,
+      "inputs": [
+        {
+          "name": "invoice_hash",
+          "ty": {
+            "Plaintext": {
+              "Primitive": "Field"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "business_addr",
+          "ty": {
+            "Plaintext": {
+              "Primitive": "Address"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "debtor_addr",
+          "ty": {
+            "Plaintext": {
+              "Primitive": "Address"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "advance_amount",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "invoice_amount",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "due_date",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        }
+      ],
+      "outputs": [
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "PoolPaymentNotice"
+              ],
+              "program": "zk_factor_12256.aleo"
             }
           },
           "mode": "None"
@@ -2009,7 +1937,40 @@
               "path": [
                 "PoolPaymentNotice"
               ],
-              "program": "zk_factor_12254.aleo"
+              "program": "zk_factor_12256.aleo"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "program_addr",
+          "ty": {
+            "Plaintext": {
+              "Primitive": "Address"
+            }
+          },
+          "mode": "None"
+        }
+      ],
+      "outputs": [
+        {
+          "ty": "Final",
+          "mode": "None"
+        }
+      ]
+    },
+    {
+      "name": "pay_pool_invoice_token",
+      "is_final": true,
+      "inputs": [
+        {
+          "name": "notice",
+          "ty": {
+            "Record": {
+              "path": [
+                "PoolPaymentNotice"
+              ],
+              "program": "zk_factor_12256.aleo"
             }
           },
           "mode": "None"
@@ -2046,6 +2007,63 @@
         }
       ],
       "outputs": [
+        {
+          "ty": "Final",
+          "mode": "None"
+        }
+      ]
+    },
+    {
+      "name": "claim_pool_proceeds_token",
+      "is_final": true,
+      "inputs": [
+        {
+          "name": "share",
+          "ty": {
+            "Record": {
+              "path": [
+                "PoolShare"
+              ],
+              "program": "zk_factor_12256.aleo"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "expected_payout",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        }
+      ],
+      "outputs": [
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "ComplianceRecord"
+              ],
+              "program": "test_usdcx_stablecoin.aleo"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "Token"
+              ],
+              "program": "test_usdcx_stablecoin.aleo"
+            }
+          },
+          "mode": "None"
+        },
         {
           "ty": "Final",
           "mode": "None"

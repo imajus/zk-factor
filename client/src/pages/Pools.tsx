@@ -40,7 +40,11 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useWallet } from "@/contexts/WalletContext";
 import { useTransaction } from "@/hooks/use-transaction";
 import { toast } from "sonner";
-import { PROGRAM_ID, PROGRAM_ADDRESS, USDCX_PROGRAM_ID } from "@/lib/config";
+import {
+  POOL_PROGRAM_ID,
+  POOL_PROGRAM_ADDRESS,
+  USDCX_PROGRAM_ID,
+} from "@/lib/config";
 import { type AleoRecord, getField, microToAleo } from "@/lib/aleo-records";
 import {
   computeExpectedPoolPayout,
@@ -114,7 +118,7 @@ function PoolCreateDialog({
       setPoolMinContribAleo("5");
       setPoolCurrency("ALEO");
       setCreating(false);
-      queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
+      queryClient.invalidateQueries({ queryKey: ["records", POOL_PROGRAM_ID] });
       queryClient.invalidateQueries({ queryKey: ["all_pools"] });
       queryClient.refetchQueries({ queryKey: ["all_pools"] });
       pendingPoolCreateRef.current = false;
@@ -197,7 +201,7 @@ function PoolCreateDialog({
         distributed: 0n,
       });
       await execute({
-        program: PROGRAM_ID,
+        program: POOL_PROGRAM_ID,
         function: "create_ownerless_pool",
         inputs: buildCreateOwnerlessPoolInputs(
           poolId,
@@ -422,8 +426,8 @@ export default function Pools() {
     isError,
     refetch,
   } = useQuery({
-    queryKey: ["records", PROGRAM_ID, "pools"],
-    queryFn: () => requestRecords(PROGRAM_ID, true),
+    queryKey: ["records", POOL_PROGRAM_ID, "pools"],
+    queryFn: () => requestRecords(POOL_PROGRAM_ID, true),
     enabled: isConnected,
     staleTime: 60_000,
   });
@@ -451,7 +455,7 @@ export default function Pools() {
       return;
     }
 
-    const storageKey = `voted-pools:${PROGRAM_ID}:${address}`;
+    const storageKey = `voted-pools:${POOL_PROGRAM_ID}:${address}`;
     try {
       const raw = localStorage.getItem(storageKey);
       const parsed = raw ? (JSON.parse(raw) as string[]) : [];
@@ -463,7 +467,7 @@ export default function Pools() {
 
   useEffect(() => {
     if (!address) return;
-    const storageKey = `voted-pools:${PROGRAM_ID}:${address}`;
+    const storageKey = `voted-pools:${POOL_PROGRAM_ID}:${address}`;
     localStorage.setItem(
       storageKey,
       JSON.stringify(Array.from(votedPoolHashes)),
@@ -562,7 +566,7 @@ export default function Pools() {
       }
 
       toast.success("Transaction confirmed!", { id: "pool-op" });
-      queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
+      queryClient.invalidateQueries({ queryKey: ["records", POOL_PROGRAM_ID] });
       queryClient.invalidateQueries({ queryKey: ["all_pools"] });
       setClaimingShareId(null);
       setPendingExecutionHash(null);
@@ -599,7 +603,7 @@ export default function Pools() {
 
     toast.success("Pool execution confirmed.", { id: "pool-op" });
     setPendingExecutionHash(null);
-    queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
+    queryClient.invalidateQueries({ queryKey: ["records", POOL_PROGRAM_ID] });
     queryClient.invalidateQueries({ queryKey: ["all_pools"] });
     reset();
   }, [status, pendingExecutionHash, onChainPools, queryClient, reset]);
@@ -617,7 +621,7 @@ export default function Pools() {
 
     toast.success("Distribution opened.", { id: "pool-op" });
     setPendingDistributionHash(null);
-    queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
+    queryClient.invalidateQueries({ queryKey: ["records", POOL_PROGRAM_ID] });
     queryClient.invalidateQueries({ queryKey: ["all_pools"] });
     reset();
   }, [status, pendingDistributionHash, onChainPools, queryClient, reset]);
@@ -659,8 +663,8 @@ export default function Pools() {
       return;
     }
 
-    if (!PROGRAM_ADDRESS) {
-      toast.error("PROGRAM_ADDRESS is not set.");
+    if (!POOL_PROGRAM_ADDRESS) {
+      toast.error("POOL_PROGRAM_ADDRESS is not set.");
       return;
     }
 
@@ -670,7 +674,7 @@ export default function Pools() {
       await execute({
         program: USDCX_PROGRAM_ID,
         function: "approve_public",
-        inputs: [PROGRAM_ID, `${contribution}u128`],
+        inputs: [POOL_PROGRAM_ID, `${contribution}u128`],
         fee: 50_000,
         privateFee: false,
       });
@@ -682,11 +686,11 @@ export default function Pools() {
         : "pool_contribute";
 
     await execute({
-      program: PROGRAM_ID,
+      program: POOL_PROGRAM_ID,
       function: contributeFunction,
       inputs: buildPoolContributeInputs(
         contributePool.meta.invoiceHash,
-        PROGRAM_ADDRESS,
+        POOL_PROGRAM_ADDRESS,
         contribution,
         existingTotal,
       ),
@@ -714,7 +718,7 @@ export default function Pools() {
     });
     setPendingVoteKey(voteKey);
     await execute({
-      program: PROGRAM_ID,
+      program: POOL_PROGRAM_ID,
       function: "pool_vote",
       inputs: buildPoolVoteInputs(pool.meta.invoiceHash),
       fee: 50_000,
@@ -736,7 +740,7 @@ export default function Pools() {
     });
     setPendingVoteKey(voteKey);
     await execute({
-      program: PROGRAM_ID,
+      program: POOL_PROGRAM_ID,
       function: "pool_vote_reject",
       inputs: buildPoolVoteRejectInputs(pool.meta.invoiceHash),
       fee: 50_000,
@@ -754,7 +758,7 @@ export default function Pools() {
         : "execute_approved_pool";
 
     await execute({
-      program: PROGRAM_ID,
+      program: POOL_PROGRAM_ID,
       function: executeFunction,
       inputs: buildExecuteApprovedPoolInputs(
         pool.meta.invoiceHash,
@@ -772,7 +776,7 @@ export default function Pools() {
   const handleOpenDistribution = async (invoiceHash: string) => {
     setPendingDistributionHash(invoiceHash);
     await execute({
-      program: PROGRAM_ID,
+      program: POOL_PROGRAM_ID,
       function: "pool_open_distribution",
       inputs: [invoiceHash],
       fee: 80_000,
@@ -782,7 +786,7 @@ export default function Pools() {
 
   const handleFinalizeRejectedPool = async (pool: OnChainPoolState) => {
     await execute({
-      program: PROGRAM_ID,
+      program: POOL_PROGRAM_ID,
       function: "finalize_rejected_pool",
       inputs: buildFinalizeRejectedPoolInputs(pool.meta.invoiceHash),
       fee: 50_000,
@@ -863,7 +867,7 @@ export default function Pools() {
           : "claim_pool_proceeds";
 
       await execute({
-        program: PROGRAM_ID,
+        program: POOL_PROGRAM_ID,
         function: claimFunction,
         inputs,
         fee: 80_000,
