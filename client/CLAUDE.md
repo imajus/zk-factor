@@ -358,7 +358,8 @@ Create `.env` file in `client/` directory:
 
 ```bash
 VITE_ALEO_NETWORK=testnet          # or mainnet
-VITE_ALEO_PROGRAM_ID=zk_factor_12250.aleo
+VITE_PROGRAM_ID=zk_factor_12250.aleo
+VITE_PROGRAM_ADDRESS=aleo1...     # required for pool_contribute; derive with: leo account program-address <VITE_PROGRAM_ID>
 VITE_API_ENDPOINT=https://api.explorer.aleo.org/v1
 VITE_ALEO_EXPLORER=https://testnet.explorer.provable.com
 VITE_USDCX_PROGRAM_ID=test_usdcx_stablecoin.aleo
