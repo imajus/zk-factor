@@ -18,6 +18,7 @@ import Pay from "./pages/Pay";
 import SelectRole from "./pages/SelectRole";
 import RegisterFactor from "./pages/RegisterFactor";
 import Pools from "./pages/Pools";
+import PoolDetail from "./pages/PoolDetail";
 import NotFound from "./pages/NotFound";
 import InvoicePending from "./pages/InvoicePending";
 
@@ -126,6 +127,18 @@ export default function WalletApp() {
                 <RequireFactor>
                   <AppLayout>
                     <Pools />
+                  </AppLayout>
+                </RequireFactor>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/pools/:hash"
+            element={
+              <RequireAuth>
+                <RequireFactor>
+                  <AppLayout>
+                    <PoolDetail />
                   </AppLayout>
                 </RequireFactor>
               </RequireAuth>
