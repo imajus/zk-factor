@@ -678,7 +678,7 @@ export default function Pools() {
             <Card
               key={`pool-${pool.meta.invoiceHash}`}
               className="cursor-pointer hover:border-primary/50 transition-colors"
-              onClick={() => navigate(`/pools/${pool.meta.invoiceHash}`)}
+              onClick={() => navigate(`/pools/${pool.meta.invoiceHash.replace(/field$/, "")}`)}
             >
               <CardContent className="pt-4 space-y-3">
                 <div className="flex items-start justify-between gap-2">

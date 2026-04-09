@@ -863,37 +863,40 @@ export function FactorDashboard() {
               ? ((contributed / totalPool) * 100).toFixed(2)
               : "0.00";
           return (
-            <Card
+            <Link
               key={invoiceHash || idx}
-              className="hover:border-primary/50 transition-colors"
+              to={`/pools/${invoiceHash.replace(/field$/, "")}`}
+              className="block"
             >
-              <CardContent className="pt-4 space-y-3">
-                <span className="font-mono text-sm text-muted-foreground">
-                  {invoiceHash.slice(0, 12)}…
-                </span>
-                <div className="space-y-1 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Contributed</span>
-                    <span className="font-mono font-medium">
-                      {contributed.toLocaleString(undefined, {
-                        maximumFractionDigits: 6,
-                      })}{" "}
-                      ALEO
-                    </span>
+              <Card className="hover:border-primary/50 transition-colors cursor-pointer">
+                <CardContent className="pt-4 space-y-3">
+                  <span className="font-mono text-sm text-muted-foreground">
+                    {invoiceHash.slice(0, 12)}…
+                  </span>
+                  <div className="space-y-1 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Contributed</span>
+                      <span className="font-mono font-medium">
+                        {contributed.toLocaleString(undefined, {
+                          maximumFractionDigits: 6,
+                        })}{" "}
+                        ALEO
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Share</span>
+                      <span>{sharePct}%</span>
+                    </div>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Share</span>
-                    <span>{sharePct}%</span>
-                  </div>
-                </div>
-                <Badge
-                  variant="outline"
-                  className="text-xs text-blue-600 border-blue-300"
-                >
-                  Pool Share
-                </Badge>
-              </CardContent>
-            </Card>
+                  <Badge
+                    variant="outline"
+                    className="text-xs text-blue-600 border-blue-300"
+                  >
+                    Pool Share
+                  </Badge>
+                </CardContent>
+              </Card>
+            </Link>
           );
         })}
       </div>

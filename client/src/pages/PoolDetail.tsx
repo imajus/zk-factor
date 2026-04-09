@@ -63,7 +63,7 @@ export default function PoolDetail() {
     staleTime: 60_000,
   });
 
-  const pool = hash ? (pools.find((p) => p.meta.invoiceHash === hash) ?? null) : null;
+  const pool = hash ? (pools.find((p) => p.meta.invoiceHash.replace(/field$/, "") === hash) ?? null) : null;
   const stats = pool ? computePoolStats(pool, activeFactorCount) : null;
   const poolStatus = pool ? getPoolStatus(pool, activeFactorCount) : null;
   const canOpenDistribution =
