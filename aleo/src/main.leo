@@ -129,6 +129,7 @@ program zk_factor_12255.aleo {
     mapping pool_use_token:     field   => bool;             // false = ALEO, true = USDCx
     mapping pool_pending_offer: field   => PendingPoolOffer; // business-submitted offer awaiting votes
     mapping pool_vote_count:    field   => u8;               // total approvals so far
+    mapping pool_reject_count:  field   => u8;               // total rejections so far
     mapping pool_voter_cast:    field   => bool;             // Poseidon2(VoteId) => voted?
     mapping pool_executor:      field   => address;          // recorded after execute_approved_pool
     // Running count of active factors — used to compute majority threshold.
@@ -707,6 +708,7 @@ program zk_factor_12255.aleo {
             Mapping::set(pool_contributions, invoice_hash, 0u64);
             Mapping::set(pool_closed,        invoice_hash, false);
             Mapping::set(pool_vote_count,    invoice_hash, 0u8);
+            Mapping::set(pool_reject_count,  invoice_hash, 0u8);
         };
     }
 
@@ -826,7 +828,11 @@ program zk_factor_12255.aleo {
             let meta: PoolMeta = Mapping::get(pool_meta, pool_hash);
             let is_closed: bool = Mapping::get_or_use(pool_closed, pool_hash, false);
             assert(!is_closed);
-            assert(!Mapping::contains(pool_pending_offer, pool_hash));
+            let has_existing_offer: bool = Mapping::contains(pool_pending_offer, pool_hash);
+            if has_existing_offer {
+                let existing_offer: PendingPoolOffer = Mapping::get(pool_pending_offer, pool_hash);
+                assert(existing_offer.is_executed);
+            }
             assert(advance_rate >= meta.min_advance_rate);
             assert(advance_rate <= meta.max_advance_rate);
             let total_contributed: u64 = Mapping::get(pool_contributions, pool_hash);
@@ -841,15 +847,19 @@ program zk_factor_12255.aleo {
                 nonce:             nonce,
                 is_executed:       false,
             });
+            Mapping::set(pool_vote_count,   pool_hash, 0u8);
+            Mapping::set(pool_reject_count, pool_hash, 0u8);
         };
     }
 
     // ─────────────────────────────────────────────────────────────
     // OWNERLESS POOL — MULTISIG VOTE
     // ─────────────────────────────────────────────────────────────
-    // Any active factor votes to approve a pending pool offer.
-    // Threshold = floor(active_factor_count / 2) + 1 (simple majority).
-    // Once vote_count >= threshold, any factor can call execute_approved_pool.
+    // Any active factor votes to approve or reject a pending pool offer.
+    // Voting only ends when every active factor has voted.
+    // Final decision:
+    //   approve_count > reject_count  => approved
+    //   approve_count <= reject_count => rejected (ties reject)
 
     fn pool_vote(invoice_hash: field) -> Final {
         let voter: address = self.caller;
@@ -870,10 +880,58 @@ program zk_factor_12255.aleo {
         };
     }
 
+    fn pool_vote_reject(invoice_hash: field) -> Final {
+        let voter: address = self.caller;
+        return final {
+            verify_factor_active(voter);
+            let offer: PendingPoolOffer = Mapping::get(pool_pending_offer, invoice_hash);
+            assert(!offer.is_executed);
+            // Composite key prevents double-voting.
+            let vote_id: field = Poseidon2::hash_to_field(VoteId {
+                invoice_hash: invoice_hash,
+                voter:        voter,
+            });
+            let already_voted: bool = Mapping::get_or_use(pool_voter_cast, vote_id, false);
+            assert(!already_voted);
+            Mapping::set(pool_voter_cast, vote_id, true);
+            let reject_count: u8 = Mapping::get_or_use(pool_reject_count, invoice_hash, 0u8);
+            Mapping::set(pool_reject_count, invoice_hash, reject_count + 1u8);
+        };
+    }
+
+    // Finalizes a rejected offer so a business can submit a new one for the same pool.
+    // Can be called by any active factor once all active factors have voted and
+    // approve_count <= reject_count.
+    fn finalize_rejected_pool(invoice_hash: field) -> Final {
+        let caller: address = self.caller;
+        return final {
+            verify_factor_active(caller);
+            let offer: PendingPoolOffer = Mapping::get(pool_pending_offer, invoice_hash);
+            assert(!offer.is_executed);
+            let approve_count: u8 = Mapping::get_or_use(pool_vote_count, invoice_hash, 0u8);
+            let reject_count: u8 = Mapping::get_or_use(pool_reject_count, invoice_hash, 0u8);
+            let active_count: u32 = Mapping::get_or_use(active_factor_count, false, 1u32);
+            let total_votes: u32 = (approve_count as u32) + (reject_count as u32);
+            assert(total_votes == active_count);
+            assert(approve_count <= reject_count);
+            Mapping::set(pool_pending_offer, invoice_hash, PendingPoolOffer {
+                original_creditor: offer.original_creditor,
+                debtor:            offer.debtor,
+                amount:            offer.amount,
+                advance_rate:      offer.advance_rate,
+                advance_amount:    offer.advance_amount,
+                due_date:          offer.due_date,
+                nonce:             offer.nonce,
+                is_executed:       true,
+            });
+        };
+    }
+
     // ─────────────────────────────────────────────────────────────
     // OWNERLESS POOL — EXECUTE APPROVED OFFER
     // ─────────────────────────────────────────────────────────────
-    // Called by any active factor once vote_count >= majority threshold.
+    // Called by any active factor after all active factors have voted,
+    // and only if approve_count > reject_count.
     // Pays advance_amount from the program's public escrow to the business.
     // Emits a PoolPaymentNotice to the debtor. Closes the pool.
     //
@@ -908,10 +966,12 @@ program zk_factor_12255.aleo {
             assert(offer.debtor            == debtor_addr);
             assert(offer.advance_amount    == advance_amount);
             assert(offer.amount            == invoice_amount);
-            let vote_count: u8   = Mapping::get_or_use(pool_vote_count, invoice_hash, 0u8);
+            let approve_count: u8 = Mapping::get_or_use(pool_vote_count, invoice_hash, 0u8);
+            let reject_count: u8  = Mapping::get_or_use(pool_reject_count, invoice_hash, 0u8);
             let active_count: u32 = Mapping::get_or_use(active_factor_count, false, 1u32);
-            let threshold: u8    = ((active_count / 2u32) + 1u32) as u8;
-            assert(vote_count >= threshold);
+            let total_votes: u32 = (approve_count as u32) + (reject_count as u32);
+            assert(total_votes == active_count);
+            assert(approve_count > reject_count);
             Mapping::set(pool_pending_offer, invoice_hash, PendingPoolOffer {
                 original_creditor: offer.original_creditor,
                 debtor:            offer.debtor,
@@ -961,10 +1021,12 @@ program zk_factor_12255.aleo {
             assert(offer.debtor            == debtor_addr);
             assert(offer.advance_amount    == advance_amount);
             assert(offer.amount            == invoice_amount);
-            let vote_count: u8   = Mapping::get_or_use(pool_vote_count, invoice_hash, 0u8);
+            let approve_count: u8 = Mapping::get_or_use(pool_vote_count, invoice_hash, 0u8);
+            let reject_count: u8  = Mapping::get_or_use(pool_reject_count, invoice_hash, 0u8);
             let active_count: u32 = Mapping::get_or_use(active_factor_count, false, 1u32);
-            let threshold: u8    = ((active_count / 2u32) + 1u32) as u8;
-            assert(vote_count >= threshold);
+            let total_votes: u32 = (approve_count as u32) + (reject_count as u32);
+            assert(total_votes == active_count);
+            assert(approve_count > reject_count);
             Mapping::set(pool_pending_offer, invoice_hash, PendingPoolOffer {
                 original_creditor: offer.original_creditor,
                 debtor:            offer.debtor,

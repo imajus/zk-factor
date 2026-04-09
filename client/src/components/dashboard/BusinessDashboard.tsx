@@ -53,6 +53,11 @@ import {
   unixToDate,
 } from "@/lib/aleo-records";
 import { listPendingFactoringRequests } from "@/lib/pending-factoring";
+import {
+  computePoolStats,
+  fetchActiveFactorCount,
+  fetchAllPools,
+} from "@/lib/pool-chain";
 
 export function BusinessDashboard() {
   const queryClient = useQueryClient();
@@ -94,6 +99,19 @@ export function BusinessDashboard() {
     refetchOnMount: "always",
   });
 
+  const { data: activeFactorCount = 1 } = useQuery({
+    queryKey: ["active_factor_count"],
+    queryFn: fetchActiveFactorCount,
+    staleTime: 60_000,
+  });
+
+  const { data: onChainPools = [], isLoading: poolsLoading } = useQuery({
+    queryKey: ["all_pools"],
+    queryFn: fetchAllPools,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+
   const invoiceRecords = ((records as AleoRecord[]) ?? []).filter(
     (r) => r.recordName === "Invoice" && !r.spent,
   );
@@ -110,6 +128,10 @@ export function BusinessDashboard() {
   const pendingFactoringRequests = address
     ? listPendingFactoringRequests(address)
     : [];
+  const submittedPoolOffers = onChainPools.filter(
+    (pool) =>
+      pool.pendingOffer && pool.pendingOffer.originalCreditor === address,
+  );
 
   const getInvoiceCurrency = (record: AleoRecord): "ALEO" | "USDCx" => {
     const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
@@ -847,6 +869,88 @@ export function BusinessDashboard() {
     );
   };
 
+  const renderSubmittedPoolCards = () => {
+    if (poolsLoading) {
+      return (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <Card key={`pool-submitted-skeleton-${i}`}>
+              <CardContent className="pt-4 space-y-2">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-9 w-full" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      );
+    }
+
+    if (submittedPoolOffers.length === 0) {
+      return (
+        <Card className="py-16 text-center">
+          <CardContent>
+            <p className="font-medium">No submitted pool requests</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              When you submit an invoice to a pool, its progress appears here.
+            </p>
+          </CardContent>
+        </Card>
+      );
+    }
+
+    return (
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {submittedPoolOffers.map((pool) => {
+          const stats = computePoolStats(pool, activeFactorCount);
+          const decisionLabel = stats.allVotesCast
+            ? stats.isApproved
+              ? "Approved"
+              : "Rejected"
+            : "Pending";
+
+          return (
+            <Card key={`submitted-${pool.meta.invoiceHash}`}>
+              <CardContent className="pt-4 space-y-3">
+                <p className="text-sm font-medium">{pool.meta.name}</p>
+                <p className="font-mono text-xs text-muted-foreground break-all">
+                  {pool.meta.invoiceHash}
+                </p>
+
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Decision</span>
+                    <span className="font-medium">{decisionLabel}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Votes</span>
+                    <span>
+                      {stats.totalVotes}/{stats.requiredVotes}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">
+                      Approve/Reject
+                    </span>
+                    <span>
+                      {stats.approveCount}/{stats.rejectCount}
+                    </span>
+                  </div>
+                </div>
+
+                <Button asChild className="w-full" variant="outline">
+                  <Link to={`/pools/${pool.meta.invoiceHash}`}>
+                    Open Progress Page
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+    );
+  };
+
   return (
     <div className="container py-6 space-y-6">
       {/* Page Header */}
@@ -935,6 +1039,14 @@ export function BusinessDashboard() {
               </span>
             )}
           </TabsTrigger>
+          <TabsTrigger value="pool-requests">
+            Pool Requests
+            {!poolsLoading && submittedPoolOffers.length > 0 && (
+              <span className="ml-1.5 text-xs opacity-70">
+                ({submittedPoolOffers.length})
+              </span>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="recourse">
             Recourse
             {!isLoading && recourseNoticeRecords.length > 0 && (
@@ -955,6 +1067,10 @@ export function BusinessDashboard() {
 
         <TabsContent value="pending" className="mt-4">
           {renderPendingCards()}
+        </TabsContent>
+
+        <TabsContent value="pool-requests" className="mt-4">
+          {renderSubmittedPoolCards()}
         </TabsContent>
 
         <TabsContent value="recourse" className="mt-4">

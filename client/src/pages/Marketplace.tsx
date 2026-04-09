@@ -8,7 +8,6 @@ import {
   ArrowRight,
   TrendingUp,
   ChevronRight,
-  Layers,
   Copy,
   Check,
   Info,
@@ -134,6 +133,14 @@ function getOwnerlessPoolStatus(
     };
   }
 
+  if (pool.pendingOffer?.isExecuted) {
+    return {
+      label: "Rejected",
+      colorClass: "text-red-700 border-red-300",
+      cardClass: "border-red-300/60 bg-red-50/40 dark:bg-red-950/20",
+    };
+  }
+
   if (stats.hasPendingOffer) {
     return {
       label: "Voting",
@@ -184,12 +191,6 @@ export default function Marketplace() {
   const [advanceRateInput, setAdvanceRateInput] = useState("");
   const [partialAmountInput, setPartialAmountInput] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
-
-  // ── pool detail dialog ─────────────────────────────────────────────
-  const [selectedPool, setSelectedPool] = useState<OnChainPoolState | null>(
-    null,
-  );
-  const [poolDetailOpen, setPoolDetailOpen] = useState(false);
 
   // ── pool contribute dialog ─────────────────────────────────────────
   const [contributeOpen, setContributeOpen] = useState(false);
@@ -263,12 +264,17 @@ export default function Marketplace() {
       f.address.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
-  const openPools = (Array.isArray(onChainPools) ? onChainPools : []).filter(
+  const allPools = Array.isArray(onChainPools) ? onChainPools : [];
+  const openPools = allPools.filter(
     (p) => !computePoolStats(p, activeFactorCount).isFullyDistributed,
   );
-  const closedPools = (Array.isArray(onChainPools) ? onChainPools : []).filter(
-    (p) => computePoolStats(p, activeFactorCount).isFullyDistributed,
+  const closedPools = allPools.filter((p) =>
+    computePoolStats(p, activeFactorCount).isFullyDistributed,
   );
+  const creditorReadyPools = openPools.filter((pool) => {
+    const stats = computePoolStats(pool, activeFactorCount);
+    return !pool.isClosed && !stats.hasPendingOffer && !pool.pendingOffer?.isExecuted;
+  });
 
   // ── invoice dialog computed values ────────────────────────────────
   const advanceRateBps = advanceRateInput ? parseInt(advanceRateInput, 10) : 0;
@@ -365,13 +371,11 @@ export default function Marketplace() {
       } else if (action === "vote-pool") {
         toast.success("Vote recorded!", { id: opId });
         refetchPools();
-        if (selectedPool) setSelectedPool(null);
       } else if (action === "execute-pool") {
         toast.success("Pool factoring executed — business receives advance!", {
           id: opId,
         });
         refetchPools();
-        setPoolDetailOpen(false);
       } else if (action === "open-distribution") {
         toast.success("Distribution opened.", { id: opId });
         refetchPools();
@@ -428,7 +432,6 @@ export default function Marketplace() {
     address,
     navigate,
     refetchPools,
-    selectedPool,
   ]);
 
   useEffect(() => {
@@ -465,58 +468,43 @@ export default function Marketplace() {
       (r) => getInvoiceSelectionId(r) === selectedInvoiceId,
     );
     if (!invoice) return;
-    const currency = getInvoiceCurrency(
-      invoice,
-      getField(invoice.recordPlaintext, "invoice_hash"),
-    );
+
     const invoiceHash = getField(invoice.recordPlaintext, "invoice_hash");
-    const debtor = getField(invoice.recordPlaintext, "debtor");
-    const dueDateUnix = parseInt(
-      getField(invoice.recordPlaintext, "due_date").replace(/u64$/, ""),
-      10,
-    );
-    const useToken = currency === "USDCx";
     const invoiceAmountMicro = parseInvoiceAmountMicro(invoice);
     const usePartial = wantsPartial && partialAmountMicro < invoiceAmountMicro;
-    const functionName = usePartial
-      ? "authorize_partial_factoring"
-      : "authorize_factoring";
+    const useToken = selectedInvoiceCurrency === "USDCx";
+    const functionName = getExecuteTransition(usePartial, useToken);
+    const inputs = buildExecuteInputs(
+      invoice.recordPlaintext,
+      selectedFactor.address,
+      advanceRateBps,
+      useToken,
+      usePartial,
+      partialAmountMicro,
+    );
 
     if (address) {
       upsertPendingFactoringRequest(address, {
         invoiceHash,
         factorAddress: selectedFactor.address,
-        debtor,
-        amountMicro: usePartial ? partialAmountMicro : invoiceAmountMicro,
-        currency,
-        dueDateUnix,
-        requestedAt: Date.now(),
+        debtor: getField(invoice.recordPlaintext, "debtor"),
+        amountMicro: invoiceAmountMicro,
+        advanceRateBps,
+        dueDateUnix: parseInt(
+          getField(invoice.recordPlaintext, "due_date").replace(/u64$/, ""),
+          10,
+        ),
+        currency: selectedInvoiceCurrency,
       });
       pendingFactoringHashRef.current = invoiceHash;
     }
 
-    pendingActionRef.current = "factor";
     pendingFactorModeRef.current = { usePartial };
+    pendingActionRef.current = "factor";
 
     await execute({
-      program: PROGRAM_ID,
       function: functionName,
-      inputs: usePartial
-        ? [
-            invoice.recordPlaintext,
-            selectedFactor.address,
-            `${partialAmountMicro}u64`,
-            `${advanceRateBps}u16`,
-            useToken ? "true" : "false",
-            "false",
-          ]
-        : [
-            invoice.recordPlaintext,
-            selectedFactor.address,
-            `${advanceRateBps}u16`,
-            useToken ? "true" : "false",
-            "false",
-          ],
+      inputs,
       fee: 100_000,
       privateFee: false,
     });
@@ -643,8 +631,11 @@ export default function Marketplace() {
     const status = getOwnerlessPoolStatus(pool, stats);
 
     const voteProgressPct =
-      stats.threshold > 0
-        ? Math.min(100, Math.round((stats.voteCount / stats.threshold) * 100))
+      stats.requiredVotes > 0
+        ? Math.min(
+            100,
+            Math.round((stats.totalVotes / stats.requiredVotes) * 100),
+          )
         : 0;
 
     return (
@@ -683,7 +674,7 @@ export default function Marketplace() {
                 </Badge>
               )}
               <Badge variant="secondary" className="text-xs">
-                {stats.hasPendingOffer ? `${voteProgressPct}% votes` : "Open"}
+                {stats.hasPendingOffer ? `${voteProgressPct}% voted` : "Open"}
               </Badge>
             </div>
           </div>
@@ -702,8 +693,12 @@ export default function Marketplace() {
               <div className="flex justify-between text-amber-900 dark:text-amber-300">
                 <span>Multisig votes</span>
                 <span>
-                  {stats.voteCount} / {stats.threshold} needed
+                  {stats.totalVotes} / {stats.requiredVotes} voted
                 </span>
+              </div>
+              <div className="flex justify-between text-[11px] text-amber-900 dark:text-amber-300">
+                <span>Approve: {stats.approveCount}</span>
+                <span>Reject: {stats.rejectCount}</span>
               </div>
               <Progress value={voteProgressPct} className="h-1 bg-amber-200" />
             </div>
@@ -734,12 +729,7 @@ export default function Marketplace() {
           {/* Business CTA */}
           {isBusiness && !pool.isClosed && (
             <>
-              {!stats.isFullyFunded && (
-                <p className="text-xs text-center text-muted-foreground">
-                  Waiting for pool to fill…
-                </p>
-              )}
-              {stats.isFullyFunded && !stats.hasPendingOffer && (
+              {!stats.hasPendingOffer && (
                 <Button
                   size="sm"
                   className="w-full"
@@ -776,7 +766,7 @@ export default function Marketplace() {
                 Contribute
                 <ChevronRight className="h-3.5 w-3.5 ml-auto" />
               </Button>
-              {stats.hasPendingOffer && !stats.isApproved && (
+              {stats.hasPendingOffer && !stats.allVotesCast && (
                 <Button
                   size="sm"
                   variant="outline"
@@ -790,7 +780,7 @@ export default function Marketplace() {
                   Go to Pools Voting
                 </Button>
               )}
-              {stats.hasPendingOffer && stats.isApproved && (
+              {stats.hasPendingOffer && stats.allVotesCast && (
                 <Button
                   size="sm"
                   className="w-full gap-1.5"
@@ -800,7 +790,7 @@ export default function Marketplace() {
                   }}
                 >
                   <ArrowRight className="h-3.5 w-3.5" />
-                  Go to Pools Execution
+                  Go to Pools Decision
                 </Button>
               )}
             </div>
@@ -942,19 +932,29 @@ export default function Marketplace() {
                   <span className="text-muted-foreground">Votes</span>
                   <span
                     className={cn(
-                      stats.isApproved
-                        ? "text-green-600 font-semibold"
+                      stats.allVotesCast
+                        ? stats.isApproved
+                          ? "text-green-600 font-semibold"
+                          : "text-red-700 font-semibold"
                         : "text-amber-800 font-semibold",
                     )}
                   >
-                    {stats.voteCount} / {stats.threshold} needed
-                    {stats.isApproved && " ✓ Approved"}
+                    {stats.totalVotes} / {stats.requiredVotes} voted
+                    {stats.allVotesCast &&
+                      (stats.isApproved ? " ✓ Approved" : " ✕ Rejected")}
                   </span>
+                </div>
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Approve: {stats.approveCount}</span>
+                  <span>Reject: {stats.rejectCount}</span>
                 </div>
                 <Progress
                   value={
-                    stats.threshold > 0
-                      ? Math.min(100, (stats.voteCount / stats.threshold) * 100)
+                    stats.requiredVotes > 0
+                      ? Math.min(
+                          100,
+                          (stats.totalVotes / stats.requiredVotes) * 100,
+                        )
                       : 0
                   }
                   className="h-1.5 bg-amber-200"
@@ -964,7 +964,7 @@ export default function Marketplace() {
           )}
 
           {/* Executed info */}
-          {pool.pendingOffer?.isExecuted && (
+          {pool.pendingOffer?.isExecuted && pool.isClosed && (
             <div className="rounded-md border border-emerald-300/50 bg-emerald-50/30 p-3 text-xs space-y-1">
               <p className="font-medium text-emerald-700">Pool Executed</p>
               <p className="text-muted-foreground">
@@ -976,6 +976,16 @@ export default function Marketplace() {
                   Proceeds available: {formatMicro(pool.proceeds)} ALEO
                 </p>
               )}
+            </div>
+          )}
+
+          {pool.pendingOffer?.isExecuted && !pool.isClosed && (
+            <div className="rounded-md border border-red-300/50 bg-red-50/30 p-3 text-xs space-y-1">
+              <p className="font-medium text-red-700">Offer Rejected</p>
+              <p className="text-muted-foreground">
+                Voting completed with reject {">="} approve. Business can submit
+                a new offer for this pool.
+              </p>
             </div>
           )}
         </div>
@@ -1031,7 +1041,7 @@ export default function Marketplace() {
           )}
 
           {/* Factor: vote */}
-          {isFactor && stats.hasPendingOffer && !stats.isApproved && (
+          {isFactor && stats.hasPendingOffer && !stats.allVotesCast && (
             <Button
               variant="outline"
               className="w-full"
@@ -1046,7 +1056,7 @@ export default function Marketplace() {
           )}
 
           {/* Factor: execute */}
-          {isFactor && stats.hasPendingOffer && stats.isApproved && (
+          {isFactor && stats.hasPendingOffer && stats.allVotesCast && (
             <Button
               className="w-full"
               onClick={() => {
@@ -1055,7 +1065,7 @@ export default function Marketplace() {
               }}
             >
               <ArrowRight className="h-4 w-4 mr-2" />
-              Go to Pools Execution
+              Go to Pools Decision
             </Button>
           )}
         </DialogFooter>
@@ -1154,24 +1164,24 @@ export default function Marketplace() {
                     </Card>
                   ))}
                 </div>
-              ) : openPools.length === 0 ? (
+              ) : (isBusiness ? creditorReadyPools : openPools).length === 0 ? (
                 <Card className="border-dashed">
                   <CardContent className="py-8 text-center space-y-2">
-                    <p className="font-medium text-sm">No open pools</p>
+                    <p className="font-medium text-sm">No pools ready for factoring</p>
                     <p className="text-xs text-muted-foreground">
                       {isFactor
                         ? "Create a pool to start collecting contributions."
-                        : "Check back later — pools are created by registered factors."}
+                        : "Only pools ready for invoice submission are shown here."}
                     </p>
                   </CardContent>
                 </Card>
               ) : (
                 <div className="grid gap-4 sm:grid-cols-2">
-                  {openPools.map(renderPoolCard)}
+                  {(isBusiness ? creditorReadyPools : openPools).map(renderPoolCard)}
                 </div>
               )}
 
-              {closedPools.length > 0 && (
+              {isFactor && closedPools.length > 0 && (
                 <div className="space-y-2">
                   <Button
                     variant="ghost"
@@ -1449,17 +1459,6 @@ export default function Marketplace() {
           </div>
         </div>
       </div>
-
-      {/* ── Pool detail dialog ─────────────────────────────────────── */}
-      <Dialog
-        open={poolDetailOpen}
-        onOpenChange={(o) => {
-          setPoolDetailOpen(o);
-          if (!o) setSelectedPool(null);
-        }}
-      >
-        {renderPoolDetail()}
-      </Dialog>
 
       {/* ── Contribute dialog ──────────────────────────────────────── */}
       <Dialog

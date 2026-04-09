@@ -752,6 +752,17 @@
       }
     },
     {
+      "name": "pool_reject_count",
+      "key": {
+        "Primitive": "Field"
+      },
+      "value": {
+        "Primitive": {
+          "UInt": "U8"
+        }
+      }
+    },
+    {
       "name": "pool_voter_cast",
       "key": {
         "Primitive": "Field"
@@ -1637,6 +1648,48 @@
     },
     {
       "name": "pool_vote",
+      "is_final": true,
+      "inputs": [
+        {
+          "name": "invoice_hash",
+          "ty": {
+            "Plaintext": {
+              "Primitive": "Field"
+            }
+          },
+          "mode": "None"
+        }
+      ],
+      "outputs": [
+        {
+          "ty": "Final",
+          "mode": "None"
+        }
+      ]
+    },
+    {
+      "name": "pool_vote_reject",
+      "is_final": true,
+      "inputs": [
+        {
+          "name": "invoice_hash",
+          "ty": {
+            "Plaintext": {
+              "Primitive": "Field"
+            }
+          },
+          "mode": "None"
+        }
+      ],
+      "outputs": [
+        {
+          "ty": "Final",
+          "mode": "None"
+        }
+      ]
+    },
+    {
+      "name": "finalize_rejected_pool",
       "is_final": true,
       "inputs": [
         {
