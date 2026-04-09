@@ -34,8 +34,7 @@ You must be a registered factor to create a pool.
 3. Enter the amount (must meet the pool's minimum contribution)
 4. Click **Contribute** — credits are sent to the program escrow and you receive a **Pool Share** record
 
-<!-- screenshot: contribute-pool.png — a pool card with contribute button -->
-<!-- ![Contribute to a pool](/img/factor-pools/contribute-pool.png) -->
+![Contribute to a pool](/img/factor-pools/contribute-pool.png)
 
 
 ## Voting on a Factoring Offer
@@ -46,9 +45,14 @@ When a business submits a factoring offer to a pool, it appears in the **Voting*
 2. Click **Vote** to approve the offer
 3. Once the threshold is reached (majority of active factors), any factor can execute
 
+![Contribute to a pool](/img/factor-pools/voting-pool.png)
+
 ## Executing an Approved Pool
 
 Once votes reach the threshold, click **Execute** in the Voting tab. The factoring offer is accepted atomically and the advance is sent to the business.
+
+![Execute pool offer](/img/factor-pools/execute-offer.png)
+
 
 ## Claiming Proceeds
 
