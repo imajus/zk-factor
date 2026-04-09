@@ -67,10 +67,6 @@ import {
 } from "@/lib/pending-factoring";
 import { PoolTimeline } from "@/components/pools/PoolTimeline";
 
-const DEFAULT_PROGRAM_ID = "zk_factor_12250.aleo";
-const DEFAULT_PROGRAM_ADDRESS =
-  "aleo1s8hgprffm0tqdc9d4q5mshu90efwcg7qfvwzyr3r9wpangazrq8s5yfww6";
-
 // ── helpers ───────────────────────────────────────────────────────────
 function formatMicro(micro: bigint | number): string {
   const n = typeof micro === "bigint" ? Number(micro) : micro;
@@ -561,16 +557,6 @@ export default function Marketplace() {
     if (!PROGRAM_ADDRESS) {
       toast.error(
         "PROGRAM_ADDRESS is not set — cannot route credits to the pool escrow.",
-      );
-      return;
-    }
-
-    if (
-      PROGRAM_ID !== DEFAULT_PROGRAM_ID &&
-      PROGRAM_ADDRESS === DEFAULT_PROGRAM_ADDRESS
-    ) {
-      toast.error(
-        "PROGRAM_ADDRESS likely does not match your deployed PROGRAM_ID. Update VITE_PROGRAM_ADDRESS.",
       );
       return;
     }
