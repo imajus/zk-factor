@@ -47,6 +47,7 @@ import { PROGRAM_ID, API_ENDPOINT } from "@/lib/config";
 import {
   type AleoRecord,
   decodeInvoiceCurrencyFromMetadata,
+  getPersistedFactoredInvoiceHashes,
   getPersistedInvoiceCurrency,
   getField,
   microToAleo,
@@ -71,6 +72,11 @@ export function BusinessDashboard() {
   const [paymentRequestedHashes, setPaymentRequestedHashes] = useState<
     Set<string>
   >(new Set());
+  const [hiddenInvoiceHashes, setHiddenInvoiceHashes] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [persistedFactoredInvoiceHashes, setPersistedFactoredInvoiceHashes] =
+    useState<Set<string>>(() => getPersistedFactoredInvoiceHashes());
   const [selectedInvoice, setSelectedInvoice] = useState<{
     invoiceHash: string;
     debtor: string;
@@ -112,7 +118,7 @@ export function BusinessDashboard() {
     refetchInterval: 60_000,
   });
 
-  const invoiceRecords = ((records as AleoRecord[]) ?? []).filter(
+  const allInvoiceRecords = ((records as AleoRecord[]) ?? []).filter(
     (r) => r.recordName === "Invoice" && !r.spent,
   );
   const factoredRecords = ((records as AleoRecord[]) ?? []).filter(
@@ -125,12 +131,66 @@ export function BusinessDashboard() {
   const recourseNoticeRecords = ((records as AleoRecord[]) ?? []).filter(
     (r) => r.recordName === "RecourseNotice" && !r.spent,
   );
+  const factoredInvoiceHashes = new Set(
+    factoredRecords.map((record) =>
+      getField(record.recordPlaintext, "invoice_hash"),
+    ),
+  );
+  const offeredInvoiceHashes = new Set(
+    offerRecords.map((record) =>
+      getField(record.recordPlaintext, "invoice_hash"),
+    ),
+  );
   const pendingFactoringRequests = address
     ? listPendingFactoringRequests(address)
     : [];
   const submittedPoolOffers = onChainPools.filter(
     (pool) =>
       pool.pendingOffer && pool.pendingOffer.originalCreditor === address,
+  );
+  const submittedPoolInvoiceHashes = new Set(
+    submittedPoolOffers.map((pool) => pool.meta.invoiceHash),
+  );
+  const invoiceRecords = allInvoiceRecords.filter(
+    (record) =>
+      !factoredInvoiceHashes.has(
+        getField(record.recordPlaintext, "invoice_hash"),
+      ) &&
+      !offeredInvoiceHashes.has(
+        getField(record.recordPlaintext, "invoice_hash"),
+      ) &&
+      !persistedFactoredInvoiceHashes.has(
+        getField(record.recordPlaintext, "invoice_hash"),
+      ),
+  );
+
+  useEffect(() => {
+    const syncPersistedFactoredHashes = () => {
+      setPersistedFactoredInvoiceHashes(getPersistedFactoredInvoiceHashes());
+    };
+
+    window.addEventListener(
+      "zkfactor:factored-invoices-changed",
+      syncPersistedFactoredHashes,
+    );
+    window.addEventListener("storage", syncPersistedFactoredHashes);
+
+    return () => {
+      window.removeEventListener(
+        "zkfactor:factored-invoices-changed",
+        syncPersistedFactoredHashes,
+      );
+      window.removeEventListener("storage", syncPersistedFactoredHashes);
+    };
+  }, []);
+  const visibleInvoiceRecords = invoiceRecords.filter(
+    (record) =>
+      !hiddenInvoiceHashes.has(
+        getField(record.recordPlaintext, "invoice_hash"),
+      ) &&
+      !submittedPoolInvoiceHashes.has(
+        getField(record.recordPlaintext, "invoice_hash"),
+      ),
   );
 
   const getInvoiceCurrency = (record: AleoRecord): "ALEO" | "USDCx" => {
@@ -254,9 +314,10 @@ export function BusinessDashboard() {
   };
 
   const handleAcceptOffer = async (record: AleoRecord) => {
-    const recordId =
-      record.commitment ?? getField(record.recordPlaintext, "invoice_hash");
+    const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
+    const recordId = record.commitment ?? invoiceHash;
     setSettlingId(recordId);
+    setHiddenInvoiceHashes((prev) => new Set(prev).add(invoiceHash));
     let creditsRecord: AleoRecord | undefined;
     try {
       const creditsRecords = (await requestRecords(
@@ -286,11 +347,21 @@ export function BusinessDashboard() {
         err instanceof Error ? err.message : "Failed to fetch credits",
       );
       setSettlingId(null);
+      setHiddenInvoiceHashes((prev) => {
+        const next = new Set(prev);
+        next.delete(invoiceHash);
+        return next;
+      });
       return;
     }
     if (!creditsRecord) {
       toast.error("Insufficient credits to fund this factoring");
       setSettlingId(null);
+      setHiddenInvoiceHashes((prev) => {
+        const next = new Set(prev);
+        next.delete(invoiceHash);
+        return next;
+      });
       return;
     }
     await execute({
@@ -397,7 +468,7 @@ export function BusinessDashboard() {
         </div>
       );
     }
-    if (invoiceRecords.length === 0) {
+    if (visibleInvoiceRecords.length === 0) {
       return (
         <Card className="py-16 text-center">
           <CardContent className="space-y-4">
@@ -420,7 +491,7 @@ export function BusinessDashboard() {
     }
     return (
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {invoiceRecords.map((invoice, idx) => {
+        {visibleInvoiceRecords.map((invoice, idx) => {
           const invoiceHash = getField(invoice.recordPlaintext, "invoice_hash");
           const currency = getInvoiceCurrency(invoice);
           const dueDate = unixToDate(
@@ -1017,9 +1088,9 @@ export function BusinessDashboard() {
         <TabsList>
           <TabsTrigger value="invoices">
             My Invoices
-            {!isLoading && invoiceRecords.length > 0 && (
+            {!isLoading && visibleInvoiceRecords.length > 0 && (
               <span className="ml-1.5 text-xs opacity-70">
-                ({invoiceRecords.length})
+                ({visibleInvoiceRecords.length})
               </span>
             )}
           </TabsTrigger>

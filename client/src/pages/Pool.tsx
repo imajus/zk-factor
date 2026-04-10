@@ -21,6 +21,7 @@ import {
   computePoolStats,
   fetchActiveFactorCount,
   fetchAllPools,
+  getPoolCurrentFunds,
 } from "@/lib/pool-chain";
 import { PoolTimeline } from "@/components/pools/PoolTimeline";
 
@@ -62,6 +63,10 @@ export default function Pool() {
   );
 
   const stats = pool ? computePoolStats(pool, activeFactorCount) : null;
+  const currentFunds = pool ? getPoolCurrentFunds(pool) : 0n;
+  const advancePaid = pool?.pendingOffer?.isExecuted
+    ? pool.pendingOffer.advanceAmount
+    : 0n;
   const canOpenDistribution =
     !!pool && pool.isSettled && pool.isClosed && pool.proceeds === null;
 
@@ -150,37 +155,55 @@ export default function Pool() {
                 {pool.meta.invoiceHash}
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-sm">
-                <div className="rounded-md border bg-muted/20 p-3">
-                  <p className="text-xs text-muted-foreground">Rate Range</p>
-                  <p className="font-mono mt-1">
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 text-sm">
+                <div className="rounded-lg border bg-muted/20 p-3 min-h-[76px] flex flex-col justify-between">
+                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    Rate Range
+                  </p>
+                  <p className="font-mono text-sm font-semibold leading-none">
                     {pool.meta.minAdvanceRate / 100}% -{" "}
                     {pool.meta.maxAdvanceRate / 100}%
                   </p>
                 </div>
-                <div className="rounded-md border bg-muted/20 p-3">
-                  <p className="text-xs text-muted-foreground">Current Funds</p>
-                  <p className="font-mono mt-1">
-                    {formatMicro(pool.totalContributed)} ALEO
+
+                <div className="rounded-lg border bg-muted/20 p-3 min-h-[76px] flex flex-col justify-between">
+                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    Current Funds
+                  </p>
+                  <p className="font-mono text-sm font-semibold leading-none">
+                    {formatMicro(currentFunds)} ALEO
                   </p>
                 </div>
-                <div className="rounded-md border bg-muted/20 p-3">
-                  <p className="text-xs text-muted-foreground">
+
+                <div className="rounded-lg border bg-muted/20 p-3 min-h-[76px] flex flex-col justify-between">
+                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    Advance Paid
+                  </p>
+                  <p className="font-mono text-sm font-semibold leading-none">
+                    {formatMicro(advancePaid)} ALEO
+                  </p>
+                </div>
+
+                <div className="rounded-lg border bg-muted/20 p-3 min-h-[76px] flex flex-col justify-between">
+                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
                     Min Contribution
                   </p>
-                  <p className="font-mono mt-1">
+                  <p className="font-mono text-sm font-semibold leading-none">
                     {formatMicro(pool.meta.minContribution)} ALEO
                   </p>
                 </div>
-                <div className="rounded-md border bg-muted/20 p-3">
-                  <p className="text-xs text-muted-foreground">Voting</p>
-                  <p className="font-mono mt-1">
+
+                <div className="rounded-lg border bg-muted/20 p-3 min-h-[76px] flex flex-col justify-between">
+                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    Voting
+                  </p>
+                  <p className="font-mono text-sm font-semibold leading-none">
                     {stats.totalVotes}/{stats.requiredVotes}
                   </p>
                 </div>
               </div>
 
-              {pool.totalContributed <= 0n && (
+              {currentFunds <= 0n && (
                 <div className="rounded-md border border-amber-300/60 bg-amber-950/5 p-3 text-xs text-amber-700 dark:text-amber-400 space-y-1">
                   <p className="font-medium">Pool has no funds yet</p>
                   <p>

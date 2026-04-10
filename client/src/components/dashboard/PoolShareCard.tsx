@@ -93,9 +93,14 @@ export function PoolShareCard({ record }: PoolShareCardProps) {
     ? computePoolStats(poolState, activeFactorCount)
     : null;
 
-  const snapshotSharePct =
-    totalPoolSnapshot > 0n
-      ? ((Number(contributed) / Number(totalPoolSnapshot)) * 100).toFixed(2)
+  const shareDenominator =
+    poolState?.totalContributed && poolState.totalContributed > 0n
+      ? poolState.totalContributed
+      : totalPoolSnapshot;
+
+  const sharePct =
+    shareDenominator > 0n
+      ? ((Number(contributed) / Number(shareDenominator)) * 100).toFixed(2)
       : "0.00";
 
   const proceedsAvailable =
@@ -326,7 +331,7 @@ export function PoolShareCard({ record }: PoolShareCardProps) {
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Your share</span>
-            <span>{snapshotSharePct}%</span>
+            <span>{sharePct}%</span>
           </div>
 
           {/* Live pool status */}

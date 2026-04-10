@@ -53,6 +53,19 @@ export interface OnChainPoolState {
   distributed: bigint;
 }
 
+/**
+ * Returns the pool balance after deducting any executed advance payment.
+ * This is the amount users expect to see as the pool's current funds.
+ */
+export function getPoolCurrentFunds(pool: OnChainPoolState): bigint {
+  const advancePaid = pool.pendingOffer?.isExecuted
+    ? pool.pendingOffer.advanceAmount
+    : 0n;
+  return pool.totalContributed > advancePaid
+    ? pool.totalContributed - advancePaid
+    : 0n;
+}
+
 // ── Encoding / decoding ────────────────────────────────────────────────
 
 /**

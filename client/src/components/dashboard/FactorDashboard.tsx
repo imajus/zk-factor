@@ -47,6 +47,7 @@ import { PoolShareCard } from "@/components/dashboard/PoolShareCard";
 import {
   type AleoRecord,
   getPersistedInvoiceCurrency,
+  persistFactoredInvoiceHash,
   persistInvoiceCurrency,
   getField,
   microToAleo,
@@ -211,6 +212,9 @@ export function FactorDashboard() {
         persistInvoiceCurrency(
           pendingAcceptedCurrencyRef.current.invoiceHash,
           pendingAcceptedCurrencyRef.current.currency,
+        );
+        persistFactoredInvoiceHash(
+          pendingAcceptedCurrencyRef.current.invoiceHash,
         );
         pendingAcceptedCurrencyRef.current = null;
       }

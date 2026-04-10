@@ -18,7 +18,11 @@
  */
 
 import { cn } from "@/lib/utils";
-import { computePoolStats, type OnChainPoolState } from "@/lib/pool-chain";
+import {
+  computePoolStats,
+  getPoolCurrentFunds,
+  type OnChainPoolState,
+} from "@/lib/pool-chain";
 import { CheckCircle2, Circle, Clock } from "lucide-react";
 
 // ── Phase definitions ─────────────────────────────────────────────────────────
@@ -46,12 +50,13 @@ function derivePhases(
   const distributionOpen = pool.proceeds !== null && pool.proceeds > 0n;
   const fullyDistributed =
     distributionOpen && pool.distributed >= pool.proceeds!;
+  const currentFunds = getPoolCurrentFunds(pool);
 
   const funding: Phase = {
     label: "Funding",
     description: "Pool receives factor contributions.",
     status: hasFunds && (invoiceSubmitted || pool.isClosed) ? "done" : "active",
-    detail: `${(Number(pool.totalContributed) / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 2 })} ALEO current funds`,
+    detail: `${(Number(currentFunds) / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 2 })} ALEO current funds`,
   };
 
   const invoicePhase: Phase = {

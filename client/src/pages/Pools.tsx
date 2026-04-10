@@ -1227,6 +1227,15 @@ export default function Pools() {
         (pool) => pool.meta.invoiceHash === selectedPoolHash,
       ) ?? null)
     : null;
+  const selectedAdvancePaid =
+    selectedPool?.pendingOffer?.isExecuted && selectedPool.pendingOffer
+      ? selectedPool.pendingOffer.advanceAmount
+      : 0n;
+  const selectedCurrentFunds = selectedPool
+    ? selectedPool.totalContributed > selectedAdvancePaid
+      ? selectedPool.totalContributed - selectedAdvancePaid
+      : 0n
+    : 0n;
   const selectedStats = selectedPool
     ? computePoolStats(selectedPool, activeFactorCount)
     : null;
@@ -1549,7 +1558,26 @@ export default function Pools() {
                         Current Funds
                       </p>
                       <p className="mt-1 font-mono text-sm font-semibold">
-                        {`${(Number(selectedPool?.totalContributed ?? 0n) / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 6 })} ALEO`}
+                        {selectedPool
+                          ? formatCurrencyAmount(
+                              selectedCurrentFunds,
+                              selectedPool.meta.currency,
+                            )
+                          : "-"}
+                      </p>
+                    </div>
+
+                    <div className="rounded-md border bg-muted/30 p-3">
+                      <p className="text-xs text-muted-foreground">
+                        Advance Paid
+                      </p>
+                      <p className="mt-1 font-mono text-sm font-semibold">
+                        {selectedPool
+                          ? formatCurrencyAmount(
+                              selectedAdvancePaid,
+                              selectedPool.meta.currency,
+                            )
+                          : "-"}
                       </p>
                     </div>
 

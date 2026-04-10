@@ -48,6 +48,7 @@ import {
   decodeInvoiceCurrencyFromMetadata,
   getField,
   getPersistedInvoiceCurrency,
+  persistFactoredInvoiceHash,
 } from "@/lib/aleo-records";
 import { type FactorInfo, fetchActiveFactors } from "@/lib/aleo-factors";
 import {
@@ -263,18 +264,19 @@ export default function Marketplace() {
   );
 
   const allPools = Array.isArray(onChainPools) ? onChainPools : [];
-  const openPools = allPools.filter(
-    (p) => !computePoolStats(p, activeFactorCount).isFullyDistributed,
-  );
-  const closedPools = allPools.filter(
-    (p) => computePoolStats(p, activeFactorCount).isFullyDistributed,
-  );
-  const creditorReadyPools = openPools.filter((pool) => {
-    const stats = computePoolStats(pool, activeFactorCount);
-    return (
-      !pool.isClosed && !stats.hasPendingOffer && !pool.pendingOffer?.isExecuted
-    );
-  });
+  const poolSnapshots = allPools.map((pool) => ({
+    pool,
+    stats: computePoolStats(pool, activeFactorCount),
+  }));
+  const openPools = poolSnapshots
+    .filter(({ pool, stats }) => !pool.isClosed && !stats.hasPendingOffer)
+    .map(({ pool }) => pool);
+  const votingPools = poolSnapshots
+    .filter(({ pool, stats }) => !pool.isClosed && stats.hasPendingOffer)
+    .map(({ pool }) => pool);
+  const closedPools = poolSnapshots
+    .filter(({ pool }) => pool.isClosed)
+    .map(({ pool }) => pool);
 
   // ── invoice dialog computed values ────────────────────────────────
   const advanceRateBps = advanceRateInput ? parseInt(advanceRateInput, 10) : 0;
@@ -365,6 +367,11 @@ export default function Marketplace() {
         toast.success("Invoice submitted to pool — factors can now vote!", {
           id: opId,
         });
+        if (submitInvoiceRecord) {
+          persistFactoredInvoiceHash(
+            getField(submitInvoiceRecord.recordPlaintext, "invoice_hash"),
+          );
+        }
         setSubmitInvoiceOpen(false);
         setSubmitInvoicePool(null);
         refetchPools();
@@ -424,7 +431,16 @@ export default function Marketplace() {
       pendingOpenDistributionHashRef.current = null;
       reset();
     }
-  }, [status, txError, queryClient, reset, address, navigate, refetchPools]);
+  }, [
+    status,
+    txError,
+    queryClient,
+    reset,
+    address,
+    navigate,
+    refetchPools,
+    submitInvoiceRecord,
+  ]);
 
   useEffect(() => {
     if (status !== "pending") return;
@@ -748,23 +764,33 @@ export default function Marketplace() {
             </div>
           </div>
 
-          {/* Business CTA */}
-          {isBusiness && !pool.isClosed && (
-            <>
-              {!stats.hasPendingOffer && (
-                <Button
-                  size="sm"
-                  className="w-full"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openSubmitInvoice(pool);
-                  }}
-                >
-                  <Send className="h-3.5 w-3.5 mr-1.5" />
-                  Submit Invoice to Pool
-                </Button>
-              )}
-            </>
+          {/* Role-specific CTAs */}
+          {!pool.isClosed && !stats.hasPendingOffer && isBusiness && (
+            <Button
+              size="sm"
+              className="w-full"
+              onClick={(e) => {
+                e.stopPropagation();
+                openSubmitInvoice(pool);
+              }}
+            >
+              <Send className="h-3.5 w-3.5 mr-1.5" />
+              Submit Invoice to Pool
+            </Button>
+          )}
+
+          {!pool.isClosed && stats.hasPendingOffer && isBusiness && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="w-full"
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/pools/${pool.meta.invoiceHash}`);
+              }}
+            >
+              View Pool Progress
+            </Button>
           )}
 
           {/* Factor CTAs */}
@@ -812,8 +838,42 @@ export default function Marketplace() {
               )}
             </div>
           )}
+
+          {pool.isClosed && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="w-full"
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/pools/${pool.meta.invoiceHash}`);
+              }}
+            >
+              View Pool Claims
+            </Button>
+          )}
         </CardContent>
       </Card>
+    );
+  };
+
+  const renderPoolSection = (
+    title: string,
+    description: string,
+    pools: OnChainPoolState[],
+  ) => {
+    if (pools.length === 0) return null;
+
+    return (
+      <div className="space-y-3">
+        <div>
+          <p className="text-sm font-medium">{title}</p>
+          <p className="text-xs text-muted-foreground">{description}</p>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {pools.map(renderPoolCard)}
+        </div>
+      </div>
     );
   };
 
@@ -885,13 +945,14 @@ export default function Marketplace() {
           )}
 
           {/* ── Pools section ── */}
-          {(poolsLoading || openPools.length > 0 || closedPools.length > 0) && (
+          {(poolsLoading || allPools.length > 0) && (
             <div className="space-y-3">
               <div>
                 <p className="text-sm font-medium">On-Chain Pools</p>
                 <p className="text-xs text-muted-foreground">
-                  Pools are public and ownerless — contributions are held in the
-                  protocol escrow. Minimum contribution is defined by each pool.
+                  Pools stay visible through funding, voting, execution, and
+                  claims. A pool handles one invoice cycle at a time, then can
+                  be reused for the next invoice once the current cycle closes.
                 </p>
               </div>
 
@@ -908,42 +969,22 @@ export default function Marketplace() {
                     </Card>
                   ))}
                 </div>
-              ) : (isBusiness ? creditorReadyPools : openPools).length === 0 ? (
-                <Card className="border-dashed">
-                  <CardContent className="py-8 text-center space-y-2">
-                    <p className="font-medium text-sm">
-                      No pools ready for factoring
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {isFactor
-                        ? "Create a pool to start collecting contributions."
-                        : "Only pools ready for invoice submission are shown here."}
-                    </p>
-                  </CardContent>
-                </Card>
               ) : (
-                <div className="grid gap-4 sm:grid-cols-2">
-                  {(isBusiness ? creditorReadyPools : openPools).map(
-                    renderPoolCard,
+                <div className="space-y-6">
+                  {renderPoolSection(
+                    "Open Pools",
+                    "Ready for new invoice submissions.",
+                    openPools,
                   )}
-                </div>
-              )}
-
-              {isFactor && closedPools.length > 0 && (
-                <div className="space-y-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="px-0 text-muted-foreground"
-                    onClick={() => setShowCompletedPools((p) => !p)}
-                  >
-                    {showCompletedPools ? "Hide" : "Show"} completed pools (
-                    {closedPools.length})
-                  </Button>
-                  {showCompletedPools && (
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      {closedPools.map(renderPoolCard)}
-                    </div>
+                  {renderPoolSection(
+                    "Voting Pools",
+                    "Pools currently processing an invoice through factor voting.",
+                    votingPools,
+                  )}
+                  {renderPoolSection(
+                    "Closed Pools",
+                    "Executed pools remain visible here for settlement and claims.",
+                    closedPools,
                   )}
                 </div>
               )}
