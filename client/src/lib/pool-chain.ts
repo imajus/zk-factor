@@ -124,11 +124,7 @@ async function safeGet(
   key: string,
 ): Promise<string | null> {
   try {
-    const v = await client.getProgramMappingValue(
-      PROGRAM_ID,
-      mapping,
-      key,
-    );
+    const v = await client.getProgramMappingValue(PROGRAM_ID, mapping, key);
     return v ? String(v) : null;
   } catch {
     return null;
@@ -351,7 +347,7 @@ export async function fetchPublicTokenBalance(
   try {
     const raw = await client.getProgramMappingValue(
       USDCX_PROGRAM_ID,
-      "account",
+      "balances",
       address,
     );
     return BigInt(stripSuffix(String(raw).trim()) || "0");
