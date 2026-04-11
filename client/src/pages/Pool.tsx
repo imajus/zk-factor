@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -7,21 +7,41 @@ import {
   ArrowRight,
   Layers,
   RefreshCw,
+  TrendingUp,
+  Vote,
+  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { AddressDisplay } from "@/components/ui/address-display";
 import { useWallet } from "@/contexts/WalletContext";
 import { useTransaction } from "@/hooks/use-transaction";
 import { toast } from "sonner";
-import { PROGRAM_ID } from "@/lib/config";
+import { PROGRAM_ID, PROGRAM_ADDRESS, USDCX_PROGRAM_ID } from "@/lib/config";
 import {
   computePoolStats,
   fetchActiveFactorCount,
   fetchAllPools,
   getPoolCurrentFunds,
+  buildPoolContributeInputs,
+  buildPoolVoteInputs,
+  buildPoolVoteRejectInputs,
+  buildFinalizeRejectedPoolInputs,
+  buildExecuteApprovedPoolInputs,
+  fetchPublicCreditsBalance,
+  fetchPublicTokenBalance,
 } from "@/lib/pool-chain";
 import { PoolTimeline } from "@/components/pools/PoolTimeline";
 
@@ -31,12 +51,30 @@ function formatMicro(value: bigint): string {
   });
 }
 
+function formatCurrencyAmount(
+  amount: bigint,
+  currency: "ALEO" | "USDCx",
+): string {
+  return `${formatMicro(amount)} ${currency}`;
+}
+
 export default function Pool() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { poolId } = useParams<{ poolId: string }>();
-  const { activeRole } = useWallet();
-  const { execute, status } = useTransaction();
+  const { activeRole, address } = useWallet();
+  const { execute, status, error: txError, reset } = useTransaction();
+
+  // Contribute dialog state
+  const [contributeOpen, setContributeOpen] = useState(false);
+  const [contributeAmount, setContributeAmount] = useState("");
+  const [publicBalance, setPublicBalance] = useState<bigint | null>(null);
+
+  // Vote tracking (persisted per-address in localStorage)
+  const [votedPoolHashes, setVotedPoolHashes] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [pendingVoteKey, setPendingVoteKey] = useState<string | null>(null);
 
   const { data: activeFactorCount = 1 } = useQuery({
     queryKey: ["active_factor_count"],
@@ -70,7 +108,203 @@ export default function Pool() {
   const canOpenDistribution =
     !!pool && pool.isSettled && pool.isClosed && pool.proceeds === null;
 
-  const openDistribution = async () => {
+  // Load vote tracking from localStorage
+  useEffect(() => {
+    if (!address) {
+      setVotedPoolHashes(new Set());
+      return;
+    }
+    const storageKey = `voted-pools:${PROGRAM_ID}:${address}`;
+    try {
+      const raw = localStorage.getItem(storageKey);
+      const parsed = raw ? (JSON.parse(raw) as string[]) : [];
+      setVotedPoolHashes(new Set(parsed));
+    } catch {
+      setVotedPoolHashes(new Set());
+    }
+  }, [address]);
+
+  useEffect(() => {
+    if (!address) return;
+    const storageKey = `voted-pools:${PROGRAM_ID}:${address}`;
+    localStorage.setItem(
+      storageKey,
+      JSON.stringify(Array.from(votedPoolHashes)),
+    );
+  }, [address, votedPoolHashes]);
+
+  // Toast feedback + cleanup on tx status changes
+  useEffect(() => {
+    if (status === "submitting")
+      toast.loading("Generating proof…", { id: "pool-op" });
+    else if (status === "pending")
+      toast.loading("Broadcasting…", { id: "pool-op" });
+    else if (status === "accepted") {
+      if (pendingVoteKey) {
+        setVotedPoolHashes((prev) => {
+          const next = new Set(prev);
+          next.add(pendingVoteKey);
+          return next;
+        });
+        setPendingVoteKey(null);
+      }
+      toast.success("Transaction confirmed!", { id: "pool-op" });
+      queryClient.invalidateQueries({ queryKey: ["all_pools"] });
+      queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
+      setContributeOpen(false);
+      setContributeAmount("");
+      setPublicBalance(null);
+      reset();
+    } else if (status === "failed") {
+      setPendingVoteKey(null);
+      toast.error(txError || "Transaction failed", { id: "pool-op" });
+      setContributeOpen(false);
+      setContributeAmount("");
+      setPublicBalance(null);
+      reset();
+    }
+  }, [status, txError, queryClient, reset, pendingVoteKey]);
+
+  const buildVoteKey = (nonce: string | undefined): string =>
+    `${poolId}:${nonce ?? "no-offer"}`;
+
+  const openContribute = async () => {
+    if (!pool) return;
+    setContributeAmount("");
+    setContributeOpen(true);
+    if (address) {
+      const balance =
+        pool.meta.currency === "USDCx"
+          ? await fetchPublicTokenBalance(address)
+          : await fetchPublicCreditsBalance(address);
+      setPublicBalance(balance);
+    }
+  };
+
+  const handleContribute = async () => {
+    if (!pool || !address) return;
+    const amountFloat = parseFloat(contributeAmount);
+    if (Number.isNaN(amountFloat) || amountFloat <= 0) {
+      toast.error("Enter a valid amount.");
+      return;
+    }
+    const contribution = BigInt(Math.round(amountFloat * 1_000_000));
+    const minContrib = pool.meta.minContribution;
+    if (contribution < minContrib) {
+      toast.error(
+        `Minimum contribution is ${formatCurrencyAmount(minContrib, pool.meta.currency)}.`,
+      );
+      return;
+    }
+    if (publicBalance !== null && contribution > publicBalance) {
+      toast.error(
+        `Insufficient public ${pool.meta.currency} balance (${formatCurrencyAmount(publicBalance, pool.meta.currency)}).`,
+      );
+      return;
+    }
+    if (!PROGRAM_ADDRESS) {
+      toast.error("PROGRAM_ADDRESS is not set.");
+      return;
+    }
+    if (pool.meta.currency === "USDCx") {
+      await execute({
+        program: USDCX_PROGRAM_ID,
+        function: "approve_public",
+        inputs: [PROGRAM_ID, `${contribution}u128`],
+        fee: 50_000,
+        privateFee: false,
+      });
+    }
+    const contributeFunction =
+      pool.meta.currency === "USDCx"
+        ? "pool_contribute_token"
+        : "pool_contribute";
+    await execute({
+      program: PROGRAM_ID,
+      function: contributeFunction,
+      inputs: buildPoolContributeInputs(
+        pool.meta.invoiceHash,
+        PROGRAM_ADDRESS,
+        contribution,
+        pool.totalContributed,
+      ),
+      fee: 80_000,
+      privateFee: false,
+    });
+  };
+
+  const handleVoteApprove = async () => {
+    if (!pool?.pendingOffer) return;
+    const voteKey = buildVoteKey(pool.pendingOffer.nonce);
+    if (votedPoolHashes.has(voteKey) || pendingVoteKey === voteKey) return;
+    setVotedPoolHashes((prev) => {
+      const next = new Set(prev);
+      next.add(voteKey);
+      return next;
+    });
+    setPendingVoteKey(voteKey);
+    await execute({
+      program: PROGRAM_ID,
+      function: "pool_vote",
+      inputs: buildPoolVoteInputs(pool.meta.invoiceHash),
+      fee: 50_000,
+      privateFee: false,
+    });
+  };
+
+  const handleVoteReject = async () => {
+    if (!pool?.pendingOffer) return;
+    const voteKey = buildVoteKey(pool.pendingOffer.nonce);
+    if (votedPoolHashes.has(voteKey) || pendingVoteKey === voteKey) return;
+    setVotedPoolHashes((prev) => {
+      const next = new Set(prev);
+      next.add(voteKey);
+      return next;
+    });
+    setPendingVoteKey(voteKey);
+    await execute({
+      program: PROGRAM_ID,
+      function: "pool_vote_reject",
+      inputs: buildPoolVoteRejectInputs(pool.meta.invoiceHash),
+      fee: 50_000,
+      privateFee: false,
+    });
+  };
+
+  const handleExecuteApprovedPool = async () => {
+    if (!pool?.pendingOffer || pool.pendingOffer.isExecuted) return;
+    const executeFunction =
+      pool.meta.currency === "USDCx"
+        ? "execute_approved_pool_token"
+        : "execute_approved_pool";
+    await execute({
+      program: PROGRAM_ID,
+      function: executeFunction,
+      inputs: buildExecuteApprovedPoolInputs(
+        pool.meta.invoiceHash,
+        pool.pendingOffer.originalCreditor,
+        pool.pendingOffer.debtor,
+        pool.pendingOffer.advanceAmount,
+        pool.pendingOffer.amount,
+        pool.pendingOffer.dueDate,
+      ),
+      fee: 120_000,
+      privateFee: false,
+    });
+  };
+
+  const handleFinalizeRejectedPool = async () => {
+    if (!pool) return;
+    await execute({
+      program: PROGRAM_ID,
+      function: "finalize_rejected_pool",
+      inputs: buildFinalizeRejectedPoolInputs(pool.meta.invoiceHash),
+      fee: 50_000,
+      privateFee: false,
+    });
+  };
+
+  const handleOpenDistribution = async () => {
     if (!pool) return;
     await execute({
       program: PROGRAM_ID,
@@ -79,9 +313,6 @@ export default function Pool() {
       fee: 80_000,
       privateFee: false,
     });
-    toast.success("Distribution opened.");
-    queryClient.invalidateQueries({ queryKey: ["all_pools"] });
-    queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
   };
 
   if (!poolId) {
@@ -150,19 +381,19 @@ export default function Pool() {
 
           {/* Main content */}
           <div className="flex-1 min-w-0 space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Layers className="h-5 w-5 text-primary" />
-                {pool.meta.name}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="font-mono text-xs text-muted-foreground break-all">
-                {pool.meta.invoiceHash}
-              </div>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Layers className="h-5 w-5 text-primary" />
+                  {pool.meta.name}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="font-mono text-xs text-muted-foreground break-all">
+                  {pool.meta.invoiceHash}
+                </div>
 
-              <div className="space-y-4">
+                <div className="space-y-4">
                   <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 text-sm">
                     <div className="rounded-lg border bg-muted/20 p-3 min-h-[76px] flex flex-col justify-between">
                       <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
@@ -215,8 +446,8 @@ export default function Pool() {
                     <div className="rounded-md border border-amber-300/60 bg-amber-950/5 p-3 text-xs text-amber-700 dark:text-amber-400 space-y-1">
                       <p className="font-medium">Pool has no funds yet</p>
                       <p>
-                        Invoice submissions will be rejected until contributors add
-                        liquidity to this pool.
+                        Invoice submissions will be rejected until contributors
+                        add liquidity to this pool.
                       </p>
                     </div>
                   )}
@@ -296,16 +527,98 @@ export default function Pool() {
                     </div>
                   )}
 
+                  {/* Action buttons */}
                   <div className="flex flex-wrap gap-2">
-                    {canOpenDistribution && (
+                    {/* Contribute — available while pool is open */}
+                    {!pool.isClosed && (
                       <Button
-                        onClick={openDistribution}
+                        onClick={openContribute}
                         disabled={status !== "idle"}
                       >
-                        Open Distribution
+                        <TrendingUp className="h-4 w-4 mr-1.5" />
+                        Contribute
                       </Button>
                     )}
 
+                    {/* Vote actions — factor only, while votes are still being cast */}
+                    {activeRole === "factor" &&
+                      pool.pendingOffer &&
+                      !pool.pendingOffer.isExecuted &&
+                      !pool.isClosed &&
+                      !stats.allVotesCast && (() => {
+                        const voteKey = buildVoteKey(pool.pendingOffer!.nonce);
+                        const hasVoted =
+                          votedPoolHashes.has(voteKey) ||
+                          pendingVoteKey === voteKey;
+                        return (
+                          <>
+                            <Button
+                              onClick={handleVoteApprove}
+                              disabled={status !== "idle" || hasVoted}
+                            >
+                              <Vote className="h-4 w-4 mr-1.5" />
+                              {hasVoted ? "Voted" : "Approve"}
+                            </Button>
+                            <Button
+                              variant="destructive"
+                              onClick={handleVoteReject}
+                              disabled={status !== "idle" || hasVoted}
+                            >
+                              Reject
+                            </Button>
+                          </>
+                        );
+                      })()}
+
+                    {/* Execute approved pool — after all votes cast and approved */}
+                    {activeRole === "factor" &&
+                      pool.pendingOffer &&
+                      !pool.pendingOffer.isExecuted &&
+                      !pool.isClosed &&
+                      stats.allVotesCast &&
+                      stats.isApproved && (
+                        <Button
+                          onClick={handleExecuteApprovedPool}
+                          disabled={status !== "idle"}
+                        >
+                          <Zap className="h-4 w-4 mr-1.5" />
+                          Execute Approved Pool
+                        </Button>
+                      )}
+
+                    {/* Finalize rejected pool — after all votes cast and rejected */}
+                    {activeRole === "factor" &&
+                      pool.pendingOffer &&
+                      !pool.pendingOffer.isExecuted &&
+                      !pool.isClosed &&
+                      stats.allVotesCast &&
+                      !stats.isApproved && (
+                        <Button
+                          variant="destructive"
+                          onClick={handleFinalizeRejectedPool}
+                          disabled={status !== "idle"}
+                        >
+                          Finalize Rejected Offer
+                        </Button>
+                      )}
+
+                    {/* Open Distribution — permissionless once debtor has paid */}
+                    {canOpenDistribution && (
+                      <div className="flex flex-col gap-1">
+                        <Button
+                          onClick={handleOpenDistribution}
+                          disabled={status !== "idle"}
+                        >
+                          Open Distribution
+                        </Button>
+                        <p className="text-[11px] text-muted-foreground">
+                          Permissionless — anyone can call this once debtor has
+                          paid.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Navigation shortcuts */}
                     {activeRole === "factor" && pool.pendingOffer && (
                       <Button asChild variant="secondary">
                         <Link to="/pools">
@@ -326,12 +639,103 @@ export default function Pool() {
                         </Button>
                       )}
                   </div>
-              </div>
-            </CardContent>
-          </Card>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
       )}
+
+      {/* Contribute dialog */}
+      <Dialog
+        open={contributeOpen}
+        onOpenChange={(open) => {
+          setContributeOpen(open);
+          if (!open) {
+            setContributeAmount("");
+            setPublicBalance(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-blue-500" />
+              Contribute to Pool
+            </DialogTitle>
+            <DialogDescription>
+              Contributions go to protocol escrow in the pool's currency, and
+              you receive a PoolShare record.
+            </DialogDescription>
+          </DialogHeader>
+
+          {pool && (
+            <div className="space-y-4 py-2">
+              <div className="bg-muted rounded-lg p-3 text-sm space-y-1.5">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Pool</span>
+                  <span className="font-medium">{pool.meta.name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Total Raised</span>
+                  <span className="font-mono">
+                    {formatCurrencyAmount(
+                      pool.totalContributed,
+                      pool.meta.currency,
+                    )}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Min contribution</span>
+                  <span className="font-mono">
+                    {formatCurrencyAmount(
+                      pool.meta.minContribution,
+                      pool.meta.currency,
+                    )}
+                  </span>
+                </div>
+                {publicBalance !== null && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">
+                      Your public balance
+                    </span>
+                    <span className="font-mono">
+                      {formatCurrencyAmount(publicBalance, pool.meta.currency)}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label>Contribution Amount ({pool.meta.currency})</Label>
+                <Input
+                  type="number"
+                  min={Number(pool.meta.minContribution) / 1e6}
+                  step="0.000001"
+                  value={contributeAmount}
+                  onChange={(e) => setContributeAmount(e.target.value)}
+                  placeholder="e.g. 25"
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setContributeOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleContribute}
+              disabled={status !== "idle" || !contributeAmount}
+            >
+              {status !== "idle" ? "Contributing..." : "Contribute"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
