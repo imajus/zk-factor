@@ -6,12 +6,8 @@ import {
   AlertCircle,
   RefreshCw,
   ArrowRight,
-  TrendingUp,
-  ChevronRight,
-  Layers,
   Copy,
   Check,
-  Info,
   Send,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -20,7 +16,6 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Progress } from "@/components/ui/progress";
 import { AddressDisplay } from "@/components/ui/address-display";
 import {
   Dialog,
@@ -43,29 +38,26 @@ import { useWallet } from "@/contexts/WalletContext";
 import { useTransaction } from "@/hooks/use-transaction";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { PROGRAM_ID, PROGRAM_ADDRESS } from "@/lib/config";
+import { PROGRAM_ID } from "@/lib/config";
 import {
   type AleoRecord,
   decodeInvoiceCurrencyFromMetadata,
   getField,
   getPersistedInvoiceCurrency,
+  persistFactoredInvoiceHash,
 } from "@/lib/aleo-records";
 import { type FactorInfo, fetchActiveFactors } from "@/lib/aleo-factors";
 import {
-  buildPoolContributeInputs,
   buildPoolSubmitInvoiceInputs,
   computePoolStats,
   fetchAllPools,
   fetchActiveFactorCount,
-  fetchPublicCreditsBalance,
   type OnChainPoolState,
 } from "../lib/pool-chain";
-import { buildExecuteInputs, getExecuteTransition } from "@/lib/aleo-factors";
 import {
   removePendingFactoringRequest,
   upsertPendingFactoringRequest,
 } from "@/lib/pending-factoring";
-import { PoolTimeline } from "@/components/pools/PoolTimeline";
 
 // ── helpers ───────────────────────────────────────────────────────────
 function formatMicro(micro: bigint | number): string {
@@ -97,81 +89,14 @@ function getInvoiceCurrency(
   return cached ?? fromMetadata;
 }
 
-function getOwnerlessPoolStatus(
-  pool: OnChainPoolState,
-  stats: ReturnType<typeof computePoolStats>,
-): { label: string; colorClass: string; cardClass: string } {
-  if (pool.isClosed) {
-    if (stats.isFullyDistributed) {
-      return {
-        label: "Closed",
-        colorClass: "text-emerald-600 border-emerald-300",
-        cardClass:
-          "border-emerald-300/60 bg-emerald-50/30 dark:bg-emerald-950/20",
-      };
-    }
-
-    if (pool.isSettled && pool.proceeds === null) {
-      return {
-        label: "Awaiting Distribution",
-        colorClass: "text-violet-700 border-violet-300",
-        cardClass: "border-violet-300/70 bg-violet-50/40 dark:bg-violet-950/20",
-      };
-    }
-
-    if (pool.proceeds !== null && pool.proceeds > 0n) {
-      return {
-        label: "Paying Out",
-        colorClass: "text-amber-700 border-amber-300",
-        cardClass: "border-amber-300/70 bg-amber-50/40 dark:bg-amber-950/20",
-      };
-    }
-
-    return {
-      label: "Executed",
-      colorClass: "text-blue-700 border-blue-400",
-      cardClass: "border-blue-300/60 bg-blue-50/40 dark:bg-blue-950/20",
-    };
-  }
-
-  if (stats.hasPendingOffer) {
-    return {
-      label: "Voting",
-      colorClass: "text-amber-700 border-amber-300",
-      cardClass: "border-amber-300/70 bg-amber-50/40 dark:bg-amber-950/20",
-    };
-  }
-
-  if (stats.isFullyFunded) {
-    return {
-      label: "Funded",
-      colorClass: "text-amber-700 border-amber-300",
-      cardClass: "border-blue-300/60 bg-blue-50/40 dark:bg-blue-950/20",
-    };
-  }
-
-  return {
-    label: "Open",
-    colorClass: "text-blue-700 border-blue-400",
-    cardClass: "border-blue-300/60 bg-blue-50/40 dark:bg-blue-950/20",
-  };
-}
 
 // ── types ─────────────────────────────────────────────────────────────
-type PendingAction =
-  | "factor"
-  | "create-pool"
-  | "contribute-pool"
-  | "submit-invoice-pool"
-  | "vote-pool"
-  | "execute-pool"
-  | "open-distribution"
-  | null;
+type PendingAction = "factor" | "submit-invoice-pool" | null;
 
 export default function Marketplace() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { isConnected, requestRecords, activeRole, address } = useWallet();
+  const { isConnected, requestRecords, address } = useWallet();
   const { execute, status, error: txError, reset } = useTransaction();
 
   // ── general UI state ───────────────────────────────────────────────
@@ -185,20 +110,6 @@ export default function Marketplace() {
   const [partialAmountInput, setPartialAmountInput] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  // ── pool detail dialog ─────────────────────────────────────────────
-  const [selectedPool, setSelectedPool] = useState<OnChainPoolState | null>(
-    null,
-  );
-  const [poolDetailOpen, setPoolDetailOpen] = useState(false);
-
-  // ── pool contribute dialog ─────────────────────────────────────────
-  const [contributeOpen, setContributeOpen] = useState(false);
-  const [contributePool, setContributePool] = useState<OnChainPoolState | null>(
-    null,
-  );
-  const [contributeAmount, setContributeAmount] = useState("");
-  const [publicBalance, setPublicBalance] = useState<bigint | null>(null);
-
   // ── pool invoice submit dialog (business) ─────────────────────────
   const [submitInvoiceOpen, setSubmitInvoiceOpen] = useState(false);
   const [submitInvoicePool, setSubmitInvoicePool] =
@@ -207,14 +118,12 @@ export default function Marketplace() {
   const [submitInvoiceRate, setSubmitInvoiceRate] = useState("");
 
   // ── misc state ─────────────────────────────────────────────────────
-  const [showCompletedPools, setShowCompletedPools] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
   // ── refs (survive re-renders during async execute) ─────────────────
   const pendingActionRef = useRef<PendingAction>(null);
   const pendingFactorModeRef = useRef<{ usePartial: boolean } | null>(null);
   const pendingFactoringHashRef = useRef<string | null>(null);
-  const pendingOpenDistributionHashRef = useRef<string | null>(null);
 
   // ── data queries ───────────────────────────────────────────────────
   const {
@@ -263,12 +172,11 @@ export default function Marketplace() {
       f.address.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
-  const openPools = (Array.isArray(onChainPools) ? onChainPools : []).filter(
-    (p) => !computePoolStats(p, activeFactorCount).isFullyDistributed,
-  );
-  const closedPools = (Array.isArray(onChainPools) ? onChainPools : []).filter(
-    (p) => computePoolStats(p, activeFactorCount).isFullyDistributed,
-  );
+  const allPools = Array.isArray(onChainPools) ? onChainPools : [];
+  const openPools = allPools.filter((pool) => {
+    const stats = computePoolStats(pool, activeFactorCount);
+    return !pool.isClosed && !stats.hasPendingOffer;
+  });
 
   // ── invoice dialog computed values ────────────────────────────────
   const advanceRateBps = advanceRateInput ? parseInt(advanceRateInput, 10) : 0;
@@ -317,9 +225,6 @@ export default function Marketplace() {
   const submitInvoiceRecord = availableInvoicesForPool.find(
     (r) => getInvoiceSelectionId(r) === submitInvoiceSelectedId,
   );
-  const submitInvoiceAmountMicro = submitInvoiceRecord
-    ? parseInvoiceAmountMicro(submitInvoiceRecord)
-    : 0;
   const submitAdvanceAmount =
     submitInvoiceRecord && submitRateValid
       ? Math.floor(
@@ -349,36 +254,21 @@ export default function Marketplace() {
         setDialogOpen(false);
         pendingFactorModeRef.current = null;
         pendingFactoringHashRef.current = null;
-      } else if (action === "contribute-pool") {
-        toast.success("Contribution submitted!", { id: opId });
-        setContributeOpen(false);
-        setContributePool(null);
-        setContributeAmount("");
-        refetchPools();
       } else if (action === "submit-invoice-pool") {
         toast.success("Invoice submitted to pool — factors can now vote!", {
           id: opId,
         });
+        if (submitInvoiceRecord) {
+          persistFactoredInvoiceHash(
+            getField(submitInvoiceRecord.recordPlaintext, "invoice_hash"),
+          );
+        }
         setSubmitInvoiceOpen(false);
         setSubmitInvoicePool(null);
-        refetchPools();
-      } else if (action === "vote-pool") {
-        toast.success("Vote recorded!", { id: opId });
-        refetchPools();
-        if (selectedPool) setSelectedPool(null);
-      } else if (action === "execute-pool") {
-        toast.success("Pool factoring executed — business receives advance!", {
-          id: opId,
-        });
-        refetchPools();
-        setPoolDetailOpen(false);
-      } else if (action === "open-distribution") {
-        toast.success("Distribution opened.", { id: opId });
         refetchPools();
       }
 
       pendingActionRef.current = null;
-      pendingOpenDistributionHashRef.current = null;
       queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
 
       if (shouldNav) {
@@ -389,8 +279,7 @@ export default function Marketplace() {
       reset();
     } else if (status === "failed") {
       let msg = "Transaction failed";
-      if (action === "create-pool") msg = "Pool creation failed";
-      else if (action === "factor") {
+      if (action === "factor") {
         msg = "Factoring failed";
         if (address && pendingFactoringHashRef.current) {
           removePendingFactoringRequest(
@@ -408,16 +297,11 @@ export default function Marketplace() {
             "Partial factoring unavailable on this deployment. Clear partial amount for full factoring.";
         }
         pendingFactorModeRef.current = null;
-      } else if (action === "contribute-pool") msg = "Contribution failed";
-      else if (action === "submit-invoice-pool")
+      } else if (action === "submit-invoice-pool")
         msg = "Invoice submission failed";
-      else if (action === "vote-pool") msg = "Vote failed";
-      else if (action === "execute-pool") msg = "Execution failed";
-      else if (action === "open-distribution") msg = "Open distribution failed";
 
       toast.error(txError || msg, { id: opId });
       pendingActionRef.current = null;
-      pendingOpenDistributionHashRef.current = null;
       reset();
     }
   }, [
@@ -428,29 +312,8 @@ export default function Marketplace() {
     address,
     navigate,
     refetchPools,
-    selectedPool,
+    submitInvoiceRecord,
   ]);
-
-  useEffect(() => {
-    if (status !== "pending") return;
-    if (pendingActionRef.current !== "open-distribution") return;
-
-    const pendingHash = pendingOpenDistributionHashRef.current;
-    if (!pendingHash) return;
-
-    const pool = onChainPools.find((p) => p.meta.invoiceHash === pendingHash);
-    const distributionOpened =
-      !!pool && pool.proceeds !== null && pool.proceeds > 0n;
-
-    if (!distributionOpened) return;
-
-    toast.success("Distribution opened.", { id: "marketplace-op" });
-    pendingActionRef.current = null;
-    pendingOpenDistributionHashRef.current = null;
-    queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
-    queryClient.invalidateQueries({ queryKey: ["all_pools"] });
-    reset();
-  }, [status, onChainPools, queryClient, reset]);
 
   // ── action: factor invoice ─────────────────────────────────────────
   const handleFactorInvoice = async () => {
@@ -465,115 +328,55 @@ export default function Marketplace() {
       (r) => getInvoiceSelectionId(r) === selectedInvoiceId,
     );
     if (!invoice) return;
-    const currency = getInvoiceCurrency(
-      invoice,
-      getField(invoice.recordPlaintext, "invoice_hash"),
-    );
+
     const invoiceHash = getField(invoice.recordPlaintext, "invoice_hash");
-    const debtor = getField(invoice.recordPlaintext, "debtor");
-    const dueDateUnix = parseInt(
-      getField(invoice.recordPlaintext, "due_date").replace(/u64$/, ""),
-      10,
-    );
-    const useToken = currency === "USDCx";
     const invoiceAmountMicro = parseInvoiceAmountMicro(invoice);
     const usePartial = wantsPartial && partialAmountMicro < invoiceAmountMicro;
+    const useToken = selectedInvoiceCurrency === "USDCx";
     const functionName = usePartial
       ? "authorize_partial_factoring"
       : "authorize_factoring";
+    const inputs = usePartial
+      ? [
+          invoice.recordPlaintext,
+          selectedFactor.address,
+          `${partialAmountMicro}u64`,
+          `${advanceRateBps}u16`,
+          useToken ? "true" : "false",
+          "false",
+        ]
+      : [
+          invoice.recordPlaintext,
+          selectedFactor.address,
+          `${advanceRateBps}u16`,
+          useToken ? "true" : "false",
+          "false",
+        ];
 
     if (address) {
       upsertPendingFactoringRequest(address, {
         invoiceHash,
         factorAddress: selectedFactor.address,
-        debtor,
-        amountMicro: usePartial ? partialAmountMicro : invoiceAmountMicro,
-        currency,
-        dueDateUnix,
+        debtor: getField(invoice.recordPlaintext, "debtor"),
+        amountMicro: invoiceAmountMicro,
+        dueDateUnix: parseInt(
+          getField(invoice.recordPlaintext, "due_date").replace(/u64$/, ""),
+          10,
+        ),
+        currency: selectedInvoiceCurrency,
         requestedAt: Date.now(),
       });
       pendingFactoringHashRef.current = invoiceHash;
     }
 
-    pendingActionRef.current = "factor";
     pendingFactorModeRef.current = { usePartial };
+    pendingActionRef.current = "factor";
 
     await execute({
       program: PROGRAM_ID,
       function: functionName,
-      inputs: usePartial
-        ? [
-            invoice.recordPlaintext,
-            selectedFactor.address,
-            `${partialAmountMicro}u64`,
-            `${advanceRateBps}u16`,
-            useToken ? "true" : "false",
-            "false",
-          ]
-        : [
-            invoice.recordPlaintext,
-            selectedFactor.address,
-            `${advanceRateBps}u16`,
-            useToken ? "true" : "false",
-            "false",
-          ],
+      inputs,
       fee: 100_000,
-      privateFee: false,
-    });
-  };
-
-  // ── action: contribute to pool ────────────────────────────────────
-  const openContribute = async (pool: OnChainPoolState) => {
-    setContributePool(pool);
-    setContributeAmount("");
-    setContributeOpen(true);
-    if (address) {
-      const bal = await fetchPublicCreditsBalance(address);
-      setPublicBalance(bal);
-    }
-  };
-
-  const handleContribute = async () => {
-    if (!contributePool || !address) return;
-    const amountAleo = parseFloat(contributeAmount);
-    if (Number.isNaN(amountAleo) || amountAleo <= 0) {
-      toast.error("Enter a valid amount.");
-      return;
-    }
-    const contribution = BigInt(Math.round(amountAleo * 1_000_000));
-    const minContrib = contributePool.meta.minContribution;
-
-    if (contribution < minContrib) {
-      toast.error(`Minimum contribution is ${formatMicro(minContrib)} ALEO.`);
-      return;
-    }
-    if (publicBalance !== null && contribution > publicBalance) {
-      toast.error(
-        `Insufficient public credits balance (${formatMicro(publicBalance)} ALEO). ` +
-          "Convert private records to public credits first.",
-      );
-      return;
-    }
-    if (!PROGRAM_ADDRESS) {
-      toast.error(
-        "PROGRAM_ADDRESS is not set — cannot route credits to the pool escrow.",
-      );
-      return;
-    }
-
-    const existingTotal = contributePool.totalContributed;
-
-    pendingActionRef.current = "contribute-pool";
-    await execute({
-      program: PROGRAM_ID,
-      function: "pool_contribute",
-      inputs: buildPoolContributeInputs(
-        contributePool.meta.invoiceHash,
-        PROGRAM_ADDRESS,
-        contribution,
-        existingTotal,
-      ),
-      fee: 80_000,
       privateFee: false,
     });
   };
@@ -596,6 +399,21 @@ export default function Marketplace() {
       );
       return;
     }
+
+    if (submitInvoicePool.totalContributed <= 0n) {
+      toast.error(
+        "This pool has no funds yet. It will reject invoice submissions until contributors fund it.",
+      );
+      return;
+    }
+
+    if (BigInt(submitAdvanceAmount) > submitInvoicePool.totalContributed) {
+      toast.error(
+        `This pool only has ${formatMicro(submitInvoicePool.totalContributed)} ALEO available, but this invoice needs ${formatMicro(BigInt(submitAdvanceAmount))} ALEO.`,
+      );
+      return;
+    }
+
     pendingActionRef.current = "submit-invoice-pool";
     await execute({
       program: PROGRAM_ID,
@@ -606,18 +424,6 @@ export default function Marketplace() {
         submitRateBps,
       ),
       fee: 100_000,
-      privateFee: false,
-    });
-  };
-
-  const handleOpenDistribution = async (invoiceHash: string) => {
-    pendingActionRef.current = "open-distribution";
-    pendingOpenDistributionHashRef.current = invoiceHash;
-    await execute({
-      program: PROGRAM_ID,
-      function: "pool_open_distribution",
-      inputs: [invoiceHash],
-      fee: 80_000,
       privateFee: false,
     });
   };
@@ -634,80 +440,21 @@ export default function Marketplace() {
     }
   };
 
-  const isFactor = activeRole === "factor";
-  const isBusiness = activeRole === "business";
-
   // ── pool card renderer ─────────────────────────────────────────────
   const renderPoolCard = (pool: OnChainPoolState) => {
-    const stats = computePoolStats(pool, activeFactorCount);
-    const status = getOwnerlessPoolStatus(pool, stats);
-
-    const voteProgressPct =
-      stats.threshold > 0
-        ? Math.min(100, Math.round((stats.voteCount / stats.threshold) * 100))
-        : 0;
-
     return (
       <Card
         key={pool.meta.invoiceHash}
-        className={cn(
-          "border-blue-300/60 bg-blue-50/40 dark:bg-blue-950/20 hover:border-blue-400/80 transition-colors cursor-pointer",
-          status.cardClass,
-        )}
-        onClick={() => {
-          setSelectedPool(pool);
-          setPoolDetailOpen(true);
-        }}
+        className="border-blue-300/60 bg-blue-50/40 dark:bg-blue-950/20 hover:border-blue-400/80 transition-colors cursor-pointer"
+        onClick={() => navigate(`/pools/${pool.meta.invoiceHash}`)}
       >
         <CardContent className="pt-4 space-y-3">
-          <div className="flex items-start justify-between">
-            <div>
-              <Badge
-                variant="outline"
-                className={cn("text-xs", status.colorClass)}
-              >
-                {status.label}
-              </Badge>
-              <p className="text-sm font-medium mt-1">{pool.meta.name}</p>
-              <p className="text-xs text-muted-foreground font-mono mt-0.5">
-                {pool.meta.invoiceHash.slice(0, 12)}…
-              </p>
-            </div>
-            <div className="flex items-center gap-1.5">
-              {stats.hasPendingOffer && (
-                <Badge
-                  variant="secondary"
-                  className="text-[10px] uppercase tracking-wide"
-                >
-                  New
-                </Badge>
-              )}
-              <Badge variant="secondary" className="text-xs">
-                {stats.hasPendingOffer ? `${voteProgressPct}% votes` : "Open"}
-              </Badge>
-            </div>
+          <div>
+            <p className="text-sm font-medium">{pool.meta.name}</p>
+            <p className="text-xs text-muted-foreground font-mono mt-0.5">
+              {pool.meta.invoiceHash.slice(0, 12)}…
+            </p>
           </div>
-
-          {/* Vote progress (only when offer pending) */}
-          {stats.hasPendingOffer && (
-            <div className="rounded-md bg-amber-100/60 dark:bg-amber-900/20 border border-amber-200/70 px-2.5 py-2 text-xs space-y-1.5">
-              <div className="flex items-center justify-between gap-2">
-                <span className="inline-flex items-center rounded-full border border-amber-300/80 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-800 dark:text-amber-300">
-                  Voting
-                </span>
-                <span className="inline-flex items-center rounded-full border border-amber-300/80 px-2 py-0.5 text-[10px] font-medium text-amber-800 dark:text-amber-300">
-                  {voteProgressPct}%
-                </span>
-              </div>
-              <div className="flex justify-between text-amber-900 dark:text-amber-300">
-                <span>Multisig votes</span>
-                <span>
-                  {stats.voteCount} / {stats.threshold} needed
-                </span>
-              </div>
-              <Progress value={voteProgressPct} className="h-1 bg-amber-200" />
-            </div>
-          )}
 
           <div className="space-y-1 text-sm">
             <div className="flex justify-between gap-2">
@@ -731,335 +478,19 @@ export default function Marketplace() {
             </div>
           </div>
 
-          {/* Business CTA */}
-          {isBusiness && !pool.isClosed && (
-            <>
-              {!stats.isFullyFunded && (
-                <p className="text-xs text-center text-muted-foreground">
-                  Waiting for pool to fill…
-                </p>
-              )}
-              {stats.isFullyFunded && !stats.hasPendingOffer && (
-                <Button
-                  size="sm"
-                  className="w-full"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openSubmitInvoice(pool);
-                  }}
-                >
-                  <Send className="h-3.5 w-3.5 mr-1.5" />
-                  Submit Invoice to Pool
-                </Button>
-              )}
-              {stats.hasPendingOffer && (
-                <p className="text-xs text-center text-amber-700">
-                  Invoice submitted — awaiting multisig approval
-                </p>
-              )}
-            </>
-          )}
-
-          {/* Factor CTAs */}
-          {isFactor && !pool.isClosed && (
-            <div className="space-y-2">
-              <Button
-                size="sm"
-                variant="secondary"
-                className="w-full gap-1.5"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  openContribute(pool);
-                }}
-              >
-                <TrendingUp className="h-3.5 w-3.5" />
-                Contribute
-                <ChevronRight className="h-3.5 w-3.5 ml-auto" />
-              </Button>
-              {stats.hasPendingOffer && !stats.isApproved && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="w-full gap-1.5"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    navigate("/pools");
-                  }}
-                >
-                  <ArrowRight className="h-3.5 w-3.5" />
-                  Go to Pools Voting
-                </Button>
-              )}
-              {stats.hasPendingOffer && stats.isApproved && (
-                <Button
-                  size="sm"
-                  className="w-full gap-1.5"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    navigate("/pools");
-                  }}
-                >
-                  <ArrowRight className="h-3.5 w-3.5" />
-                  Go to Pools Execution
-                </Button>
-              )}
-            </div>
-          )}
+          <Button
+            size="sm"
+            className="w-full"
+            onClick={(e) => {
+              e.stopPropagation();
+              openSubmitInvoice(pool);
+            }}
+          >
+            <Send className="h-3.5 w-3.5 mr-1.5" />
+            Submit Invoice to Pool
+          </Button>
         </CardContent>
       </Card>
-    );
-  };
-
-  // ── pool detail dialog renderer ───────────────────────────────────
-  const renderPoolDetail = () => {
-    if (!selectedPool) return null;
-    const pool = selectedPool;
-    const stats = computePoolStats(pool, activeFactorCount);
-    const status = getOwnerlessPoolStatus(pool, stats);
-    const canOpenDistribution =
-      pool.isSettled && pool.isClosed && pool.proceeds === null;
-
-    return (
-      <DialogContent className="max-w-xl max-h-[92vh] overflow-y-auto">
-        <DialogHeader>
-          <div className="mx-auto rounded-full bg-primary/10 p-3 mb-2">
-            <Layers className="h-6 w-6 text-primary" />
-          </div>
-          <DialogTitle className="text-center">{pool.meta.name}</DialogTitle>
-          <DialogDescription className="text-center">
-            On-chain pool — visible to everyone, no single owner.
-          </DialogDescription>
-          <div className="flex justify-center mt-2">
-            <Badge
-              variant="outline"
-              className={cn("text-xs", status.colorClass)}
-            >
-              {status.label}
-            </Badge>
-          </div>
-        </DialogHeader>
-
-        <div className="space-y-3 text-sm max-h-[36vh] overflow-y-auto pr-1">
-          {/* Pool ID */}
-          <div className="rounded-md border bg-muted/30 p-3 space-y-1.5">
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground text-xs">Pool ID</span>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-6 w-6"
-                onClick={() => copyField(pool.meta.invoiceHash, "Pool ID")}
-              >
-                {copiedField === "Pool ID" ? (
-                  <Check className="h-3.5 w-3.5 text-green-600" />
-                ) : (
-                  <Copy className="h-3.5 w-3.5" />
-                )}
-              </Button>
-            </div>
-            <p className="font-mono text-xs break-all">
-              {pool.meta.invoiceHash}
-            </p>
-            {isBusiness && (
-              <p className="text-xs text-blue-600 dark:text-blue-400 flex items-start gap-1">
-                <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                Pool ID used for voting/execution. You can submit any invoice as
-                long as its advance rate falls within the pool's min/max range.
-              </p>
-            )}
-          </div>
-
-          {/* Funding */}
-          <div className="grid grid-cols-3 gap-2">
-            {[
-              [
-                "Rate Range",
-                `${pool.meta.minAdvanceRate / 100}%-${pool.meta.maxAdvanceRate / 100}%`,
-              ],
-              ["Current Funds", formatMicro(pool.totalContributed) + " ALEO"],
-              ["Min/Contrib", formatMicro(pool.meta.minContribution) + " ALEO"],
-            ].map(([label, value]) => (
-              <div key={label} className="rounded-md border p-2 text-center">
-                <p className="text-muted-foreground text-xs">{label}</p>
-                <p className="font-mono text-xs font-medium mt-0.5">{value}</p>
-              </div>
-            ))}
-          </div>
-
-          <div>
-            <Progress value={100} className="h-1.5" />
-            <p className="text-right text-xs text-muted-foreground mt-1">
-              Always accepting invoices within rate range
-            </p>
-          </div>
-
-          {/* Pending offer / voting */}
-          {pool.pendingOffer && !pool.pendingOffer.isExecuted && (
-            <div className="rounded-md border border-amber-300/70 bg-amber-50/40 dark:bg-amber-950/20 p-3 space-y-2.5">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-semibold text-amber-900 dark:text-amber-300">
-                  Pending Invoice Offer
-                </p>
-                <div className="flex items-center gap-1.5">
-                  <Badge
-                    variant="secondary"
-                    className="text-[10px] uppercase tracking-wide"
-                  >
-                    New
-                  </Badge>
-                  <Badge
-                    variant="outline"
-                    className="text-[10px] border-amber-300 text-amber-800"
-                  >
-                    Voting
-                  </Badge>
-                </div>
-              </div>
-              <div className="space-y-1">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Creditor</span>
-                  <AddressDisplay
-                    address={pool.pendingOffer.originalCreditor}
-                    chars={5}
-                    showExplorer
-                  />
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Invoice Amount</span>
-                  <span className="font-mono">
-                    {formatMicro(pool.pendingOffer.amount)} ALEO
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Advance Rate</span>
-                  <span>
-                    {(pool.pendingOffer.advanceRate / 100).toFixed(2)}%
-                  </span>
-                </div>
-              </div>
-              <div className="space-y-1">
-                <div className="flex justify-between text-xs">
-                  <span className="text-muted-foreground">Votes</span>
-                  <span
-                    className={cn(
-                      stats.isApproved
-                        ? "text-green-600 font-semibold"
-                        : "text-amber-800 font-semibold",
-                    )}
-                  >
-                    {stats.voteCount} / {stats.threshold} needed
-                    {stats.isApproved && " ✓ Approved"}
-                  </span>
-                </div>
-                <Progress
-                  value={
-                    stats.threshold > 0
-                      ? Math.min(100, (stats.voteCount / stats.threshold) * 100)
-                      : 0
-                  }
-                  className="h-1.5 bg-amber-200"
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Executed info */}
-          {pool.pendingOffer?.isExecuted && (
-            <div className="rounded-md border border-emerald-300/50 bg-emerald-50/30 p-3 text-xs space-y-1">
-              <p className="font-medium text-emerald-700">Pool Executed</p>
-              <p className="text-muted-foreground">
-                Advance paid to business. Awaiting debtor payment, then
-                contributors can claim proceeds.
-              </p>
-              {pool.proceeds !== null && (
-                <p className="text-emerald-700">
-                  Proceeds available: {formatMicro(pool.proceeds)} ALEO
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-
-        <PoolTimeline pool={pool} activeFactorCount={activeFactorCount} />
-
-        <DialogFooter className="flex-col gap-2">
-          {canOpenDistribution && (
-            <div className="w-full space-y-1.5">
-              <Button
-                className="w-full"
-                onClick={() => handleOpenDistribution(pool.meta.invoiceHash)}
-                disabled={isWorking}
-              >
-                Open Distribution
-              </Button>
-              <p className="text-xs text-muted-foreground text-center">
-                Permissionless — anyone can call this once debtor has paid.
-              </p>
-            </div>
-          )}
-
-          {/* Business */}
-          {isBusiness &&
-            stats.isFullyFunded &&
-            !stats.hasPendingOffer &&
-            !pool.isClosed && (
-              <Button
-                className="w-full"
-                onClick={() => {
-                  setPoolDetailOpen(false);
-                  openSubmitInvoice(pool);
-                }}
-              >
-                <Send className="h-4 w-4 mr-2" />
-                Submit Invoice to Pool
-              </Button>
-            )}
-
-          {/* Factor: contribute */}
-          {isFactor && !pool.isClosed && (
-            <Button
-              variant="secondary"
-              className="w-full"
-              onClick={() => {
-                setPoolDetailOpen(false);
-                openContribute(pool);
-              }}
-            >
-              <TrendingUp className="h-4 w-4 mr-2" />
-              Contribute
-            </Button>
-          )}
-
-          {/* Factor: vote */}
-          {isFactor && stats.hasPendingOffer && !stats.isApproved && (
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => {
-                setPoolDetailOpen(false);
-                navigate("/pools");
-              }}
-            >
-              <ArrowRight className="h-4 w-4 mr-2" />
-              Go to Pools Voting
-            </Button>
-          )}
-
-          {/* Factor: execute */}
-          {isFactor && stats.hasPendingOffer && stats.isApproved && (
-            <Button
-              className="w-full"
-              onClick={() => {
-                setPoolDetailOpen(false);
-                navigate("/pools");
-              }}
-            >
-              <ArrowRight className="h-4 w-4 mr-2" />
-              Go to Pools Execution
-            </Button>
-          )}
-        </DialogFooter>
-      </DialogContent>
     );
   };
 
@@ -1067,13 +498,9 @@ export default function Marketplace() {
   return (
     <div className="container py-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold">
-          {isFactor ? "Invoice Marketplace" : "Browse Factors & Pools"}
-        </h1>
+        <h1 className="text-2xl font-bold">Browse Factors & Pools</h1>
         <p className="text-muted-foreground">
-          {isFactor
-            ? "Register, contribute to pools, and manage voting from the Pools page."
-            : "Find factors and join on-chain pools — no account needed to browse."}
+          Find factors and join on-chain pools — no account needed to browse.
         </p>
       </div>
 
@@ -1131,13 +558,12 @@ export default function Marketplace() {
           )}
 
           {/* ── Pools section ── */}
-          {(poolsLoading || openPools.length > 0 || closedPools.length > 0) && (
+          {(poolsLoading || openPools.length > 0) && (
             <div className="space-y-3">
               <div>
                 <p className="text-sm font-medium">On-Chain Pools</p>
                 <p className="text-xs text-muted-foreground">
-                  Pools are public and ownerless — contributions are held in the
-                  protocol escrow. Minimum contribution is defined by each pool.
+                  Open pools accepting invoice submissions and contributions.
                 </p>
               </div>
 
@@ -1154,39 +580,9 @@ export default function Marketplace() {
                     </Card>
                   ))}
                 </div>
-              ) : openPools.length === 0 ? (
-                <Card className="border-dashed">
-                  <CardContent className="py-8 text-center space-y-2">
-                    <p className="font-medium text-sm">No open pools</p>
-                    <p className="text-xs text-muted-foreground">
-                      {isFactor
-                        ? "Create a pool to start collecting contributions."
-                        : "Check back later — pools are created by registered factors."}
-                    </p>
-                  </CardContent>
-                </Card>
               ) : (
                 <div className="grid gap-4 sm:grid-cols-2">
                   {openPools.map(renderPoolCard)}
-                </div>
-              )}
-
-              {closedPools.length > 0 && (
-                <div className="space-y-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="px-0 text-muted-foreground"
-                    onClick={() => setShowCompletedPools((p) => !p)}
-                  >
-                    {showCompletedPools ? "Hide" : "Show"} completed pools (
-                    {closedPools.length})
-                  </Button>
-                  {showCompletedPools && (
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      {closedPools.map(renderPoolCard)}
-                    </div>
-                  )}
                 </div>
               )}
             </div>
@@ -1309,7 +705,7 @@ export default function Marketplace() {
                         >
                           <DialogTrigger asChild>
                             <Button className="w-full">
-                              {isFactor ? "View Details" : "Factor Invoice"}
+                              Factor Invoice
                             </Button>
                           </DialogTrigger>
                           <DialogContent className="max-w-md">
@@ -1450,120 +846,6 @@ export default function Marketplace() {
         </div>
       </div>
 
-      {/* ── Pool detail dialog ─────────────────────────────────────── */}
-      <Dialog
-        open={poolDetailOpen}
-        onOpenChange={(o) => {
-          setPoolDetailOpen(o);
-          if (!o) setSelectedPool(null);
-        }}
-      >
-        {renderPoolDetail()}
-      </Dialog>
-
-      {/* ── Contribute dialog ──────────────────────────────────────── */}
-      <Dialog
-        open={contributeOpen}
-        onOpenChange={(o) => {
-          setContributeOpen(o);
-          if (!o) setContributePool(null);
-        }}
-      >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-blue-500" />
-              Contribute to Pool
-            </DialogTitle>
-            <DialogDescription>
-              Credits go to the protocol escrow — you receive a PoolShare record
-              as your claim ticket.
-            </DialogDescription>
-          </DialogHeader>
-          {contributePool && (
-            <div className="space-y-4 py-2">
-              <div className="bg-muted rounded-lg p-3 text-sm space-y-1.5">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Pool</span>
-                  <span className="font-medium">
-                    {contributePool.meta.name}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Current Funds</span>
-                  <span className="font-mono">
-                    {formatMicro(contributePool.totalContributed)} ALEO
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">
-                    Min contribution
-                  </span>
-                  <span className="font-mono">
-                    {formatMicro(contributePool.meta.minContribution)} ALEO
-                  </span>
-                </div>
-                {publicBalance !== null && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">
-                      Your public balance
-                    </span>
-                    <span
-                      className={cn(
-                        "font-mono",
-                        publicBalance < contributePool.meta.minContribution &&
-                          "text-destructive",
-                      )}
-                    >
-                      {formatMicro(publicBalance)} ALEO
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              {publicBalance !== null &&
-                publicBalance < contributePool.meta.minContribution && (
-                  <div className="rounded-md bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800 space-y-1">
-                    <p className="font-medium">Insufficient public balance</p>
-                    <p>
-                      Pool contributions use your public credits balance (not
-                      private records). Convert first:{" "}
-                      <code className="bg-amber-100 px-1 rounded">
-                        credits.aleo/transfer_private_to_public
-                      </code>
-                    </p>
-                  </div>
-                )}
-
-              <div className="space-y-2">
-                <Label>Contribution Amount (ALEO)</Label>
-                <Input
-                  type="number"
-                  placeholder={`Min ${formatMicro(contributePool.meta.minContribution)}`}
-                  min={Number(contributePool.meta.minContribution) / 1e6}
-                  step="0.000001"
-                  value={contributeAmount}
-                  onChange={(e) => setContributeAmount(e.target.value)}
-                />
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setContributeOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleContribute}
-              disabled={isWorking || !contributeAmount}
-            >
-              {isWorking && pendingActionRef.current === "contribute-pool"
-                ? "Contributing…"
-                : "Contribute"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* ── Submit Invoice to Pool dialog (business) ───────────────── */}
       <Dialog
         open={submitInvoiceOpen}
@@ -1608,15 +890,34 @@ export default function Marketplace() {
                 </div>
               </div>
 
+              {submitInvoicePool.totalContributed <= 0n ? (
+                <div className="rounded-md border border-amber-300/60 bg-amber-950/5 p-3 text-xs text-amber-700 dark:text-amber-400 space-y-1">
+                  <p className="font-medium">Pool has no funds yet</p>
+                  <p>
+                    Invoice submission will be rejected until contributors add
+                    liquidity to this pool.
+                  </p>
+                </div>
+              ) : BigInt(submitAdvanceAmount) >
+                submitInvoicePool.totalContributed ? (
+                <div className="rounded-md border border-amber-300/60 bg-amber-950/5 p-3 text-xs text-amber-700 dark:text-amber-400 space-y-1">
+                  <p className="font-medium">
+                    Pool is underfunded for this invoice
+                  </p>
+                  <p>
+                    Available: {formatMicro(submitInvoicePool.totalContributed)}{" "}
+                    ALEO · Required: {formatMicro(BigInt(submitAdvanceAmount))}{" "}
+                    ALEO
+                  </p>
+                </div>
+              ) : null}
+
               <div className="space-y-2">
                 <Label>Select Invoice</Label>
                 {availableInvoicesForPool.length === 0 ? (
-                  <div className="rounded-md bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800 space-y-1">
-                    <p className="font-medium">No invoices in wallet</p>
-                    <p>
-                      Mint an invoice first, then submit it into this funded
-                      pool with a matching advance rate.
-                    </p>
+                  <div className="rounded-md bg-amber-950/5 border border-amber-300/60 p-3 text-xs text-amber-700 dark:text-amber-400 space-y-1">
+                    <p className="font-medium">No available invoices</p>
+                    <p>Your invoices may already be factored or in a pool.</p>
                   </div>
                 ) : (
                   <Select

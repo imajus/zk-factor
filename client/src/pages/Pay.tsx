@@ -164,9 +164,25 @@ export default function Pay() {
           setPayingId(null);
           return;
         }
+
+        const client = new AleoNetworkClient(API_ENDPOINT);
+        let useTokenPool = false;
+        try {
+          const rawUseToken = await client.getProgramMappingValue(
+            PROGRAM_ID,
+            "pool_use_token",
+            row.invoiceHash,
+          );
+          useTokenPool = String(rawUseToken).includes("true");
+        } catch {
+          useTokenPool = false;
+        }
+
         await execute({
           program: PROGRAM_ID,
-          function: "pay_pool_invoice",
+          function: useTokenPool
+            ? "pay_pool_invoice_token"
+            : "pay_pool_invoice",
           inputs: [row.record.recordPlaintext, row.programAddr],
           fee: 100_000,
           privateFee: false,

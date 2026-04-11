@@ -33,10 +33,10 @@ export interface SettlementInfo {
 }
 
 export interface PoolPayoutStatus {
-  proceeds: bigint | null;       // null = open_pool_distribution not yet called
-  distributed: bigint;           // how much has been paid out so far
-  remaining: bigint;             // proceeds - distributed
-  isFullyDistributed: boolean;   // distributed >= proceeds
+  proceeds: bigint | null; // null = open_pool_distribution not yet called
+  distributed: bigint; // how much has been paid out so far
+  remaining: bigint; // proceeds - distributed
+  isFullyDistributed: boolean; // distributed >= proceeds
 }
 
 function parseMappingField(plaintext: string, field: string): string {
@@ -234,25 +234,6 @@ export async function fetchPoolContributions(
 }
 
 /**
- * Returns the pool owner's address, or null if pool does not exist.
- */
-export async function fetchPoolOwner(
-  invoiceHash: string,
-): Promise<string | null> {
-  try {
-    const client = new AleoNetworkClient(API_ENDPOINT);
-    const value = await client.getProgramMappingValue(
-      PROGRAM_ID,
-      "pool_owners",
-      invoiceHash,
-    );
-    return String(value).trim();
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Returns true if execute_pool_factoring (or recover_pool_close) has been called.
  */
 export async function fetchPoolClosed(invoiceHash: string): Promise<boolean> {
@@ -270,8 +251,8 @@ export async function fetchPoolClosed(invoiceHash: string): Promise<boolean> {
 }
 
 /**
- * Returns the total proceeds registered for distribution (set by open_pool_distribution),
- * or null if open_pool_distribution has not been called yet.
+ * Returns the total proceeds registered for distribution (set by pool_open_distribution),
+ * or null if pool_open_distribution has not been called yet.
  */
 export async function fetchPoolProceeds(
   invoiceHash: string,
@@ -352,7 +333,8 @@ export function computeExpectedPoolPayout(
   totalContributions: bigint,
   proceeds: bigint,
 ): bigint {
-  if (contributed <= 0n || totalContributions <= 0n || proceeds <= 0n) return 0n;
+  if (contributed <= 0n || totalContributions <= 0n || proceeds <= 0n)
+    return 0n;
   return (proceeds * contributed) / totalContributions;
 }
 
@@ -393,7 +375,7 @@ export function buildOpenPoolDistributionInputs(invoiceHash: string): string[] {
  * not from a caller-supplied record.
  */
 export function buildClaimPoolProceedsInputs(
-  share: string,           // serialized PoolShare record plaintext
+  share: string, // serialized PoolShare record plaintext
   expectedPayout: bigint,
 ): string[] {
   return [share, `${expectedPayout}u64`];

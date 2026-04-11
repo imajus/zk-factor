@@ -31,7 +31,7 @@ import { fetchFactorStatus } from "@/lib/aleo-factors";
 
 const navItems = [
   { label: "Dashboard", href: "/dashboard" },
-  { label: "Marketplace", href: "/marketplace" },
+  { label: "Marketplace", href: "/marketplace", creditorOnly: true },
   { label: "Transactions", href: "/transactions" },
   { label: "Pools", href: "/pools", factorOnly: true },
   { label: "Settings", href: "/settings" },
@@ -98,7 +98,7 @@ export function Header() {
         <nav className="hidden md:flex items-center gap-1">
           {isConnected &&
             navItems
-              .filter((item) => !item.factorOnly || activeRole === "factor")
+              .filter((item) => (!item.factorOnly || activeRole === "factor") && (!item.creditorOnly || activeRole === "business"))
               .map((item) => (
                 <Link
                   key={item.href}
@@ -249,7 +249,7 @@ export function Header() {
         <div className="md:hidden border-t border-border">
           <nav className="container py-4 flex flex-col gap-1">
             {navItems
-              .filter((item) => !item.factorOnly || activeRole === "factor")
+              .filter((item) => (!item.factorOnly || activeRole === "factor") && (!item.creditorOnly || activeRole === "business"))
               .map((item) => (
                 <Link
                   key={item.href}

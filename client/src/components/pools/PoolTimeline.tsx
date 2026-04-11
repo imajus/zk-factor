@@ -18,7 +18,11 @@
  */
 
 import { cn } from "@/lib/utils";
-import { computePoolStats, type OnChainPoolState } from "@/lib/pool-chain";
+import {
+  computePoolStats,
+  getPoolCurrentFunds,
+  type OnChainPoolState,
+} from "@/lib/pool-chain";
 import { CheckCircle2, Circle, Clock } from "lucide-react";
 
 // ── Phase definitions ─────────────────────────────────────────────────────────
@@ -40,18 +44,19 @@ function derivePhases(
 
   const hasFunds = pool.totalContributed > 0n;
   const invoiceSubmitted = pool.pendingOffer !== null;
-  const votesDone = stats.isApproved;
+  const votesDone = stats.allVotesCast;
   const advanceExecuted = pool.pendingOffer?.isExecuted === true;
   const debtorPaid = pool.isSettled;
   const distributionOpen = pool.proceeds !== null && pool.proceeds > 0n;
   const fullyDistributed =
     distributionOpen && pool.distributed >= pool.proceeds!;
+  const currentFunds = getPoolCurrentFunds(pool);
 
   const funding: Phase = {
     label: "Funding",
     description: "Pool receives factor contributions.",
     status: hasFunds && (invoiceSubmitted || pool.isClosed) ? "done" : "active",
-    detail: `${(Number(pool.totalContributed) / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 2 })} ALEO current funds`,
+    detail: `${(Number(currentFunds) / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 2 })} ALEO current funds`,
   };
 
   const invoicePhase: Phase = {
@@ -68,18 +73,22 @@ function derivePhases(
   };
 
   const votingPhase: Phase = {
-    label: "Multisig Approved",
-    description: `Majority vote required (${stats.threshold} needed).`,
+    label: "Voting Complete",
+    description: `All factors must vote (${stats.requiredVotes} total).`,
     status: votesDone ? "done" : invoiceSubmitted ? "active" : "pending",
     detail: invoiceSubmitted
-      ? `${stats.voteCount} / ${stats.threshold} votes`
+      ? `Approve ${stats.approveCount} · Reject ${stats.rejectCount} (${stats.totalVotes}/${stats.requiredVotes})`
       : undefined,
   };
 
   const advancePhase: Phase = {
     label: "Advance Paid",
     description: "Pool executes and sends advance to the business.",
-    status: advanceExecuted ? "done" : votesDone ? "active" : "pending",
+    status: advanceExecuted
+      ? "done"
+      : votesDone && stats.isApproved
+        ? "active"
+        : "pending",
     detail:
       advanceExecuted && pool.pendingOffer
         ? `${(Number(pool.pendingOffer.advanceAmount) / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 2 })} ALEO advanced`

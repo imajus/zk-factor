@@ -14,6 +14,7 @@ export interface AleoRecord {
 type InvoiceCurrency = "ALEO" | "USDCx";
 const INVOICE_METADATA_FLAG_MASK = 1n;
 const INVOICE_CURRENCY_CACHE_KEY = "zkfactor.invoice_currency_map";
+const FACTORED_INVOICE_CACHE_KEY = "zkfactor.factored_invoice_hashes";
 
 export function getField(plaintext: string, field: string): string {
   for (const line of plaintext.split("\n")) {
@@ -93,5 +94,31 @@ export function getPersistedInvoiceCurrency(
     return map[invoiceHash] ?? null;
   } catch {
     return null;
+  }
+}
+
+export function persistFactoredInvoiceHash(invoiceHash: string): void {
+  if (!invoiceHash) return;
+  try {
+    const existing = localStorage.getItem(FACTORED_INVOICE_CACHE_KEY);
+    const hashes = existing ? (JSON.parse(existing) as string[]) : [];
+    if (!hashes.includes(invoiceHash)) {
+      hashes.push(invoiceHash);
+      localStorage.setItem(FACTORED_INVOICE_CACHE_KEY, JSON.stringify(hashes));
+    }
+    window.dispatchEvent(new Event("zkfactor:factored-invoices-changed"));
+  } catch {
+    // Ignore storage failures (private browsing / quota issues).
+  }
+}
+
+export function getPersistedFactoredInvoiceHashes(): Set<string> {
+  try {
+    const existing = localStorage.getItem(FACTORED_INVOICE_CACHE_KEY);
+    if (!existing) return new Set();
+    const hashes = JSON.parse(existing) as string[];
+    return new Set(hashes.filter((hash) => typeof hash === "string" && hash));
+  } catch {
+    return new Set();
   }
 }

@@ -38,9 +38,11 @@ import { useTransaction } from "@/hooks/use-transaction";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { PROGRAM_ID, API_ENDPOINT, USDCX_PROGRAM_ID } from "@/lib/config";
+import { PoolShareCard } from "@/components/dashboard/PoolShareCard";
 import {
   type AleoRecord,
   getPersistedInvoiceCurrency,
+  persistFactoredInvoiceHash,
   persistInvoiceCurrency,
   getField,
   microToAleo,
@@ -95,6 +97,14 @@ export function FactorDashboard() {
     refetchOnMount: "always",
   });
 
+  const { data: poolRecords } = useQuery({
+    queryKey: ["records", PROGRAM_ID],
+    queryFn: () => requestRecords(PROGRAM_ID, true),
+    enabled: isConnected,
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
+
   const factoredRecords = ((records as AleoRecord[]) ?? []).filter(
     (r) => r.recordName === "FactoredInvoice" && !r.spent,
   );
@@ -105,7 +115,7 @@ export function FactorDashboard() {
     const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
     return !executingOffers[invoiceHash];
   });
-  const poolShareRecords = ((records as AleoRecord[]) ?? []).filter(
+  const poolShareRecords = ((poolRecords as AleoRecord[]) ?? []).filter(
     (r) => r.recordName === "PoolShare" && !r.spent,
   );
 
@@ -198,6 +208,9 @@ export function FactorDashboard() {
           pendingAcceptedCurrencyRef.current.invoiceHash,
           pendingAcceptedCurrencyRef.current.currency,
         );
+        persistFactoredInvoiceHash(
+          pendingAcceptedCurrencyRef.current.invoiceHash,
+        );
         pendingAcceptedCurrencyRef.current = null;
       }
       if (acceptedHash) {
@@ -208,6 +221,7 @@ export function FactorDashboard() {
         });
       }
       toast.success("Transaction confirmed!", { id: "tx-op" });
+      queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
       queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
       setSettlingId(null);
       setReclaimingId(null);
@@ -311,9 +325,7 @@ export function FactorDashboard() {
         getField(record.recordPlaintext, "advance_rate"),
         10,
       );
-      const advanceAmount = Math.floor(
-        (amountMicro * advanceRateBps) / 10000,
-      );
+      const advanceAmount = Math.floor((amountMicro * advanceRateBps) / 10000);
       toast.loading("Step 1/2: Approving USDCx spend\u2026", { id: "tx-op" });
       await execute({
         program: USDCX_PROGRAM_ID,
@@ -850,55 +862,15 @@ export function FactorDashboard() {
     }
     return (
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {poolShareRecords.map((record, idx) => {
-          const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
-          const contributed = microToAleo(
-            getField(record.recordPlaintext, "contributed") || "0u64",
-          );
-          const totalPool = microToAleo(
-            getField(record.recordPlaintext, "total_pool") || "0u64",
-          );
-          const sharePct =
-            totalPool > 0
-              ? ((contributed / totalPool) * 100).toFixed(2)
-              : "0.00";
-          return (
-            <Link
-              key={invoiceHash || idx}
-              to={`/pools/${invoiceHash.replace(/field$/, "")}`}
-              className="block"
-            >
-              <Card className="hover:border-primary/50 transition-colors cursor-pointer">
-                <CardContent className="pt-4 space-y-3">
-                  <span className="font-mono text-sm text-muted-foreground">
-                    {invoiceHash.slice(0, 12)}…
-                  </span>
-                  <div className="space-y-1 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Contributed</span>
-                      <span className="font-mono font-medium">
-                        {contributed.toLocaleString(undefined, {
-                          maximumFractionDigits: 6,
-                        })}{" "}
-                        ALEO
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Share</span>
-                      <span>{sharePct}%</span>
-                    </div>
-                  </div>
-                  <Badge
-                    variant="outline"
-                    className="text-xs text-blue-600 border-blue-300"
-                  >
-                    Pool Share
-                  </Badge>
-                </CardContent>
-              </Card>
-            </Link>
-          );
-        })}
+        {poolShareRecords.map((record, idx) => (
+          <PoolShareCard
+            key={
+              getField(record.recordPlaintext, "invoice_hash") ||
+              String(record.commitment ?? idx)
+            }
+            record={record}
+          />
+        ))}
       </div>
     );
   };

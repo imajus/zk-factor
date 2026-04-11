@@ -10,7 +10,8 @@
  */
 
 import { AleoNetworkClient } from "@provablehq/sdk";
-import { PROGRAM_ID, API_ENDPOINT } from "@/lib/config";
+import { API_ENDPOINT, PROGRAM_ID, USDCX_PROGRAM_ID } from "@/lib/config";
+import type { PaymentCurrency } from "@/lib/config";
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -19,6 +20,8 @@ export interface OnChainPoolMeta {
   nameU128: bigint;
   /** Human-readable name decoded from nameU128 */
   name: string;
+  currency: PaymentCurrency;
+  useToken: boolean;
   minAdvanceRate: number;
   maxAdvanceRate: number;
   minContribution: bigint;
@@ -32,6 +35,7 @@ export interface OnChainPendingOffer {
   advanceRate: number;
   advanceAmount: bigint;
   dueDate: number;
+  nonce: string;
   isExecuted: boolean;
 }
 
@@ -41,11 +45,25 @@ export interface OnChainPoolState {
   isClosed: boolean;
   isSettled: boolean;
   voteCount: number;
+  rejectCount: number;
   /** null = no offer submitted yet */
   pendingOffer: OnChainPendingOffer | null;
   /** null = pool_open_distribution not yet called */
   proceeds: bigint | null;
   distributed: bigint;
+}
+
+/**
+ * Returns the pool balance after deducting any executed advance payment.
+ * This is the amount users expect to see as the pool's current funds.
+ */
+export function getPoolCurrentFunds(pool: OnChainPoolState): bigint {
+  const advancePaid = pool.pendingOffer?.isExecuted
+    ? pool.pendingOffer.advanceAmount
+    : 0n;
+  return pool.totalContributed > advancePaid
+    ? pool.totalContributed - advancePaid
+    : 0n;
 }
 
 // ── Encoding / decoding ────────────────────────────────────────────────
@@ -144,8 +162,12 @@ export async function fetchPoolMeta(
   invoiceHash: string,
 ): Promise<OnChainPoolMeta | null> {
   const client = new AleoNetworkClient(API_ENDPOINT);
-  const raw = await safeGet(client, "pool_meta", invoiceHash);
+  const [raw, useTokenRaw] = await Promise.all([
+    safeGet(client, "pool_meta", invoiceHash),
+    safeGet(client, "pool_use_token", invoiceHash),
+  ]);
   if (!raw) return null;
+  const useToken = useTokenRaw?.trim() === "true";
 
   const nameU128Str = stripSuffix(parseField(raw, "name_u128"));
   const nameU128 = nameU128Str ? BigInt(nameU128Str) : 0n;
@@ -155,6 +177,8 @@ export async function fetchPoolMeta(
     invoiceHash,
     nameU128,
     name: decoded || `Pool ${invoiceHash.slice(0, 10)}…`,
+    currency: useToken ? "USDCx" : "ALEO",
+    useToken,
     minAdvanceRate: parseInt(
       stripSuffix(parseField(raw, "min_advance_rate")) || "5000",
       10,
@@ -190,6 +214,7 @@ export async function fetchPendingOffer(
       stripSuffix(parseField(raw, "advance_amount")) || "0",
     ),
     dueDate: parseInt(stripSuffix(parseField(raw, "due_date")) || "0", 10),
+    nonce: parseField(raw, "nonce"),
     isExecuted: parseField(raw, "is_executed") === "true",
   };
 }
@@ -198,6 +223,16 @@ export async function fetchPendingOffer(
 export async function fetchPoolVoteCount(invoiceHash: string): Promise<number> {
   const client = new AleoNetworkClient(API_ENDPOINT);
   const raw = await safeGet(client, "pool_vote_count", invoiceHash);
+  if (!raw) return 0;
+  return parseInt(stripSuffix(raw), 10) || 0;
+}
+
+/** Current reject vote count for a pool's pending offer. */
+export async function fetchPoolRejectCount(
+  invoiceHash: string,
+): Promise<number> {
+  const client = new AleoNetworkClient(API_ENDPOINT);
+  const raw = await safeGet(client, "pool_reject_count", invoiceHash);
   if (!raw) return 0;
   return parseInt(stripSuffix(raw), 10) || 0;
 }
@@ -230,6 +265,7 @@ export async function fetchPoolState(
     isClosedRaw,
     settledInvoiceRaw,
     voteCountRaw,
+    rejectCountRaw,
     pendingOffer,
     proceedsRaw,
     distributedRaw,
@@ -239,6 +275,7 @@ export async function fetchPoolState(
     safeGet(client, "pool_closed", invoiceHash),
     safeGet(client, "settled_invoices", invoiceHash),
     safeGet(client, "pool_vote_count", invoiceHash),
+    safeGet(client, "pool_reject_count", invoiceHash),
     fetchPendingOffer(invoiceHash),
     safeGet(client, "pool_proceeds", invoiceHash),
     safeGet(client, "pool_distributed", invoiceHash),
@@ -256,6 +293,10 @@ export async function fetchPoolState(
       !!settledInvoiceRaw &&
       parseField(settledInvoiceRaw, "is_settled") === "true",
     voteCount: parseInt(stripSuffix(voteCountRaw?.trim() ?? "0") || "0", 10),
+    rejectCount: parseInt(
+      stripSuffix(rejectCountRaw?.trim() ?? "0") || "0",
+      10,
+    ),
     pendingOffer,
     proceeds: proceedsRaw
       ? BigInt(stripSuffix(proceedsRaw.trim()) || "0")
@@ -295,6 +336,26 @@ export async function fetchPublicCreditsBalance(
   }
 }
 
+/**
+ * Check a caller's public USDCx balance.
+ * Returns 0n if the address has no public balance.
+ */
+export async function fetchPublicTokenBalance(
+  address: string,
+): Promise<bigint> {
+  const client = new AleoNetworkClient(API_ENDPOINT);
+  try {
+    const raw = await client.getProgramMappingValue(
+      USDCX_PROGRAM_ID,
+      "balances",
+      address,
+    );
+    return BigInt(stripSuffix(String(raw).trim()) || "0");
+  } catch {
+    return 0n;
+  }
+}
+
 // ── Payout math ────────────────────────────────────────────────────────
 
 /**
@@ -323,6 +384,12 @@ export interface PoolStats {
   isFullyDistributed: boolean;
   hasPendingOffer: boolean;
   isApproved: boolean;
+  isRejected: boolean;
+  allVotesCast: boolean;
+  requiredVotes: number;
+  approveCount: number;
+  rejectCount: number;
+  totalVotes: number;
   isExecuted: boolean;
   voteCount: number;
   threshold: number;
@@ -336,8 +403,13 @@ export function computePoolStats(
   // In range-based pools, there's no funding target, so no "remaining" or "percent funded"
   const remainingMicro = 0n;
   const percentFunded = 0; // Not applicable in range-based model
-  const threshold = computeVoteThreshold(activeFactorCount);
-  const isApproved = pool.voteCount >= threshold;
+  const requiredVotes = Math.max(1, activeFactorCount);
+  const approveCount = pool.voteCount;
+  const rejectCount = pool.rejectCount;
+  const totalVotes = approveCount + rejectCount;
+  const allVotesCast = totalVotes >= requiredVotes;
+  const isApproved = allVotesCast && approveCount > rejectCount;
+  const isRejected = allVotesCast && approveCount <= rejectCount;
   const isExecuted = pool.pendingOffer?.isExecuted ?? false;
   const isFullyDistributed =
     pool.proceeds !== null &&
@@ -352,9 +424,15 @@ export function computePoolStats(
     isFullyDistributed,
     hasPendingOffer: pool.pendingOffer !== null && !isExecuted,
     isApproved,
+    isRejected,
+    allVotesCast,
+    requiredVotes,
+    approveCount,
+    rejectCount,
+    totalVotes,
     isExecuted,
-    voteCount: pool.voteCount,
-    threshold,
+    voteCount: approveCount,
+    threshold: requiredVotes,
   };
 }
 
@@ -366,6 +444,7 @@ export function buildCreateOwnerlessPoolInputs(
   minAdvanceRate: number,
   maxAdvanceRate: number,
   minContribution: bigint,
+  useToken: boolean,
 ): string[] {
   return [
     invoiceHash,
@@ -373,6 +452,7 @@ export function buildCreateOwnerlessPoolInputs(
     `${minAdvanceRate}u16`,
     `${maxAdvanceRate}u16`,
     `${minContribution}u64`,
+    `${useToken}`,
   ];
 }
 
@@ -400,6 +480,14 @@ export function buildPoolSubmitInvoiceInputs(
 }
 
 export function buildPoolVoteInputs(invoiceHash: string): string[] {
+  return [invoiceHash];
+}
+
+export function buildPoolVoteRejectInputs(invoiceHash: string): string[] {
+  return [invoiceHash];
+}
+
+export function buildFinalizeRejectedPoolInputs(invoiceHash: string): string[] {
   return [invoiceHash];
 }
 

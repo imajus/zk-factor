@@ -12,7 +12,7 @@
  * the hook is called at the top level — which is what this file does.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useWallet } from "@/contexts/WalletContext";
@@ -21,15 +21,32 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { PROGRAM_ID, PROGRAM_ADDRESS } from "@/lib/config";
+import {
+  PROGRAM_ID,
+  PROGRAM_ADDRESS,
+  USDCX_PROGRAM_ID,
+} from "@/lib/config";
 import { type AleoRecord, getField } from "@/lib/aleo-records";
 import {
   fetchPoolState,
   fetchActiveFactorCount,
   computePoolStats,
   computePoolPayout,
+  fetchPublicCreditsBalance,
+  fetchPublicTokenBalance,
+  buildPoolContributeInputs,
   buildPoolOpenDistributionInputs,
   buildClaimPoolProceedsInputs,
 } from "@/lib/pool-chain";
@@ -41,8 +58,12 @@ interface PoolShareCardProps {
 
 export function PoolShareCard({ record }: PoolShareCardProps) {
   const queryClient = useQueryClient();
+  const { address } = useWallet();
   const { execute, status } = useTransaction();
   const isWorking = status !== "idle";
+  const [manageOpen, setManageOpen] = useState(false);
+  const [manageAmount, setManageAmount] = useState("");
+  const [publicBalance, setPublicBalance] = useState<bigint | null>(null);
 
   const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
   const contributed = BigInt(
@@ -72,9 +93,14 @@ export function PoolShareCard({ record }: PoolShareCardProps) {
     ? computePoolStats(poolState, activeFactorCount)
     : null;
 
-  const snapshotSharePct =
-    totalPoolSnapshot > 0n
-      ? ((Number(contributed) / Number(totalPoolSnapshot)) * 100).toFixed(2)
+  const shareDenominator =
+    poolState?.totalContributed && poolState.totalContributed > 0n
+      ? poolState.totalContributed
+      : totalPoolSnapshot;
+
+  const sharePct =
+    shareDenominator > 0n
+      ? ((Number(contributed) / Number(shareDenominator)) * 100).toFixed(2)
       : "0.00";
 
   const proceedsAvailable =
@@ -94,6 +120,40 @@ export function PoolShareCard({ record }: PoolShareCardProps) {
     poolState?.isClosed &&
     poolState.pendingOffer?.isExecuted &&
     poolState.proceeds === null;
+
+  const shareCurrency = poolState?.meta.currency ?? "ALEO";
+
+  const formatInputAmount = (value: bigint) => {
+    const asNumber = Number(value) / 1_000_000;
+    if (!Number.isFinite(asNumber)) return "0";
+    return asNumber
+      .toFixed(6)
+      .replace(/\.0+$/, "")
+      .replace(/(\.\d*?)0+$/, "$1");
+  };
+
+  const parseInputAmount = (value: string): bigint | null => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed <= 0) return null;
+    return BigInt(Math.round(parsed * 1_000_000));
+  };
+
+  useEffect(() => {
+    if (!manageOpen || !address) {
+      setPublicBalance(null);
+      return;
+    }
+
+    const loadBalance = async () => {
+      const balance =
+        shareCurrency === "USDCx"
+          ? await fetchPublicTokenBalance(address)
+          : await fetchPublicCreditsBalance(address);
+      setPublicBalance(balance);
+    };
+
+    loadBalance();
+  }, [address, manageOpen, shareCurrency]);
 
   const statusLabel = !poolState
     ? "Loading"
@@ -171,6 +231,84 @@ export function PoolShareCard({ record }: PoolShareCardProps) {
     }
   };
 
+  const openManageDialog = () => {
+    setManageAmount("");
+    setManageOpen(true);
+  };
+
+  const handleSetMax = () => {
+    if (publicBalance !== null) {
+      setManageAmount(formatInputAmount(publicBalance));
+    }
+  };
+
+  const handleManageSubmit = async () => {
+    if (!poolState) {
+      toast.error("Pool state is still loading.");
+      return;
+    }
+
+    const amountMicro = parseInputAmount(manageAmount);
+    if (!amountMicro || amountMicro <= 0n) {
+      toast.error("Enter a valid amount.");
+      return;
+    }
+
+    if (poolState.isClosed) {
+      toast.error("Pool is closed. Contributions are disabled.");
+      return;
+    }
+    if (!PROGRAM_ADDRESS) {
+      toast.error("PROGRAM_ADDRESS is not set.");
+      return;
+    }
+    if (publicBalance !== null && amountMicro > publicBalance) {
+      toast.error(
+        `Insufficient public ${shareCurrency} balance (${formatInputAmount(publicBalance)} ${shareCurrency}).`,
+      );
+      return;
+    }
+
+    try {
+      if (shareCurrency === "USDCx") {
+        await execute({
+          program: USDCX_PROGRAM_ID,
+          function: "approve_public",
+          inputs: [PROGRAM_ID, `${amountMicro}u128`],
+          fee: 50_000,
+          privateFee: false,
+        });
+      }
+
+      await execute({
+        program: PROGRAM_ID,
+        function:
+          shareCurrency === "USDCx"
+            ? "pool_contribute_token"
+            : "pool_contribute",
+        inputs: buildPoolContributeInputs(
+          invoiceHash,
+          PROGRAM_ADDRESS,
+          amountMicro,
+          poolState.totalContributed,
+        ),
+        fee: 80_000,
+        privateFee: false,
+      });
+
+      toast.success("Contribution added.");
+      setManageOpen(false);
+      setManageAmount("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Contribution failed");
+      return;
+    }
+
+    queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
+    queryClient.invalidateQueries({ queryKey: ["pool_state", invoiceHash] });
+    queryClient.invalidateQueries({ queryKey: ["all_pools"] });
+  };
+
   // ── render ────────────────────────────────────────────────────────
   return (
     <Card className="hover:border-primary/50 transition-colors">
@@ -193,7 +331,7 @@ export function PoolShareCard({ record }: PoolShareCardProps) {
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Your share</span>
-            <span>{snapshotSharePct}%</span>
+            <span>{sharePct}%</span>
           </div>
 
           {/* Live pool status */}
@@ -250,6 +388,16 @@ export function PoolShareCard({ record }: PoolShareCardProps) {
           </Button>
         )}
 
+        {/* Manage contribution */}
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={openManageDialog}
+          disabled={isWorking || !poolState || poolState.isClosed}
+        >
+          Add Funds
+        </Button>
+
         {/* Waiting state */}
         {!needsDistributionOpen &&
           (!proceedsAvailable || expectedPayout <= 0n) && (
@@ -261,6 +409,75 @@ export function PoolShareCard({ record }: PoolShareCardProps) {
             </Badge>
           )}
       </CardContent>
+
+      <Dialog open={manageOpen} onOpenChange={setManageOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Manage Contribution</DialogTitle>
+            <DialogDescription>
+              Pool {invoiceHash.slice(0, 14)}…
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">
+                  Current contributed
+                </span>
+                <span className="font-mono font-medium">
+                  {formatInputAmount(contributed)} {shareCurrency}
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor={`manage-amount-${invoiceHash}`}>
+                Amount ({shareCurrency})
+              </Label>
+              <div className="flex gap-2">
+                <Input
+                  id={`manage-amount-${invoiceHash}`}
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.000001"
+                  placeholder="0.0"
+                  value={manageAmount}
+                  onChange={(e) => setManageAmount(e.target.value)}
+                />
+                <Button type="button" variant="outline" onClick={handleSetMax}>
+                  Max
+                </Button>
+              </div>
+              {publicBalance !== null && (
+                <p className="text-xs text-muted-foreground">
+                  Public balance: {formatInputAmount(publicBalance)}{" "}
+                  {shareCurrency}
+                </p>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setManageOpen(false)}
+              disabled={isWorking}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleManageSubmit}
+              disabled={isWorking}
+            >
+              {isWorking ? "Submitting…" : "Contribute"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
