@@ -1422,11 +1422,8 @@ export default function Marketplace() {
                 <Label>Select Invoice</Label>
                 {availableInvoicesForPool.length === 0 ? (
                   <div className="rounded-md bg-amber-950/5 border border-amber-300/60 p-3 text-xs text-amber-700 dark:text-amber-400 space-y-1">
-                    <p className="font-medium">No invoices in wallet</p>
-                    <p>
-                      Mint an invoice first, then submit it into this funded
-                      pool with a matching advance rate.
-                    </p>
+                    <p className="font-medium">No available invoices</p>
+                    <p>Your invoices may already be factored or in a pool.</p>
                   </div>
                 ) : (
                   <Select
