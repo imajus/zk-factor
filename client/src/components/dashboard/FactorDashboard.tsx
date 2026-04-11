@@ -37,12 +37,7 @@ import { useWallet } from "@/contexts/WalletContext";
 import { useTransaction } from "@/hooks/use-transaction";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import {
-  PROGRAM_ID,
-  POOL_PROGRAM_ID,
-  API_ENDPOINT,
-  USDCX_PROGRAM_ID,
-} from "@/lib/config";
+import { PROGRAM_ID, API_ENDPOINT, USDCX_PROGRAM_ID } from "@/lib/config";
 import { PoolShareCard } from "@/components/dashboard/PoolShareCard";
 import {
   type AleoRecord,
@@ -103,8 +98,8 @@ export function FactorDashboard() {
   });
 
   const { data: poolRecords } = useQuery({
-    queryKey: ["records", POOL_PROGRAM_ID],
-    queryFn: () => requestRecords(POOL_PROGRAM_ID, true),
+    queryKey: ["records", PROGRAM_ID],
+    queryFn: () => requestRecords(PROGRAM_ID, true),
     enabled: isConnected,
     staleTime: 0,
     refetchOnMount: "always",
@@ -227,7 +222,7 @@ export function FactorDashboard() {
       }
       toast.success("Transaction confirmed!", { id: "tx-op" });
       queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
-      queryClient.invalidateQueries({ queryKey: ["records", POOL_PROGRAM_ID] });
+      queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
       setSettlingId(null);
       setReclaimingId(null);
       reset();

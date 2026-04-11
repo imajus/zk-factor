@@ -34,8 +34,8 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
-  POOL_PROGRAM_ID,
-  POOL_PROGRAM_ADDRESS,
+  PROGRAM_ID,
+  PROGRAM_ADDRESS,
   USDCX_PROGRAM_ID,
 } from "@/lib/config";
 import { type AleoRecord, getField } from "@/lib/aleo-records";
@@ -179,7 +179,7 @@ export function PoolShareCard({ record }: PoolShareCardProps) {
   const handleOpenDistribution = async () => {
     try {
       await execute({
-        program: POOL_PROGRAM_ID,
+        program: PROGRAM_ID,
         function: "pool_open_distribution",
         inputs: buildPoolOpenDistributionInputs(invoiceHash),
         fee: 50_000,
@@ -217,13 +217,13 @@ export function PoolShareCard({ record }: PoolShareCardProps) {
 
     try {
       await execute({
-        program: POOL_PROGRAM_ID,
+        program: PROGRAM_ID,
         function: "claim_pool_proceeds",
         inputs: buildClaimPoolProceedsInputs(record.recordPlaintext, payout),
         fee: 80_000,
         privateFee: false,
       });
-      queryClient.invalidateQueries({ queryKey: ["records", POOL_PROGRAM_ID] });
+      queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
       queryClient.invalidateQueries({ queryKey: ["pool_state", invoiceHash] });
       toast.success("Proceeds claimed!");
     } catch (err) {
@@ -258,8 +258,8 @@ export function PoolShareCard({ record }: PoolShareCardProps) {
       toast.error("Pool is closed. Contributions are disabled.");
       return;
     }
-    if (!POOL_PROGRAM_ADDRESS) {
-      toast.error("POOL_PROGRAM_ADDRESS is not set.");
+    if (!PROGRAM_ADDRESS) {
+      toast.error("PROGRAM_ADDRESS is not set.");
       return;
     }
     if (publicBalance !== null && amountMicro > publicBalance) {
@@ -274,21 +274,21 @@ export function PoolShareCard({ record }: PoolShareCardProps) {
         await execute({
           program: USDCX_PROGRAM_ID,
           function: "approve_public",
-          inputs: [POOL_PROGRAM_ID, `${amountMicro}u128`],
+          inputs: [PROGRAM_ID, `${amountMicro}u128`],
           fee: 50_000,
           privateFee: false,
         });
       }
 
       await execute({
-        program: POOL_PROGRAM_ID,
+        program: PROGRAM_ID,
         function:
           shareCurrency === "USDCx"
             ? "pool_contribute_token"
             : "pool_contribute",
         inputs: buildPoolContributeInputs(
           invoiceHash,
-          POOL_PROGRAM_ADDRESS,
+          PROGRAM_ADDRESS,
           amountMicro,
           poolState.totalContributed,
         ),
@@ -304,7 +304,7 @@ export function PoolShareCard({ record }: PoolShareCardProps) {
       return;
     }
 
-    queryClient.invalidateQueries({ queryKey: ["records", POOL_PROGRAM_ID] });
+    queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
     queryClient.invalidateQueries({ queryKey: ["pool_state", invoiceHash] });
     queryClient.invalidateQueries({ queryKey: ["all_pools"] });
   };
