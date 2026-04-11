@@ -40,11 +40,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useWallet } from "@/contexts/WalletContext";
 import { useTransaction } from "@/hooks/use-transaction";
 import { toast } from "sonner";
-import {
-  PROGRAM_ID,
-  PROGRAM_ADDRESS,
-  USDCX_PROGRAM_ID,
-} from "@/lib/config";
+import { PROGRAM_ID, PROGRAM_ADDRESS, USDCX_PROGRAM_ID } from "@/lib/config";
 import { type AleoRecord, getField, microToAleo } from "@/lib/aleo-records";
 import {
   computeExpectedPoolPayout,
@@ -641,6 +637,10 @@ export default function Pools() {
 
   const handleContribute = async () => {
     if (!contributePool || !address) return;
+    if (activeRole !== "factor") {
+      toast.error("Only registered factors can contribute to pools.");
+      return;
+    }
     const amountAleo = parseFloat(contributeAmount);
     if (Number.isNaN(amountAleo) || amountAleo <= 0) {
       toast.error("Enter a valid amount.");
@@ -963,7 +963,7 @@ export default function Pools() {
                       e.stopPropagation();
                       openContribute(pool);
                     }}
-                    disabled={status !== "idle"}
+                    disabled={status !== "idle" || activeRole !== "factor"}
                   >
                     Contribute
                   </Button>
@@ -1825,7 +1825,11 @@ export default function Pools() {
             </Button>
             <Button
               onClick={handleContribute}
-              disabled={status !== "idle" || !contributeAmount}
+              disabled={
+                status !== "idle" ||
+                !contributeAmount ||
+                activeRole !== "factor"
+              }
             >
               {status !== "idle" ? "Contributing..." : "Contribute"}
             </Button>
