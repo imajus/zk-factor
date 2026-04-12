@@ -136,9 +136,11 @@ export default function WalletApp() {
             path="/pools/:poolId"
             element={
               <RequireAuth>
-                <AppLayout>
-                  <Pool />
-                </AppLayout>
+                <RequireFactor>
+                  <AppLayout>
+                    <Pool />
+                  </AppLayout>
+                </RequireFactor>
               </RequireAuth>
             }
           />

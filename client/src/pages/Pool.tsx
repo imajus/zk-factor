@@ -1,10 +1,9 @@
 import { useMemo, useState, useEffect } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
   ArrowLeft,
-  ArrowRight,
   Layers,
   RefreshCw,
   TrendingUp,
@@ -696,17 +695,6 @@ export default function Pool() {
                   Claim Proceeds ({formatMicro(myPayout)} {pool.meta.currency})
                 </Button>
               )}
-
-              {activeRole === "business" &&
-                !pool.isClosed &&
-                !stats.hasPendingOffer && (
-                  <Button asChild variant="secondary">
-                    <Link to="/marketplace">
-                      <ArrowRight className="h-4 w-4 mr-1.5" />
-                      Go to Marketplace
-                    </Link>
-                  </Button>
-                )}
             </div>
           </div>
         </div>
