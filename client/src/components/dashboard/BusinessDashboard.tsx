@@ -979,19 +979,39 @@ export function BusinessDashboard() {
               ? "Approved"
               : "Rejected"
             : "Pending";
+          const offer = pool.pendingOffer!;
+          const aleoAmount = microToAleo(`${offer.amount}u64`);
+          const dueDate = unixToDate(`${offer.dueDate}u64`);
+          const rate = offer.advanceRate / 100;
 
           return (
             <Card key={`submitted-${pool.meta.invoiceHash}`}>
               <CardContent className="pt-4 space-y-3">
-                <p className="text-sm font-medium">{pool.meta.name}</p>
-                <p className="font-mono text-xs text-muted-foreground break-all">
-                  {pool.meta.invoiceHash}
-                </p>
+                <p className="font-semibold">{pool.meta.name}</p>
 
                 <div className="space-y-1 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Decision</span>
-                    <span className="font-medium">{decisionLabel}</span>
+                    <span className="text-muted-foreground">Invoice</span>
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {pool.meta.invoiceHash.slice(0, 12)}…
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Amount</span>
+                    <span className="font-mono font-medium">
+                      {aleoAmount.toLocaleString(undefined, {
+                        maximumFractionDigits: 6,
+                      })}{" "}
+                      {pool.meta.currency}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Advance Rate</span>
+                    <span>{rate.toFixed(2)}%</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Due</span>
+                    <span>{formatDate(dueDate)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Votes</span>
@@ -999,21 +1019,21 @@ export function BusinessDashboard() {
                       {stats.totalVotes}/{stats.requiredVotes}
                     </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">
-                      Approve/Reject
-                    </span>
-                    <span>
-                      {stats.approveCount}/{stats.rejectCount}
-                    </span>
-                  </div>
                 </div>
 
-                <Button asChild className="w-full" variant="outline">
-                  <Link to={`/pools/${pool.meta.invoiceHash}`}>
-                    Open Progress Page
-                  </Link>
-                </Button>
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "text-xs",
+                    stats.allVotesCast && stats.isApproved
+                      ? "text-green-600 border-green-300"
+                      : stats.allVotesCast && !stats.isApproved
+                        ? "text-destructive border-destructive/40"
+                        : "text-yellow-600 border-yellow-300",
+                  )}
+                >
+                  {decisionLabel}
+                </Badge>
               </CardContent>
             </Card>
           );
