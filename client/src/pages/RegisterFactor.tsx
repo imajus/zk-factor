@@ -17,6 +17,7 @@ import {
 import { useWallet } from "@/contexts/WalletContext";
 import { useTransaction } from "@/hooks/use-transaction";
 import { fetchFactorStatus } from "@/lib/aleo-factors";
+import { formatAdvanceRate } from "@/lib/format";
 import { toast } from "sonner";
 import { PROGRAM_ID } from "@/lib/config";
 
@@ -34,13 +35,17 @@ export default function RegisterFactor() {
   });
   const alreadyRegistered = !!factorStatus?.is_active;
 
-  const minRateBps = minRate ? parseInt(minRate, 10) : 0;
-  const maxRateBps = maxRate ? parseInt(maxRate, 10) : 0;
+  const minRatePercent = minRate ? parseFloat(minRate) : 0;
+  const maxRatePercent = maxRate ? parseFloat(maxRate) : 0;
+  const minRateBps = Math.round(minRatePercent * 100);
+  const maxRateBps = Math.round(maxRatePercent * 100);
   const registrationValid =
-    minRateBps >= 5000 &&
-    minRateBps <= 9900 &&
-    maxRateBps >= 5000 &&
-    maxRateBps <= 9900 &&
+    Number.isFinite(minRatePercent) &&
+    minRatePercent >= 50 &&
+    minRatePercent <= 99 &&
+    Number.isFinite(maxRatePercent) &&
+    maxRatePercent >= 50 &&
+    maxRatePercent <= 99 &&
     minRateBps <= maxRateBps;
 
   const isSubmitting = status !== "idle";
@@ -106,8 +111,8 @@ export default function RegisterFactor() {
             <AlertTitle>Already registered</AlertTitle>
             <AlertDescription>
               You are already registered as a factor with advance rates{" "}
-              {(factorStatus!.min_advance_rate / 100).toFixed(0)}%–
-              {(factorStatus!.max_advance_rate / 100).toFixed(0)}%.
+              {formatAdvanceRate(factorStatus!.min_advance_rate)}–
+              {formatAdvanceRate(factorStatus!.max_advance_rate)}.
             </AlertDescription>
           </Alert>
         )}
@@ -123,28 +128,30 @@ export default function RegisterFactor() {
           <CardContent className="space-y-6">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="min-rate">Min Advance Rate (basis points)</Label>
+                <Label htmlFor="min-rate">Min Advance Rate (%)</Label>
                 <Input
                   id="min-rate"
                   type="number"
-                  placeholder="e.g. 7000 for 70%"
+                  placeholder="e.g. 70"
                   value={minRate}
                   onChange={(e) => setMinRate(e.target.value)}
-                  min="5000"
-                  max="9900"
+                  min="50"
+                  max="99"
+                  step="0.01"
                   disabled={formDisabled}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="max-rate">Max Advance Rate (basis points)</Label>
+                <Label htmlFor="max-rate">Max Advance Rate (%)</Label>
                 <Input
                   id="max-rate"
                   type="number"
-                  placeholder="e.g. 9500 for 95%"
+                  placeholder="e.g. 95"
                   value={maxRate}
                   onChange={(e) => setMaxRate(e.target.value)}
-                  min="5000"
-                  max="9900"
+                  min="50"
+                  max="99"
+                  step="0.01"
                   disabled={formDisabled}
                 />
               </div>
@@ -152,14 +159,14 @@ export default function RegisterFactor() {
 
             {(minRate || maxRate) && !registrationValid && (
               <p className="text-xs text-destructive">
-                Rates must be between 5000–9900 basis points, and min ≤ max
+                Rates must be between 50–99%, and min ≤ max
               </p>
             )}
 
             {minRate && maxRate && registrationValid && (
               <p className="text-xs text-muted-foreground">
-                You will advance {(minRateBps / 100).toFixed(0)}%–
-                {(maxRateBps / 100).toFixed(0)}% of invoice value upfront.
+                You will advance {formatAdvanceRate(minRateBps)}–
+                {formatAdvanceRate(maxRateBps)} of invoice value upfront.
               </p>
             )}
 
