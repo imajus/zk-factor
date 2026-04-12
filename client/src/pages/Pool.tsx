@@ -398,7 +398,11 @@ export default function Pool() {
         </Button>
         <div className="flex items-center gap-2">
           {pool && !pool.isClosed && (
-            <Button size="sm" onClick={openContribute} disabled={status !== "idle"}>
+            <Button
+              size="sm"
+              onClick={openContribute}
+              disabled={status !== "idle"}
+            >
               <TrendingUp className="h-4 w-4 mr-1.5" />
               Contribute
             </Button>
@@ -480,7 +484,7 @@ export default function Pool() {
                         Current Funds
                       </p>
                       <p className="font-mono text-sm font-semibold leading-none">
-                        {formatMicro(currentFunds)} ALEO
+                        {formatMicro(currentFunds)} {pool.meta.currency}
                       </p>
                     </div>
 
@@ -489,7 +493,7 @@ export default function Pool() {
                         Advance Paid
                       </p>
                       <p className="font-mono text-sm font-semibold leading-none">
-                        {formatMicro(advancePaid)} ALEO
+                        {formatMicro(advancePaid)} {pool.meta.currency}
                       </p>
                     </div>
 
@@ -498,7 +502,8 @@ export default function Pool() {
                         Min Contribution
                       </p>
                       <p className="font-mono text-sm font-semibold leading-none">
-                        {formatMicro(pool.meta.minContribution)} ALEO
+                        {formatMicro(pool.meta.minContribution)}{" "}
+                        {pool.meta.currency}
                       </p>
                     </div>
 
@@ -590,7 +595,8 @@ export default function Pool() {
                             Invoice Amount
                           </span>
                           <span className="font-mono">
-                            {formatMicro(pool.pendingOffer.amount)} ALEO
+                            {formatMicro(pool.pendingOffer.amount)}{" "}
+                            {pool.meta.currency}
                           </span>
                         </div>
                         <div className="flex justify-between gap-2">
@@ -609,9 +615,12 @@ export default function Pool() {
                         !pool.isClosed &&
                         !stats.allVotesCast &&
                         (() => {
-                          const voteKey = buildVoteKey(pool.pendingOffer!.nonce);
+                          const voteKey = buildVoteKey(
+                            pool.pendingOffer!.nonce,
+                          );
                           const hasVoted =
-                            votedPoolHashes.has(voteKey) || pendingVoteKey === voteKey;
+                            votedPoolHashes.has(voteKey) ||
+                            pendingVoteKey === voteKey;
                           return (
                             <div className="flex gap-2 pt-1">
                               <Button
@@ -685,7 +694,8 @@ export default function Pool() {
                       Open Distribution
                     </Button>
                     <p className="text-[11px] text-muted-foreground">
-                      Permissionless — anyone can call this once debtor has paid.
+                      Permissionless — anyone can call this once debtor has
+                      paid.
                     </p>
                   </div>
                 )}
@@ -696,7 +706,8 @@ export default function Pool() {
                     onClick={handleClaimProceeds}
                     disabled={status !== "idle"}
                   >
-                    Claim Proceeds ({formatMicro(myPayout)} {pool.meta.currency})
+                    Claim Proceeds ({formatMicro(myPayout)} {pool.meta.currency}
+                    )
                   </Button>
                 )}
               </div>

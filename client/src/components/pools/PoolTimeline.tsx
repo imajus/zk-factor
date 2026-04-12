@@ -41,6 +41,7 @@ function derivePhases(
   activeFactorCount: number,
 ): Phase[] {
   const stats = computePoolStats(pool, activeFactorCount);
+  const currency = pool.meta.currency;
 
   const hasFunds = pool.totalContributed > 0n;
   const invoiceSubmitted = pool.pendingOffer !== null;
@@ -56,7 +57,7 @@ function derivePhases(
     label: "Funding",
     description: "Pool receives factor contributions.",
     status: hasFunds ? "done" : "active",
-    detail: `${(Number(currentFunds) / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 2 })} ALEO current funds`,
+    detail: `${(Number(currentFunds) / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 2 })} ${currency} current funds`,
   };
 
   const invoicePhase: Phase = {
@@ -68,7 +69,7 @@ function derivePhases(
         ? "active"
         : "pending",
     detail: invoiceSubmitted
-      ? `${(Number(pool.pendingOffer!.amount) / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 2 })} ALEO invoice`
+      ? `${(Number(pool.pendingOffer!.amount) / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 2 })} ${currency} invoice`
       : undefined,
   };
 
@@ -91,7 +92,7 @@ function derivePhases(
         : "pending",
     detail:
       advanceExecuted && pool.pendingOffer
-        ? `${(Number(pool.pendingOffer.advanceAmount) / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 2 })} ALEO advanced`
+        ? `${(Number(pool.pendingOffer.advanceAmount) / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 2 })} ${currency} advanced`
         : undefined,
   };
 
@@ -107,7 +108,7 @@ function derivePhases(
     description: "Proceeds are opened for share claims.",
     status: distributionOpen ? "done" : debtorPaid ? "active" : "pending",
     detail: distributionOpen
-      ? `${(Number(pool.proceeds!) / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 2 })} ALEO available`
+      ? `${(Number(pool.proceeds!) / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 2 })} ${currency} available`
       : undefined,
   };
 
@@ -117,7 +118,7 @@ function derivePhases(
     status: fullyDistributed ? "done" : distributionOpen ? "active" : "pending",
     detail:
       distributionOpen && pool.distributed > 0n
-        ? `${(Number(pool.distributed) / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 2 })} ALEO claimed so far`
+        ? `${(Number(pool.distributed) / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 2 })} ${currency} claimed so far`
         : distributionOpen
           ? "Ready to claim"
           : undefined,
