@@ -169,52 +169,52 @@ export function PoolTimeline({
 
       <div className="space-y-2">
         {phases.map((phase, idx) => (
-            <div key={idx} className="relative pl-8">
-              {idx < phases.length - 1 && (
-                <div className="absolute left-[10px] top-6 bottom-[-10px] w-px bg-border" />
-              )}
+          <div key={idx} className="relative pl-8">
+            {idx < phases.length - 1 && (
+              <div className="absolute left-[12px] top-6 bottom-[-10px] w-px bg-border" />
+            )}
 
-              <div className="absolute left-0 top-0 z-10 bg-background rounded-full">
-                <PhaseIcon status={phase.status} />
-              </div>
+            <div className="absolute left-0 top-0 z-10 bg-background rounded-full">
+              <PhaseIcon status={phase.status} />
+            </div>
 
-              <div className="rounded-md border bg-card/60 px-2 py-1.5">
-                <div className="flex flex-wrap items-start gap-1.5">
-                  <p
-                    title={phase.description}
-                    className={cn(
-                      "text-xs font-semibold leading-tight",
-                      phase.status === "done" && "text-foreground",
-                      phase.status === "active" &&
-                        "text-amber-700 dark:text-amber-400",
-                      phase.status === "pending" && "text-muted-foreground",
-                    )}
-                  >
-                    {phase.label}
-                  </p>
-
-                  {phase.status === "active" && (
-                    <span className="inline-flex items-center rounded-full border border-amber-300/80 px-1.5 py-0.5 text-[9px] font-medium text-amber-700 dark:text-amber-400 uppercase tracking-wide">
-                      Now
-                    </span>
+            <div className="rounded-md border bg-card/60 px-2 py-1.5">
+              <div className="flex flex-wrap items-start gap-1.5">
+                <p
+                  title={phase.description}
+                  className={cn(
+                    "text-sm font-semibold leading-tight",
+                    phase.status === "done" && "text-foreground",
+                    phase.status === "active" &&
+                      "text-amber-700 dark:text-amber-400",
+                    phase.status === "pending" && "text-muted-foreground",
                   )}
-                </div>
+                >
+                  {phase.label}
+                </p>
 
-                {phase.detail && (
-                  <p
-                    className={cn(
-                      "text-[10px] font-mono mt-1.5 break-words",
-                      phase.status === "done"
-                        ? "text-emerald-600 dark:text-emerald-400"
-                        : "text-amber-600 dark:text-amber-400",
-                    )}
-                  >
-                    {phase.detail}
-                  </p>
+                {phase.status === "active" && (
+                  <span className="inline-flex items-center rounded-full border border-amber-300/80 px-1.5 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400 uppercase tracking-wide">
+                    Now
+                  </span>
                 )}
               </div>
+
+              {phase.detail && (
+                <p
+                  className={cn(
+                    "text-xs font-mono mt-1.5 break-words",
+                    phase.status === "done"
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : "text-amber-600 dark:text-amber-400",
+                  )}
+                >
+                  {phase.detail}
+                </p>
+              )}
             </div>
-          ))}
+          </div>
+        ))}
       </div>
     </div>
   );

@@ -407,10 +407,15 @@ export function computePoolStats(
   const approveCount = pool.voteCount;
   const rejectCount = pool.rejectCount;
   const totalVotes = approveCount + rejectCount;
-  const allVotesCast = totalVotes >= requiredVotes;
-  const isApproved = allVotesCast && approveCount > rejectCount;
-  const isRejected = allVotesCast && approveCount <= rejectCount;
   const isExecuted = pool.pendingOffer?.isExecuted ?? false;
+  const majorityThreshold = computeVoteThreshold(requiredVotes);
+  const allVotesCast =
+    isExecuted ||
+    totalVotes >= requiredVotes ||
+    approveCount >= majorityThreshold ||
+    rejectCount >= majorityThreshold;
+  const isApproved = allVotesCast && approveCount > rejectCount;
+  const isRejected = allVotesCast && rejectCount >= majorityThreshold;
   const isFullyDistributed =
     pool.proceeds !== null &&
     pool.proceeds > 0n &&

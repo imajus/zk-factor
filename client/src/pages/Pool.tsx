@@ -444,16 +444,17 @@ export default function Pool() {
           <div className="flex-1 min-w-0 space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Layers className="h-5 w-5 text-primary" />
-                  {pool.meta.name}
+                <CardTitle className="">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Layers className="h-5 w-5 text-primary" />
+                    {pool.meta.name}
+                  </div>
+                  <div className="font-mono text-xs text-muted-foreground break-all">
+                    {pool.meta.invoiceHash}
+                  </div>
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="font-mono text-xs text-muted-foreground break-all">
-                  {pool.meta.invoiceHash}
-                </div>
-
                 <div className="space-y-4">
                   <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 text-sm">
                     <div className="rounded-lg border bg-muted/20 p-3 min-h-[76px] flex flex-col justify-between">
@@ -514,13 +515,19 @@ export default function Pool() {
                   )}
 
                   {pool.pendingOffer && (
-                    <div className="rounded-md border bg-muted/20 p-3 space-y-2 text-sm">
+                    <div className="rounded-md border bg-muted/20 p-3 space-y-4 text-sm">
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge variant="outline">Pending Offer</Badge>
-                        <Badge variant="outline">
-                          Approve {stats.approveCount}
-                        </Badge>
-                        <Badge variant="outline">Reject {stats.rejectCount}</Badge>
+                        {stats.approveCount > 0 && (
+                          <Badge variant="outline">
+                            Approved: {stats.approveCount}
+                          </Badge>
+                        )}
+                        {stats.rejectCount > 0 && (
+                          <Badge variant="outline">
+                            Rejected: {stats.rejectCount}
+                          </Badge>
+                        )}
                         <Badge
                           variant="outline"
                           className={
@@ -553,7 +560,9 @@ export default function Pool() {
 
                       <div className="grid gap-2 sm:grid-cols-2">
                         <div className="flex justify-between gap-2">
-                          <span className="text-muted-foreground">Creditor</span>
+                          <span className="text-muted-foreground">
+                            Creditor
+                          </span>
                           <AddressDisplay
                             address={pool.pendingOffer.originalCreditor}
                             chars={5}
@@ -587,7 +596,6 @@ export default function Pool() {
                       </div>
                     </div>
                   )}
-
                 </div>
               </CardContent>
             </Card>
@@ -596,10 +604,7 @@ export default function Pool() {
             <div className="flex flex-wrap gap-2 justify-end">
               {/* Contribute — available while pool is open */}
               {!pool.isClosed && (
-                <Button
-                  onClick={openContribute}
-                  disabled={status !== "idle"}
-                >
+                <Button onClick={openContribute} disabled={status !== "idle"}>
                   <TrendingUp className="h-4 w-4 mr-1.5" />
                   Contribute
                 </Button>
@@ -610,11 +615,11 @@ export default function Pool() {
                 pool.pendingOffer &&
                 !pool.pendingOffer.isExecuted &&
                 !pool.isClosed &&
-                !stats.allVotesCast && (() => {
+                !stats.allVotesCast &&
+                (() => {
                   const voteKey = buildVoteKey(pool.pendingOffer!.nonce);
                   const hasVoted =
-                    votedPoolHashes.has(voteKey) ||
-                    pendingVoteKey === voteKey;
+                    votedPoolHashes.has(voteKey) || pendingVoteKey === voteKey;
                   return (
                     <>
                       <Button
@@ -677,8 +682,7 @@ export default function Pool() {
                     Open Distribution
                   </Button>
                   <p className="text-[11px] text-muted-foreground">
-                    Permissionless — anyone can call this once debtor has
-                    paid.
+                    Permissionless — anyone can call this once debtor has paid.
                   </p>
                 </div>
               )}
@@ -689,8 +693,7 @@ export default function Pool() {
                   onClick={handleClaimProceeds}
                   disabled={status !== "idle"}
                 >
-                  Claim Proceeds ({formatMicro(myPayout)}{" "}
-                  {pool.meta.currency})
+                  Claim Proceeds ({formatMicro(myPayout)} {pool.meta.currency})
                 </Button>
               )}
 
@@ -749,7 +752,9 @@ export default function Pool() {
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Min contribution</span>
+                  <span className="text-muted-foreground">
+                    Min contribution
+                  </span>
                   <span className="font-mono">
                     {formatCurrencyAmount(
                       pool.meta.minContribution,
@@ -784,10 +789,7 @@ export default function Pool() {
           )}
 
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setContributeOpen(false)}
-            >
+            <Button variant="outline" onClick={() => setContributeOpen(false)}>
               Cancel
             </Button>
             <Button
