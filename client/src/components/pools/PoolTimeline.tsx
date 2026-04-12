@@ -167,9 +167,8 @@ export function PoolTimeline({
         Pool Lifecycle
       </p>
 
-      <div className="rounded-md border bg-card/20 p-2.5">
-        <div className="space-y-2">
-          {phases.map((phase, idx) => (
+      <div className="space-y-2">
+        {phases.map((phase, idx) => (
             <div key={idx} className="relative pl-8">
               {idx < phases.length - 1 && (
                 <div className="absolute left-[10px] top-6 bottom-[-10px] w-px bg-border" />
@@ -216,7 +215,6 @@ export function PoolTimeline({
               </div>
             </div>
           ))}
-        </div>
       </div>
     </div>
   );
