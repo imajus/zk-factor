@@ -8,6 +8,7 @@ import {
   RefreshCw,
   TrendingUp,
   Vote,
+  X,
   Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -395,10 +396,18 @@ export default function Pool() {
           <ArrowLeft className="h-4 w-4 mr-1.5" />
           Pools
         </Button>
-        <Button variant="outline" size="sm" onClick={() => refetch()}>
-          <RefreshCw className="h-4 w-4 mr-1.5" />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          {pool && !pool.isClosed && (
+            <Button size="sm" onClick={openContribute} disabled={status !== "idle"}>
+              <TrendingUp className="h-4 w-4 mr-1.5" />
+              Contribute
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={() => refetch()}>
+            <RefreshCw className="h-4 w-4 mr-1.5" />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {isLoading && (
@@ -593,6 +602,70 @@ export default function Pool() {
                           </span>
                         </div>
                       </div>
+
+                      {/* Vote buttons — factor only, while votes are still being cast */}
+                      {activeRole === "factor" &&
+                        !pool.pendingOffer.isExecuted &&
+                        !pool.isClosed &&
+                        !stats.allVotesCast &&
+                        (() => {
+                          const voteKey = buildVoteKey(pool.pendingOffer!.nonce);
+                          const hasVoted =
+                            votedPoolHashes.has(voteKey) || pendingVoteKey === voteKey;
+                          return (
+                            <div className="flex gap-2 pt-1">
+                              <Button
+                                className="flex-1"
+                                onClick={handleVoteApprove}
+                                disabled={status !== "idle" || hasVoted}
+                              >
+                                <Vote className="h-4 w-4 mr-1.5" />
+                                {hasVoted ? "Voted" : "Approve"}
+                              </Button>
+                              <Button
+                                className="flex-1"
+                                variant="destructive"
+                                onClick={handleVoteReject}
+                                disabled={status !== "idle" || hasVoted}
+                              >
+                                <X className="h-4 w-4 mr-1.5" />
+                                Reject
+                              </Button>
+                            </div>
+                          );
+                        })()}
+
+                      {/* Execute approved pool — after all votes cast and approved */}
+                      {activeRole === "factor" &&
+                        !pool.pendingOffer.isExecuted &&
+                        !pool.isClosed &&
+                        stats.allVotesCast &&
+                        stats.isApproved && (
+                          <Button
+                            className="w-full"
+                            onClick={handleExecuteApprovedPool}
+                            disabled={status !== "idle"}
+                          >
+                            <Zap className="h-4 w-4 mr-1.5" />
+                            Execute Approved Pool
+                          </Button>
+                        )}
+
+                      {/* Finalize rejected pool — after all votes cast and rejected */}
+                      {activeRole === "factor" &&
+                        !pool.pendingOffer.isExecuted &&
+                        !pool.isClosed &&
+                        stats.allVotesCast &&
+                        !stats.isApproved && (
+                          <Button
+                            className="w-full"
+                            variant="destructive"
+                            onClick={handleFinalizeRejectedPool}
+                            disabled={status !== "idle"}
+                          >
+                            Finalize Rejected Offer
+                          </Button>
+                        )}
                     </div>
                   )}
                 </div>
@@ -600,102 +673,34 @@ export default function Pool() {
             </Card>
 
             {/* Action buttons */}
-            <div className="flex flex-wrap gap-2 justify-end">
-              {/* Contribute — available while pool is open */}
-              {!pool.isClosed && (
-                <Button onClick={openContribute} disabled={status !== "idle"}>
-                  <TrendingUp className="h-4 w-4 mr-1.5" />
-                  Contribute
-                </Button>
-              )}
-
-              {/* Vote actions — factor only, while votes are still being cast */}
-              {activeRole === "factor" &&
-                pool.pendingOffer &&
-                !pool.pendingOffer.isExecuted &&
-                !pool.isClosed &&
-                !stats.allVotesCast &&
-                (() => {
-                  const voteKey = buildVoteKey(pool.pendingOffer!.nonce);
-                  const hasVoted =
-                    votedPoolHashes.has(voteKey) || pendingVoteKey === voteKey;
-                  return (
-                    <>
-                      <Button
-                        onClick={handleVoteApprove}
-                        disabled={status !== "idle" || hasVoted}
-                      >
-                        <Vote className="h-4 w-4 mr-1.5" />
-                        {hasVoted ? "Voted" : "Approve"}
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        onClick={handleVoteReject}
-                        disabled={status !== "idle" || hasVoted}
-                      >
-                        Reject
-                      </Button>
-                    </>
-                  );
-                })()}
-
-              {/* Execute approved pool — after all votes cast and approved */}
-              {activeRole === "factor" &&
-                pool.pendingOffer &&
-                !pool.pendingOffer.isExecuted &&
-                !pool.isClosed &&
-                stats.allVotesCast &&
-                stats.isApproved && (
-                  <Button
-                    onClick={handleExecuteApprovedPool}
-                    disabled={status !== "idle"}
-                  >
-                    <Zap className="h-4 w-4 mr-1.5" />
-                    Execute Approved Pool
-                  </Button>
+            {(canOpenDistribution || myPayout > 0n) && (
+              <div className="flex flex-wrap gap-2 justify-end">
+                {/* Open Distribution — permissionless once debtor has paid */}
+                {canOpenDistribution && (
+                  <div className="flex flex-col gap-1 items-end">
+                    <Button
+                      onClick={handleOpenDistribution}
+                      disabled={status !== "idle"}
+                    >
+                      Open Distribution
+                    </Button>
+                    <p className="text-[11px] text-muted-foreground">
+                      Permissionless — anyone can call this once debtor has paid.
+                    </p>
+                  </div>
                 )}
 
-              {/* Finalize rejected pool — after all votes cast and rejected */}
-              {activeRole === "factor" &&
-                pool.pendingOffer &&
-                !pool.pendingOffer.isExecuted &&
-                !pool.isClosed &&
-                stats.allVotesCast &&
-                !stats.isApproved && (
+                {/* Claim proceeds — shown when this user has a PoolShare and proceeds are open */}
+                {myPayout > 0n && (
                   <Button
-                    variant="destructive"
-                    onClick={handleFinalizeRejectedPool}
+                    onClick={handleClaimProceeds}
                     disabled={status !== "idle"}
                   >
-                    Finalize Rejected Offer
+                    Claim Proceeds ({formatMicro(myPayout)} {pool.meta.currency})
                   </Button>
                 )}
-
-              {/* Open Distribution — permissionless once debtor has paid */}
-              {canOpenDistribution && (
-                <div className="flex flex-col gap-1 items-end">
-                  <Button
-                    onClick={handleOpenDistribution}
-                    disabled={status !== "idle"}
-                  >
-                    Open Distribution
-                  </Button>
-                  <p className="text-[11px] text-muted-foreground">
-                    Permissionless — anyone can call this once debtor has paid.
-                  </p>
-                </div>
-              )}
-
-              {/* Claim proceeds — shown when this user has a PoolShare and proceeds are open */}
-              {myPayout > 0n && (
-                <Button
-                  onClick={handleClaimProceeds}
-                  disabled={status !== "idle"}
-                >
-                  Claim Proceeds ({formatMicro(myPayout)} {pool.meta.currency})
-                </Button>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
       )}
