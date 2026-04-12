@@ -6,9 +6,8 @@ import {
   AlertCircle,
   RefreshCw,
   ArrowRight,
-  Copy,
-  Check,
   Send,
+  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -118,7 +117,7 @@ export default function Marketplace() {
   const [submitInvoiceRate, setSubmitInvoiceRate] = useState("");
 
   // ── misc state ─────────────────────────────────────────────────────
-  const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"all" | "factors" | "pools">("all");
 
   // ── refs (survive re-renders during async execute) ─────────────────
   const pendingActionRef = useRef<PendingAction>(null);
@@ -428,67 +427,62 @@ export default function Marketplace() {
     });
   };
 
-  // ── helpers ───────────────────────────────────────────────────────
-  const copyField = async (value: string, label: string) => {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopiedField(label);
-      setTimeout(() => setCopiedField(null), 1500);
-      toast.success(`${label} copied`);
-    } catch {
-      toast.error("Failed to copy");
-    }
-  };
-
   // ── pool card renderer ─────────────────────────────────────────────
   const renderPoolCard = (pool: OnChainPoolState) => {
     return (
       <Card
         key={pool.meta.invoiceHash}
-        className="border-blue-300/60 bg-blue-50/40 dark:bg-blue-950/20 hover:border-blue-400/80 transition-colors cursor-pointer"
+        className="hover:border-primary/50 transition-colors cursor-pointer"
         onClick={() => navigate(`/pools/${pool.meta.invoiceHash}`)}
       >
-        <CardContent className="pt-4 space-y-3">
-          <div>
-            <p className="text-sm font-medium">{pool.meta.name}</p>
-            <p className="text-xs text-muted-foreground font-mono mt-0.5">
-              {pool.meta.invoiceHash.slice(0, 12)}…
-            </p>
+        <CardHeader className="pb-3">
+          <div className="space-y-1">
+            <CardTitle className="text-base">{pool.meta.name}</CardTitle>
+            <Badge variant="outline" className="text-xs text-blue-600 border-blue-300/60 w-fit">
+              Pool
+            </Badge>
           </div>
-
-          <div className="space-y-1 text-sm">
-            <div className="flex justify-between gap-2">
-              <span className="text-muted-foreground">Advance Rate Range</span>
-              <span className="font-mono font-medium">
-                {pool.meta.minAdvanceRate / 100}%-
-                {pool.meta.maxAdvanceRate / 100}%
-              </span>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Min Rate</p>
+              <p className="font-semibold text-primary">
+                {(pool.meta.minAdvanceRate / 100).toFixed(2)}%
+              </p>
             </div>
-            <div className="flex justify-between gap-2">
-              <span className="text-muted-foreground">Total Raised</span>
-              <span className="font-mono font-medium">
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Max Rate</p>
+              <p className="font-semibold text-primary">
+                {(pool.meta.maxAdvanceRate / 100).toFixed(2)}%
+              </p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Total Raised</p>
+              <p className="font-semibold">
                 {formatMicro(pool.totalContributed)} ALEO
-              </span>
+              </p>
             </div>
-            <div className="flex justify-between gap-2">
-              <span className="text-muted-foreground">Min contribution</span>
-              <span className="font-mono text-xs">
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Min Contribution</p>
+              <p className="font-semibold text-sm">
                 {formatMicro(pool.meta.minContribution)} ALEO
-              </span>
+              </p>
             </div>
           </div>
 
-          <Button
-            size="sm"
-            className="w-full"
-            onClick={(e) => {
-              e.stopPropagation();
-              openSubmitInvoice(pool);
-            }}
-          >
-            <Send className="h-3.5 w-3.5 mr-1.5" />
-            Submit Invoice to Pool
-          </Button>
+          {isConnected && (
+            <Button
+              className="w-full"
+              onClick={(e) => {
+                e.stopPropagation();
+                openSubmitInvoice(pool);
+              }}
+            >
+              <Zap className="h-4 w-4 mr-1.5" />
+              Factor
+            </Button>
+          )}
         </CardContent>
       </Card>
     );
@@ -523,6 +517,22 @@ export default function Marketplace() {
                 />
               </div>
             </div>
+            <div className="flex rounded-md overflow-hidden border text-sm">
+              {(["all", "factors", "pools"] as const).map((tab) => (
+                <button
+                  key={tab}
+                  className={cn(
+                    "flex-1 py-1.5 capitalize transition-colors",
+                    activeTab === tab
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-background hover:bg-muted",
+                  )}
+                  onClick={() => setActiveTab(tab)}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
             <Button
               variant="outline"
               className="w-full"
@@ -539,7 +549,7 @@ export default function Marketplace() {
 
         {/* Main content */}
         <div className="lg:col-span-3 space-y-6">
-          {factorsError && (
+          {factorsError && activeTab !== "pools" && (
             <Card className="border-destructive/50">
               <CardContent className="pt-6 flex items-center gap-4">
                 <AlertCircle className="h-5 w-5 text-destructive shrink-0" />
@@ -557,45 +567,45 @@ export default function Marketplace() {
             </Card>
           )}
 
-          {/* ── Pools section ── */}
-          {(poolsLoading || openPools.length > 0) && (
-            <div className="space-y-3">
-              <div>
-                <p className="text-sm font-medium">On-Chain Pools</p>
-                <p className="text-xs text-muted-foreground">
-                  Open pools accepting invoice submissions and contributions.
-                </p>
-              </div>
-
+          {/* ── Pools tab ── */}
+          {activeTab !== "factors" && (
+            <div className="grid gap-4 sm:grid-cols-2">
               {poolsLoading ? (
-                <div className="grid gap-4 sm:grid-cols-2">
-                  {[0, 1].map((i) => (
-                    <Card key={i}>
-                      <CardContent className="pt-4 space-y-3">
-                        <Skeleton className="h-4 w-24" />
-                        <Skeleton className="h-4 w-full" />
-                        <Skeleton className="h-2 w-full" />
-                        <Skeleton className="h-9 w-full" />
-                      </CardContent>
-                    </Card>
-                  ))}
+                [0, 1].map((i) => (
+                  <Card key={i}>
+                    <CardHeader className="pb-3">
+                      <Skeleton className="h-5 w-48" />
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <Skeleton className="h-4 w-full" />
+                      <Skeleton className="h-9 w-full" />
+                    </CardContent>
+                  </Card>
+                ))
+              ) : openPools.length === 0 ? (
+                <div className="col-span-2">
+                  <Card className="border-dashed">
+                    <CardContent className="py-16 text-center space-y-4">
+                      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+                        <Users className="h-8 w-8 text-primary" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-semibold">No open pools</h3>
+                        <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+                          There are no pools accepting submissions right now.
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
                 </div>
               ) : (
-                <div className="grid gap-4 sm:grid-cols-2">
-                  {openPools.map(renderPoolCard)}
-                </div>
+                openPools.map(renderPoolCard)
               )}
             </div>
           )}
 
-          {/* ── Factors section ── */}
-          <div className="space-y-3">
-            <p className="text-sm font-medium">
-              {factorsLoading
-                ? "Loading factors…"
-                : `${filteredFactors.length} active factor${filteredFactors.length !== 1 ? "s" : ""}`}
-            </p>
-
+          {/* ── Factors tab ── */}
+          {activeTab !== "pools" && (
             <div className="grid gap-4 sm:grid-cols-2">
               {factorsLoading ? (
                 Array.from({ length: 4 }).map((_, i) => (
@@ -705,7 +715,8 @@ export default function Marketplace() {
                         >
                           <DialogTrigger asChild>
                             <Button className="w-full">
-                              Factor Invoice
+                              <Zap className="h-4 w-4 mr-1.5" />
+                              Factor
                             </Button>
                           </DialogTrigger>
                           <DialogContent className="max-w-md">
@@ -842,7 +853,7 @@ export default function Marketplace() {
                 ))
               )}
             </div>
-          </div>
+          )}
         </div>
       </div>
 
@@ -867,29 +878,6 @@ export default function Marketplace() {
           </DialogHeader>
           {submitInvoicePool && (
             <div className="space-y-4 py-2">
-              <div className="rounded-md border bg-muted/30 p-3 space-y-1">
-                <p className="text-xs text-muted-foreground">Pool ID</p>
-                <div className="flex items-center gap-2">
-                  <p className="font-mono text-xs break-all flex-1">
-                    {submitInvoicePool.meta.invoiceHash}
-                  </p>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-6 w-6 shrink-0"
-                    onClick={() =>
-                      copyField(submitInvoicePool.meta.invoiceHash, "Pool ID")
-                    }
-                  >
-                    {copiedField === "Pool ID" ? (
-                      <Check className="h-3.5 w-3.5 text-green-600" />
-                    ) : (
-                      <Copy className="h-3.5 w-3.5" />
-                    )}
-                  </Button>
-                </div>
-              </div>
-
               {submitInvoicePool.totalContributed <= 0n ? (
                 <div className="rounded-md border border-amber-300/60 bg-amber-950/5 p-3 text-xs text-amber-700 dark:text-amber-400 space-y-1">
                   <p className="font-medium">Pool has no funds yet</p>
