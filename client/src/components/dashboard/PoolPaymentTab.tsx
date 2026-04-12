@@ -43,6 +43,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Layers } from "lucide-react";
 import { toast } from "sonner";
 import { useTransaction } from "@/hooks/use-transaction";
+import { useWallet } from "@/contexts/WalletContext";
 import { AleoNetworkClient } from "@provablehq/sdk";
 import { API_ENDPOINT, PROGRAM_ID, PROGRAM_ADDRESS } from "@/lib/config";
 import { type AleoRecord, getField } from "@/lib/aleo-records";
@@ -56,6 +57,7 @@ interface PoolPaymentTabProps {
 export function PoolPaymentTab({ records, isLoading }: PoolPaymentTabProps) {
   const queryClient = useQueryClient();
   const { execute, status } = useTransaction();
+  const { requestRecords } = useWallet();
   const isWorking = status !== "idle";
 
   const handlePay = async (record: AleoRecord) => {
@@ -82,16 +84,55 @@ export function PoolPaymentTab({ records, isLoading }: PoolPaymentTabProps) {
         useTokenPool = false;
       }
 
-      await execute({
-        program: PROGRAM_ID,
-        function: useTokenPool ? "pay_pool_invoice_token" : "pay_pool_invoice",
-        inputs: buildPayPoolInvoiceInputs(
-          record.recordPlaintext,
-          PROGRAM_ADDRESS,
-        ),
-        fee: 100_000,
-        privateFee: false,
-      });
+      if (useTokenPool) {
+        // USDCx pool: token path unchanged (out of scope for private records).
+        await execute({
+          program: PROGRAM_ID,
+          function: "pay_pool_invoice_token",
+          inputs: [record.recordPlaintext, PROGRAM_ADDRESS],
+          fee: 100_000,
+          privateFee: false,
+        });
+      } else {
+        // ALEO pool: use private credits record.
+        const amountMicro = parseInt(
+          getField(record.recordPlaintext, "amount").replace(/u64$/, ""),
+          10,
+        );
+        const creditsRecords = (await requestRecords(
+          "credits.aleo",
+          true,
+        )) as AleoRecord[];
+        const creditsRecord = creditsRecords
+          .filter((r) => !r.spent)
+          .find(
+            (r) =>
+              parseInt(
+                getField(r.recordPlaintext, "microcredits").replace(
+                  /u64$/,
+                  "",
+                ),
+                10,
+              ) >= amountMicro,
+          );
+        if (!creditsRecord) {
+          toast.error(
+            "No credits record with sufficient balance found. Ensure you hold an unspent credits record.",
+          );
+          return;
+        }
+        await execute({
+          program: PROGRAM_ID,
+          function: "pay_pool_invoice",
+          inputs: buildPayPoolInvoiceInputs(
+            record.recordPlaintext,
+            creditsRecord.recordPlaintext,
+            PROGRAM_ADDRESS,
+          ),
+          fee: 100_000,
+          privateFee: false,
+        });
+      }
       queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
       toast.success("Payment sent to pool escrow!");
     } catch (err) {

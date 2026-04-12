@@ -145,11 +145,49 @@ export default function Pay() {
   }, [status, txError, reset, payingId, refetch]);
 
   /**
-   * Single-factor path: pay_invoice(notice, factor)
-   *   → transfer_public_as_signer(factor, amount) + settlement in same finalize
+   * Fetch an unspent credits record with balance >= amountMicro.
+   * Returns undefined and shows a toast if none is found.
+   */
+  const fetchCreditsRecord = async (
+    amountMicro: number,
+  ): Promise<AleoRecord | undefined> => {
+    try {
+      const creditsRecords = (await requestRecords(
+        "credits.aleo",
+        true,
+      )) as AleoRecord[];
+      const record = creditsRecords
+        .filter((r) => !r.spent)
+        .find(
+          (r) =>
+            parseInt(
+              getField(r.recordPlaintext, "microcredits").replace(/u64$/, ""),
+              10,
+            ) >= amountMicro,
+        );
+      if (!record) {
+        toast.error(
+          "No credits record with sufficient balance found. Ensure you hold an unspent credits record.",
+          { id: "pay-invoice" },
+        );
+      }
+      return record;
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to fetch credits records",
+        { id: "pay-invoice" },
+      );
+      return undefined;
+    }
+  };
+
+  /**
+   * Single-factor path: pay_invoice(notice, credit_in, factor)
+   *   → transfer_private(credit_in, factor, amount) + settlement in same finalize
+   *   Factor receives a private credits record; debtor's source of funds stays encrypted.
    *
-   * Pool path: pay_pool_invoice(notice, program_addr)
-   *   → transfer_public_as_signer(program_addr, amount) + settlement in same finalize
+   * Pool path: pay_pool_invoice(notice, credit_in, program_addr)
+   *   → transfer_private_to_public(credit_in, program_addr, amount) + settlement
    *   Funds land in the program's public escrow, ready for distribution.
    */
   const handlePay = async (row: NoticeRow) => {
@@ -178,20 +216,53 @@ export default function Pay() {
           useTokenPool = false;
         }
 
-        await execute({
-          program: PROGRAM_ID,
-          function: useTokenPool
-            ? "pay_pool_invoice_token"
-            : "pay_pool_invoice",
-          inputs: [row.record.recordPlaintext, row.programAddr],
-          fee: 100_000,
-          privateFee: false,
-        });
+        if (useTokenPool) {
+          // USDCx pool: token path unchanged (out of scope for private records).
+          await execute({
+            program: PROGRAM_ID,
+            function: "pay_pool_invoice_token",
+            inputs: [row.record.recordPlaintext, row.programAddr],
+            fee: 100_000,
+            privateFee: false,
+          });
+        } else {
+          // ALEO pool: use private credits record.
+          const creditsRecord = await fetchCreditsRecord(
+            Math.round(row.amount * 1_000_000),
+          );
+          if (!creditsRecord) {
+            setPayingId(null);
+            return;
+          }
+          await execute({
+            program: PROGRAM_ID,
+            function: "pay_pool_invoice",
+            inputs: [
+              row.record.recordPlaintext,
+              creditsRecord.recordPlaintext,
+              row.programAddr,
+            ],
+            fee: 100_000,
+            privateFee: false,
+          });
+        }
       } else {
+        // Single-factor path: use private credits record.
+        const creditsRecord = await fetchCreditsRecord(
+          Math.round(row.amount * 1_000_000),
+        );
+        if (!creditsRecord) {
+          setPayingId(null);
+          return;
+        }
         await execute({
           program: PROGRAM_ID,
           function: "pay_invoice",
-          inputs: [row.record.recordPlaintext, row.factor],
+          inputs: [
+            row.record.recordPlaintext,
+            creditsRecord.recordPlaintext,
+            row.factor,
+          ],
           fee: 100_000,
           privateFee: false,
         });

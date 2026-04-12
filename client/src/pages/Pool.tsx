@@ -42,7 +42,6 @@ import {
   buildFinalizeRejectedPoolInputs,
   buildExecuteApprovedPoolInputs,
   buildClaimPoolProceedsInputs,
-  fetchPublicCreditsBalance,
   fetchPublicTokenBalance,
 } from "@/lib/pool-chain";
 import { type AleoRecord, getField } from "@/lib/aleo-records";
@@ -205,11 +204,10 @@ export default function Pool() {
     if (!pool) return;
     setContributeAmount("");
     setContributeOpen(true);
-    if (address) {
-      const balance =
-        pool.meta.currency === "USDCx"
-          ? await fetchPublicTokenBalance(address)
-          : await fetchPublicCreditsBalance(address);
+    // Only fetch public balance for USDCx pools (token path still uses public balance).
+    // ALEO pools now use private credits records fetched at contribution time.
+    if (address && pool.meta.currency === "USDCx") {
+      const balance = await fetchPublicTokenBalance(address);
       setPublicBalance(balance);
     }
   };
@@ -229,17 +227,19 @@ export default function Pool() {
       );
       return;
     }
-    if (publicBalance !== null && contribution > publicBalance) {
-      toast.error(
-        `Insufficient public ${pool.meta.currency} balance (${formatCurrencyAmount(publicBalance, pool.meta.currency)}).`,
-      );
-      return;
-    }
     if (!PROGRAM_ADDRESS) {
       toast.error("PROGRAM_ADDRESS is not set.");
       return;
     }
+
     if (pool.meta.currency === "USDCx") {
+      // USDCx pool: public allowance path (pool_contribute_token is out of scope for private records).
+      if (publicBalance !== null && contribution > publicBalance) {
+        toast.error(
+          `Insufficient public ${pool.meta.currency} balance (${formatCurrencyAmount(publicBalance, pool.meta.currency)}).`,
+        );
+        return;
+      }
       await execute({
         program: USDCX_PROGRAM_ID,
         function: "approve_public",
@@ -247,15 +247,55 @@ export default function Pool() {
         fee: 50_000,
         privateFee: false,
       });
+      await execute({
+        program: PROGRAM_ID,
+        function: "pool_contribute_token",
+        inputs: [
+          pool.meta.invoiceHash,
+          PROGRAM_ADDRESS,
+          `${contribution}u64`,
+          `${pool.totalContributed}u64`,
+        ],
+        fee: 80_000,
+        privateFee: false,
+      });
+      return;
     }
-    const contributeFunction =
-      pool.meta.currency === "USDCx"
-        ? "pool_contribute_token"
-        : "pool_contribute";
+
+    // ALEO pool: private credits record path.
+    let creditsRecord: AleoRecord | undefined;
+    try {
+      const creditsRecords = (await requestRecords(
+        "credits.aleo",
+        true,
+      )) as AleoRecord[];
+      const contributionMicro = Number(contribution);
+      creditsRecord = creditsRecords
+        .filter((r) => !r.spent)
+        .find(
+          (r) =>
+            parseInt(
+              getField(r.recordPlaintext, "microcredits").replace(/u64$/, ""),
+              10,
+            ) >= contributionMicro,
+        );
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to fetch credits records",
+      );
+      return;
+    }
+    if (!creditsRecord) {
+      toast.error(
+        "No credits record with sufficient balance found. Ensure you hold an unspent credits record.",
+      );
+      return;
+    }
     await execute({
       program: PROGRAM_ID,
-      function: contributeFunction,
+      function: "pool_contribute",
       inputs: buildPoolContributeInputs(
+        creditsRecord.recordPlaintext,
         pool.meta.invoiceHash,
         PROGRAM_ADDRESS,
         contribution,

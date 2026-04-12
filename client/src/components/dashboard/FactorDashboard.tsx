@@ -354,19 +354,91 @@ export function FactorDashboard() {
         10,
       );
       const advanceAmount = Math.floor((amountMicro * advanceRateBps) / 10000);
-      toast.loading("Step 1/2: Approving USDCx spend\u2026", { id: "tx-op" });
-      await execute({
-        program: USDCX_PROGRAM_ID,
-        function: "approve_public",
-        inputs: [PROGRAM_ID, `${advanceAmount}u128`],
-        fee: 50_000,
-        privateFee: false,
-      });
+
+      // Fetch private USDCx Token + Credentials records from wallet.
+      toast.loading("Fetching USDCx records\u2026", { id: "tx-op" });
+      const usdcxRecords = (await requestRecords(
+        USDCX_PROGRAM_ID,
+        true,
+      )) as AleoRecord[];
+      const unspentUsdcx = usdcxRecords.filter((r) => !r.spent);
+
+      const tokenRecord = unspentUsdcx.find(
+        (r) =>
+          r.recordName === "Token" &&
+          parseInt(
+            getField(r.recordPlaintext, "amount").replace(/u128$/, ""),
+            10,
+          ) >= advanceAmount,
+      );
+      if (!tokenRecord) {
+        toast.error(
+          "No USDCx Token record with sufficient balance found. Ensure you hold a private USDCx record.",
+          { id: "tx-op" },
+        );
+        setSettlingId(null);
+        pendingAcceptedCurrencyRef.current = null;
+        setExecutingOffers((prev) => {
+          const next = { ...prev };
+          delete next[invoiceHash];
+          return next;
+        });
+        return;
+      }
+
+      let credsRecord = unspentUsdcx.find(
+        (r) => r.recordName === "Credentials",
+      );
+      if (!credsRecord) {
+        // No credentials record found — obtain one first via get_credentials.
+        toast.loading(
+          "Step 1/2: Obtaining USDCx compliance credentials\u2026",
+          { id: "tx-op" },
+        );
+        await execute({
+          program: USDCX_PROGRAM_ID,
+          function: "get_credentials",
+          // MerkleProof inputs — wallet/prover handles proof generation.
+          // For testnet with an empty freeze list, use zero-value proofs.
+          inputs: [
+            "[{ leaf_index: 0u32, siblings: [0field, 0field, 0field] }, { leaf_index: 0u32, siblings: [0field, 0field, 0field] }]",
+          ],
+          fee: 50_000,
+          privateFee: false,
+        });
+        // Re-fetch to get the newly created Credentials record.
+        const refreshed = (await requestRecords(
+          USDCX_PROGRAM_ID,
+          true,
+        )) as AleoRecord[];
+        credsRecord = refreshed
+          .filter((r) => !r.spent)
+          .find((r) => r.recordName === "Credentials");
+        if (!credsRecord) {
+          toast.error(
+            "Failed to obtain USDCx credentials. Please try again.",
+            { id: "tx-op" },
+          );
+          setSettlingId(null);
+          pendingAcceptedCurrencyRef.current = null;
+          setExecutingOffers((prev) => {
+            const next = { ...prev };
+            delete next[invoiceHash];
+            return next;
+          });
+          return;
+        }
+      }
+
       toast.loading("Step 2/2: Executing factoring\u2026", { id: "tx-op" });
       await execute({
         program: PROGRAM_ID,
         function: "execute_factoring_token",
-        inputs: [record.recordPlaintext],
+        inputs: [
+          record.recordPlaintext,
+          tokenRecord.recordPlaintext,
+          credsRecord.recordPlaintext,
+        ],
         fee: 100_000,
         privateFee: false,
       });
