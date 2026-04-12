@@ -23,7 +23,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Calendar } from "@/components/ui/calendar";
 import {
   Popover,
@@ -85,7 +84,6 @@ export default function CreateInvoice() {
   const [debtorAddress, setDebtorAddress] = useState("");
   const [amount, setAmount] = useState("");
   const [dueDate, setDueDate] = useState<Date>();
-  const [makeDebtorPublic, setMakeDebtorPublic] = useState(false);
   const [internalNotes, setInternalNotes] = useState("");
   const [showPreview, setShowPreview] = useState(false);
   const [currency, setCurrency] = useState<PaymentCurrency>("ALEO");
@@ -524,26 +522,6 @@ export default function CreateInvoice() {
                 <CardTitle>Privacy & Metadata</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex items-start gap-3">
-                  <Checkbox
-                    id="makeDebtorPublic"
-                    checked={makeDebtorPublic}
-                    onCheckedChange={(checked) =>
-                      setMakeDebtorPublic(checked as boolean)
-                    }
-                  />
-                  <div className="space-y-1">
-                    <Label
-                      htmlFor="makeDebtorPublic"
-                      className="cursor-pointer"
-                    >
-                      Make debtor address public
-                    </Label>
-                    <p className="text-xs text-muted-foreground">
-                      If checked, debtor can see they owe this invoice
-                    </p>
-                  </div>
-                </div>
                 <div className="space-y-2">
                   <Label htmlFor="internalNotes">
                     Internal Notes (Optional)
