@@ -89,8 +89,12 @@ type PendingAction = "factor" | "submit-invoice-pool" | null;
 export default function Marketplace() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { isConnected, requestRecords } = useWallet();
+  const { isConnected, requestRecords, activeRole } = useWallet();
   const { execute, status, error: txError, reset } = useTransaction();
+
+  useEffect(() => {
+    if (activeRole === "factor") navigate("/dashboard", { replace: true });
+  }, [activeRole, navigate]);
 
   // ── general UI state ───────────────────────────────────────────────
   const isWorking = status !== "idle";
@@ -111,9 +115,8 @@ export default function Marketplace() {
   const [submitInvoiceRate, setSubmitInvoiceRate] = useState("");
 
   // ── misc state ─────────────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState<"all" | "factors" | "pools">(
-    "all",
-  );
+  const [activeTab, setActiveTab] = useState<"all" | "factors" | "pools">("all");
+  const [currencyFilter, setCurrencyFilter] = useState<"all" | "ALEO" | "USDCx">("all");
   const [noInvoiceDialogOpen, setNoInvoiceDialogOpen] = useState(false);
 
   // ── refs (survive re-renders during async execute) ─────────────────
@@ -151,7 +154,7 @@ export default function Marketplace() {
   });
 
   const { data: records } = useQuery({
-    queryKey: ["records", PROGRAM_ID, "invoices"],
+    queryKey: ["records", PROGRAM_ID],
     queryFn: () => requestRecords(PROGRAM_ID, true),
     enabled: isConnected,
     staleTime: 60_000,
@@ -170,7 +173,9 @@ export default function Marketplace() {
   const allPools = Array.isArray(onChainPools) ? onChainPools : [];
   const openPools = allPools.filter((pool) => {
     const stats = computePoolStats(pool, activeFactorCount);
-    return !pool.isClosed && !stats.hasPendingOffer;
+    if (pool.isClosed || stats.hasPendingOffer) return false;
+    if (currencyFilter !== "all" && pool.meta.currency !== currencyFilter) return false;
+    return true;
   });
 
   // ── invoice dialog computed values ────────────────────────────────
@@ -211,7 +216,12 @@ export default function Marketplace() {
       partialAmountMicro < selectedInvoiceAmountMicro);
 
   // ── pool submit invoice — available invoices ───────────────────────
-  const availableInvoicesForPool = submitInvoicePool ? invoiceRecords : [];
+  const availableInvoicesForPool = submitInvoicePool
+    ? invoiceRecords.filter((r) => {
+        const hash = getField(r.recordPlaintext, "invoice_hash");
+        return getInvoiceCurrency(r, hash) === submitInvoicePool.meta.currency;
+      })
+    : [];
 
   // ── pool submit dialog computed values ────────────────────────────
   // submitInvoiceRate stores a percentage string (e.g. "75" for 75%)
@@ -483,10 +493,7 @@ export default function Marketplace() {
       <div className="grid gap-6 lg:grid-cols-4">
         {/* Sidebar */}
         <Card className="lg:col-span-1 h-fit sticky top-20">
-          <CardHeader>
-            <CardTitle className="text-base">Filters</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-4 pt-6">
             <div className="space-y-2">
               <Label>Search by address</Label>
               <div className="relative">
@@ -499,22 +506,46 @@ export default function Marketplace() {
                 />
               </div>
             </div>
-            <div className="flex rounded-md overflow-hidden border text-sm">
-              {(["all", "factors", "pools"] as const).map((tab) => (
-                <button
-                  key={tab}
-                  className={cn(
-                    "flex-1 py-1.5 capitalize transition-colors",
-                    activeTab === tab
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-background hover:bg-muted",
-                  )}
-                  onClick={() => setActiveTab(tab)}
-                >
-                  {tab}
-                </button>
-              ))}
+            <div className="space-y-2">
+              <Label>Show</Label>
+              <div className="flex rounded-md overflow-hidden border text-sm">
+                {(["all", "factors", "pools"] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    className={cn(
+                      "flex-1 py-1.5 capitalize transition-colors",
+                      activeTab === tab
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-background hover:bg-muted",
+                    )}
+                    onClick={() => setActiveTab(tab)}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
             </div>
+            {activeTab !== "factors" && (
+              <div className="space-y-2">
+                <Label>Pool currency</Label>
+                <div className="flex rounded-md overflow-hidden border text-sm">
+                  {(["all", "ALEO", "USDCx"] as const).map((c) => (
+                    <button
+                      key={c}
+                      className={cn(
+                        "flex-1 py-1.5 transition-colors",
+                        currencyFilter === c
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-background hover:bg-muted",
+                      )}
+                      onClick={() => setCurrencyFilter(c)}
+                    >
+                      {c === "all" ? "All" : c}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <Button
               variant="outline"
               className="w-full"
@@ -549,9 +580,211 @@ export default function Marketplace() {
             </Card>
           )}
 
-          {/* ── Pools tab ── */}
-          {activeTab !== "factors" && openPools.length > 0 && (
-            <div className="grid gap-4 sm:grid-cols-2">
+          {/* ── Combined pools + factors grid ── */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            {/* Pool cards */}
+            {activeTab !== "factors" && openPools.map((pool) => renderPoolCard(pool))}
+
+            {/* Factor loading skeletons */}
+            {activeTab !== "pools" && factorsLoading &&
+              Array.from({ length: 4 }).map((_, i) => (
+                <Card key={`skel-${i}`}>
+                  <CardHeader className="pb-3">
+                    <Skeleton className="h-5 w-48" />
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-9 w-full" />
+                  </CardContent>
+                </Card>
+              ))}
+
+            {/* Factor cards */}
+            {activeTab !== "pools" && !factorsLoading &&
+              filteredFactors.map((factor) => (
+                <Card
+                  key={factor.address}
+                  className="hover:border-primary/50 transition-colors"
+                >
+                  <CardHeader className="pb-3">
+                    <div className="space-y-1">
+                      <CardTitle className="text-base">Anonymous Factor</CardTitle>
+                      <AddressDisplay address={factor.address} chars={4} />
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground">Min Rate</p>
+                        <p className="font-semibold text-primary">
+                          {(factor.min_advance_rate / 100).toFixed(2)}%
+                        </p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground">Max Rate</p>
+                        <p className="font-semibold text-primary">
+                          {(factor.max_advance_rate / 100).toFixed(2)}%
+                        </p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground">Invoices Factored</p>
+                        <p className="font-semibold">
+                          {factor.total_factored.toLocaleString()}
+                        </p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground">Status</p>
+                        <Badge
+                          variant="outline"
+                          className="text-xs text-primary border-primary/30"
+                        >
+                          Active
+                        </Badge>
+                      </div>
+                    </div>
+
+                    {isConnected && (
+                      <Dialog
+                        open={dialogOpen && selectedFactor?.address === factor.address}
+                        onOpenChange={(open) => {
+                          setDialogOpen(open);
+                          if (!open) return;
+                          if (selectedFactor?.address !== factor.address) {
+                            setSelectedFactor(factor);
+                            setSelectedInvoiceId("");
+                            setAdvanceRateInput("");
+                            setPartialAmountInput("");
+                          }
+                        }}
+                      >
+                        <Button
+                          className="w-full"
+                          onClick={() => {
+                            if (invoiceRecords.length === 0) {
+                              setNoInvoiceDialogOpen(true);
+                              return;
+                            }
+                            if (selectedFactor?.address !== factor.address) {
+                              setSelectedFactor(factor);
+                              setSelectedInvoiceId("");
+                              setAdvanceRateInput("");
+                              setPartialAmountInput("");
+                            }
+                            setDialogOpen(true);
+                          }}
+                        >
+                          <Zap className="h-4 w-4 mr-1.5" />
+                          Factor
+                        </Button>
+                        <DialogContent className="max-w-md">
+                          <DialogHeader>
+                            <DialogTitle>Factor Invoice</DialogTitle>
+                            <DialogDescription>
+                              Sell your invoice to this factor at an agreed advance rate.
+                            </DialogDescription>
+                          </DialogHeader>
+                          <div className="space-y-4 py-2">
+                            <div className="space-y-2">
+                              <Label>Factor</Label>
+                              <AddressDisplay address={factor.address} showExplorer />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Select Invoice</Label>
+                              <Select
+                                value={selectedInvoiceId}
+                                onValueChange={setSelectedInvoiceId}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Choose an invoice…" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {invoiceRecords.length === 0 ? (
+                                    <SelectItem value="_none" disabled>
+                                      No invoices available
+                                    </SelectItem>
+                                  ) : (
+                                    invoiceRecords.map((r) => {
+                                      const hash = getField(r.recordPlaintext, "invoice_hash");
+                                      const selId = getInvoiceSelectionId(r);
+                                      const currency = getInvoiceCurrency(r, hash);
+                                      const amount = (parseInvoiceAmountMicro(r) / 1_000_000).toFixed(6);
+                                      return (
+                                        <SelectItem key={selId} value={selId}>
+                                          {hash.slice(0, 12)}… — {amount} {currency}
+                                        </SelectItem>
+                                      );
+                                    })
+                                  )}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Partial Amount ({selectedInvoiceCurrency}, optional)</Label>
+                              <Input
+                                type="number"
+                                min="0"
+                                step="0.000001"
+                                placeholder={`Leave empty to factor full ${formattedInvoiceAmount}`}
+                                value={partialAmountInput}
+                                onChange={(e) => setPartialAmountInput(e.target.value)}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>
+                                Advance Rate (%, {formatAdvanceRate(factorMinRate)}–
+                                {formatAdvanceRate(factorMaxRate)})
+                              </Label>
+                              <Input
+                                type="number"
+                                placeholder={`e.g. ${(factorMaxRate / 100).toFixed(0)}`}
+                                min={factorMinRate / 100}
+                                max={factorMaxRate / 100}
+                                step="0.01"
+                                value={advanceRateInput}
+                                onChange={(e) => setAdvanceRateInput(e.target.value)}
+                              />
+                              {advanceRateInput && (
+                                <p className={cn("text-xs", advanceRateValid ? "text-muted-foreground" : "text-destructive")}>
+                                  {advanceRateValid
+                                    ? `${formatAdvanceRate(advanceRateBps)} advance`
+                                    : `Must be between ${formatAdvanceRate(factorMinRate)} and ${formatAdvanceRate(factorMaxRate)}`}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <DialogFooter>
+                            <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                              Cancel
+                            </Button>
+                            <Button
+                              onClick={handleFactorInvoice}
+                              disabled={
+                                !selectedInvoiceId ||
+                                !advanceRateValid ||
+                                !partialAmountValid ||
+                                isWorking ||
+                                selectedInvoiceId === "_none"
+                              }
+                            >
+                              {isWorking && pendingActionRef.current === "factor"
+                                ? "Processing…"
+                                : "Confirm"}
+                            </Button>
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+
+            {/* Empty state */}
+            {!factorsLoading &&
+              (activeTab === "all"
+                ? openPools.length === 0 && filteredFactors.length === 0
+                : activeTab === "pools"
+                  ? openPools.length === 0
+                  : filteredFactors.length === 0) && (
               <div className="col-span-2">
                 <Card className="border-dashed">
                   <CardContent className="py-16 text-center space-y-4">
@@ -559,281 +792,28 @@ export default function Marketplace() {
                       <Users className="h-8 w-8 text-primary" />
                     </div>
                     <div>
-                      <h3 className="text-lg font-semibold">No open pools</h3>
+                      <h3 className="text-lg font-semibold">
+                        {activeTab === "pools" ? "No open pools" : "No active factors yet"}
+                      </h3>
                       <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-                        There are no pools accepting submissions right now.
+                        {activeTab === "pools"
+                          ? "There are no pools accepting submissions right now."
+                          : "Be the first to register as a factor."}
                       </p>
                     </div>
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
-          )}
-
-          {/* ── Factors tab ── */}
-          {activeTab !== "pools" && (
-            <div className="grid gap-4 sm:grid-cols-2">
-              {factorsLoading ? (
-                Array.from({ length: 4 }).map((_, i) => (
-                  <Card key={i}>
-                    <CardHeader className="pb-3">
-                      <Skeleton className="h-5 w-48" />
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <Skeleton className="h-4 w-full" />
-                      <Skeleton className="h-9 w-full" />
-                    </CardContent>
-                  </Card>
-                ))
-              ) : filteredFactors.length === 0 ? (
-                <div className="col-span-2">
-                  <Card className="border-dashed">
-                    <CardContent className="py-16 text-center space-y-4">
-                      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
-                        <Users className="h-8 w-8 text-primary" />
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-semibold">
-                          No active factors yet
-                        </h3>
-                        <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-                          Be the first to register as a factor.
-                        </p>
-                      </div>
+                    {activeTab !== "pools" && (
                       <Button asChild>
                         <Link to="/settings">
                           Register as Factor
                           <ArrowRight className="h-4 w-4 ml-2" />
                         </Link>
                       </Button>
-                    </CardContent>
-                  </Card>
-                </div>
-              ) : (
-                filteredFactors.map((factor) => (
-                  <Card
-                    key={factor.address}
-                    className="hover:border-primary/50 transition-colors"
-                  >
-                    <CardHeader className="pb-3">
-                      <div className="space-y-1">
-                        <CardTitle className="text-base">
-                          Anonymous Factor
-                        </CardTitle>
-                        <AddressDisplay address={factor.address} chars={4} />
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1">
-                          <p className="text-xs text-muted-foreground">
-                            Min Rate
-                          </p>
-                          <p className="font-semibold text-primary">
-                            {(factor.min_advance_rate / 100).toFixed(2)}%
-                          </p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs text-muted-foreground">
-                            Max Rate
-                          </p>
-                          <p className="font-semibold text-primary">
-                            {(factor.max_advance_rate / 100).toFixed(2)}%
-                          </p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs text-muted-foreground">
-                            Invoices Factored
-                          </p>
-                          <p className="font-semibold">
-                            {factor.total_factored.toLocaleString()}
-                          </p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs text-muted-foreground">
-                            Status
-                          </p>
-                          <Badge
-                            variant="outline"
-                            className="text-xs text-primary border-primary/30"
-                          >
-                            Active
-                          </Badge>
-                        </div>
-                      </div>
-
-                      {isConnected && (
-                        <Dialog
-                          open={
-                            dialogOpen &&
-                            selectedFactor?.address === factor.address
-                          }
-                          onOpenChange={(open) => {
-                            setDialogOpen(open);
-                            if (!open) return;
-                            if (selectedFactor?.address !== factor.address) {
-                              setSelectedFactor(factor);
-                              setSelectedInvoiceId("");
-                              setAdvanceRateInput("");
-                              setPartialAmountInput("");
-                            }
-                          }}
-                        >
-                          <Button
-                            className="w-full"
-                            onClick={() => {
-                              if (invoiceRecords.length === 0) {
-                                setNoInvoiceDialogOpen(true);
-                                return;
-                              }
-                              if (selectedFactor?.address !== factor.address) {
-                                setSelectedFactor(factor);
-                                setSelectedInvoiceId("");
-                                setAdvanceRateInput("");
-                                setPartialAmountInput("");
-                              }
-                              setDialogOpen(true);
-                            }}
-                          >
-                            <Zap className="h-4 w-4 mr-1" />
-                            Factor
-                          </Button>
-                          <DialogContent className="max-w-md">
-                            <DialogHeader>
-                              <DialogTitle>Factor Invoice</DialogTitle>
-                              <DialogDescription>
-                                Sell your invoice to this factor at an agreed
-                                advance rate.
-                              </DialogDescription>
-                            </DialogHeader>
-                            <div className="space-y-4 py-2">
-                              <div className="space-y-2">
-                                <Label>Factor</Label>
-                                <AddressDisplay
-                                  address={factor.address}
-                                  showExplorer
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <Label>Select Invoice</Label>
-                                <Select
-                                  value={selectedInvoiceId}
-                                  onValueChange={setSelectedInvoiceId}
-                                >
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="Choose an invoice…" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {invoiceRecords.length === 0 ? (
-                                      <SelectItem value="_none" disabled>
-                                        No invoices available
-                                      </SelectItem>
-                                    ) : (
-                                      invoiceRecords.map((r) => {
-                                        const hash = getField(
-                                          r.recordPlaintext,
-                                          "invoice_hash",
-                                        );
-                                        const selId = getInvoiceSelectionId(r);
-                                        const currency = getInvoiceCurrency(
-                                          r,
-                                          hash,
-                                        );
-                                        const amount = (
-                                          parseInvoiceAmountMicro(r) / 1_000_000
-                                        ).toFixed(6);
-                                        return (
-                                          <SelectItem key={selId} value={selId}>
-                                            {hash.slice(0, 12)}… — {amount}{" "}
-                                            {currency}
-                                          </SelectItem>
-                                        );
-                                      })
-                                    )}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <div className="space-y-2">
-                                <Label>
-                                  Partial Amount ({selectedInvoiceCurrency},
-                                  optional)
-                                </Label>
-                                <Input
-                                  type="number"
-                                  min="0"
-                                  step="0.000001"
-                                  placeholder={`Leave empty to factor full ${formattedInvoiceAmount}`}
-                                  value={partialAmountInput}
-                                  onChange={(e) =>
-                                    setPartialAmountInput(e.target.value)
-                                  }
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <Label>
-                                  Advance Rate (%,{" "}
-                                  {formatAdvanceRate(factorMinRate)}–
-                                  {formatAdvanceRate(factorMaxRate)})
-                                </Label>
-                                <Input
-                                  type="number"
-                                  placeholder={`e.g. ${(factorMaxRate / 100).toFixed(0)}`}
-                                  min={factorMinRate / 100}
-                                  max={factorMaxRate / 100}
-                                  step="0.01"
-                                  value={advanceRateInput}
-                                  onChange={(e) =>
-                                    setAdvanceRateInput(e.target.value)
-                                  }
-                                />
-                                {advanceRateInput && (
-                                  <p
-                                    className={cn(
-                                      "text-xs",
-                                      advanceRateValid
-                                        ? "text-muted-foreground"
-                                        : "text-destructive",
-                                    )}
-                                  >
-                                    {advanceRateValid
-                                      ? `${formatAdvanceRate(advanceRateBps)} advance`
-                                      : `Must be between ${formatAdvanceRate(factorMinRate)} and ${formatAdvanceRate(factorMaxRate)}`}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                            <DialogFooter>
-                              <Button
-                                variant="outline"
-                                onClick={() => setDialogOpen(false)}
-                              >
-                                Cancel
-                              </Button>
-                              <Button
-                                onClick={handleFactorInvoice}
-                                disabled={
-                                  !selectedInvoiceId ||
-                                  !advanceRateValid ||
-                                  !partialAmountValid ||
-                                  isWorking ||
-                                  selectedInvoiceId === "_none"
-                                }
-                              >
-                                {isWorking &&
-                                pendingActionRef.current === "factor"
-                                  ? "Processing…"
-                                  : "Confirm"}
-                              </Button>
-                            </DialogFooter>
-                          </DialogContent>
-                        </Dialog>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))
-              )}
-            </div>
-          )}
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -892,13 +872,17 @@ export default function Marketplace() {
                   <SelectContent>
                     {availableInvoicesForPool.map((r) => {
                       const selId = getInvoiceSelectionId(r);
-                      const hash = getField(r.recordPlaintext, "invoice_hash");
+                      const hash = getField(
+                        r.recordPlaintext,
+                        "invoice_hash",
+                      );
+                      const currency = getInvoiceCurrency(r, hash);
                       const amount = (
                         parseInvoiceAmountMicro(r) / 1_000_000
                       ).toFixed(6);
                       return (
                         <SelectItem key={selId} value={selId}>
-                          {hash.slice(0, 12)}… — {amount} ALEO
+                          {hash.slice(0, 12)}… — {amount} {currency}
                         </SelectItem>
                       );
                     })}
@@ -971,10 +955,12 @@ export default function Marketplace() {
       <Dialog open={noInvoiceDialogOpen} onOpenChange={setNoInvoiceDialogOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>No invoices available</DialogTitle>
+            <DialogTitle>No eligible invoices</DialogTitle>
           </DialogHeader>
           <div className="rounded-md border border-amber-300/60 bg-amber-950/5 p-3 text-xs text-amber-700 dark:text-amber-400">
-            You need to create an invoice before you can factor it. Go to your
+            No unspent invoices were found. This can happen if you haven't
+            created any invoices yet, or if your existing invoices are in a
+            different currency than what this factor or pool accepts. Go to your
             dashboard to create one.
           </div>
           <DialogFooter>

@@ -109,7 +109,7 @@ export function FactorDashboard() {
     refetchOnMount: "always",
   });
 
-  const { refetch: refetchPools } = useQuery({
+  const { data: allPools, refetch: refetchPools } = useQuery({
     queryKey: ["all_pools"],
     queryFn: fetchAllPools,
     staleTime: 30_000,
@@ -131,6 +131,15 @@ export function FactorDashboard() {
   const poolShareRecords = ((poolRecords as AleoRecord[]) ?? []).filter(
     (r) => r.recordName === "PoolShare" && !r.spent,
   );
+
+  // Pool shares where a business has submitted a pending offer awaiting factor votes
+  const poolSharesNeedingVote = poolShareRecords.filter((r) => {
+    const hash = getField(r.recordPlaintext, "invoice_hash");
+    const poolState = (allPools ?? []).find(
+      (p) => p.meta.invoiceHash === hash,
+    );
+    return poolState?.pendingOffer && !poolState.pendingOffer.isExecuted;
+  });
 
   // FactoredInvoice records that are eligible for recourse:
   //   recourse == true  AND  due_date has passed  AND  not yet settled
@@ -447,6 +456,7 @@ export function FactorDashboard() {
     }
   };
 
+
   const dynamicStats = [
     {
       title: "Invoices Factored",
@@ -691,7 +701,7 @@ export function FactorDashboard() {
         </div>
       );
     }
-    if (visibleOfferRecords.length === 0 && executingList.length === 0) {
+    if (visibleOfferRecords.length === 0 && executingList.length === 0 && poolSharesNeedingVote.length === 0) {
       return (
         <Card className="py-16 text-center">
           <CardContent>
@@ -846,6 +856,93 @@ export function FactorDashboard() {
             })}
           </div>
         )}
+
+      </div>
+    );
+  };
+
+  const renderPoolVotingCards = () => {
+    if (isLoading) {
+      return (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <Card key={i}>
+              <CardContent className="pt-4 space-y-2">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-4 w-20" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      );
+    }
+    if (poolSharesNeedingVote.length === 0) {
+      return (
+        <Card className="py-16 text-center">
+          <CardContent>
+            <p className="font-medium">No pool offers awaiting vote</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              When a business submits an offer to a pool you contributed to, it will appear here
+            </p>
+          </CardContent>
+        </Card>
+      );
+    }
+    return (
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {poolSharesNeedingVote.map((record, idx) => {
+          const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
+          const poolState = (allPools ?? []).find(
+            (p) => p.meta.invoiceHash === invoiceHash,
+          );
+          const offer = poolState?.pendingOffer;
+          return (
+            <Link key={invoiceHash || idx} to={`/pools/${invoiceHash}`}>
+              <Card className="hover:border-primary/50 transition-colors cursor-pointer h-full">
+                <CardContent className="pt-4 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="font-mono text-sm text-muted-foreground">
+                      {invoiceHash.slice(0, 12)}…
+                    </span>
+                    <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">
+                      Voting
+                    </Badge>
+                  </div>
+                  <div className="space-y-1 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Pool</span>
+                      <span>{poolState?.meta.name ?? "—"}</span>
+                    </div>
+                    {offer && (
+                      <>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Business</span>
+                          <AddressDisplay address={offer.originalCreditor} chars={4} showExplorer />
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Amount</span>
+                          <span className="font-mono font-medium">
+                            {microToAleo(`${offer.amount}u64`).toLocaleString(undefined, { maximumFractionDigits: 6 })}{" "}
+                            {poolState?.meta.currency ?? "ALEO"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Rate</span>
+                          <span>{(offer.advanceRate / 100).toFixed(2)}%</span>
+                        </div>
+                      </>
+                    )}
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Votes</span>
+                      <span>{poolState?.voteCount ?? 0} approve / {poolState?.rejectCount ?? 0} reject</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          );
+        })}
       </div>
     );
   };
@@ -983,6 +1080,14 @@ export function FactorDashboard() {
               </span>
             )}
           </TabsTrigger>
+          <TabsTrigger value="pool-voting">
+            Pool Voting
+            {!isLoading && poolSharesNeedingVote.length > 0 && (
+              <span className="ml-1.5 text-xs opacity-70">
+                ({poolSharesNeedingVote.length})
+              </span>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="pool-shares">
             Pool Shares
             {!isLoading && poolShareRecords.length > 0 && (
@@ -999,6 +1104,10 @@ export function FactorDashboard() {
 
         <TabsContent value="offers" className="mt-4">
           {renderOfferCards()}
+        </TabsContent>
+
+        <TabsContent value="pool-voting" className="mt-4">
+          {renderPoolVotingCards()}
         </TabsContent>
 
         <TabsContent value="pool-shares" className="mt-4">

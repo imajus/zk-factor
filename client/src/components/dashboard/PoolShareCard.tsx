@@ -71,6 +71,7 @@ export function PoolShareCard({ record }: PoolShareCardProps) {
       return { statusLabel: "Executed", statusClass: "text-blue-600 border-blue-300" };
     }
     if (poolState.pendingOffer?.isExecuted) return { statusLabel: "Rejected", statusClass: "text-red-700 border-red-300" };
+    if (poolState.pendingOffer && !poolState.pendingOffer.isExecuted) return { statusLabel: "Voting", statusClass: "text-amber-600 border-amber-300" };
     return { statusLabel: "Open", statusClass: "text-blue-600 border-blue-300" };
   })();
 

@@ -290,18 +290,24 @@ export function BusinessDashboard() {
     }
   };
 
-  const totalValue = visibleInvoiceRecords.reduce((sum, r) => {
-    return sum + microToAleo(getField(r.recordPlaintext, "amount") || "0u64");
-  }, 0);
-  const invoiceCurrencies = new Set(
-    visibleInvoiceRecords.map((r) => getInvoiceCurrency(r)),
-  );
-  const totalValueUnit =
-    invoiceCurrencies.size === 1
-      ? Array.from(invoiceCurrencies)[0]
-      : invoiceCurrencies.size > 1
-        ? "Mixed"
-        : "ALEO";
+  const totalAleo = visibleInvoiceRecords
+    .filter((r) => getInvoiceCurrency(r) === "ALEO")
+    .reduce((sum, r) => sum + microToAleo(getField(r.recordPlaintext, "amount") || "0u64"), 0);
+  const totalUSDCx = visibleInvoiceRecords
+    .filter((r) => getInvoiceCurrency(r) === "USDCx")
+    .reduce((sum, r) => sum + microToAleo(getField(r.recordPlaintext, "amount") || "0u64"), 0);
+  const currencyValues: string[] = [];
+  if (totalAleo > 0) currencyValues.push(`${totalAleo.toLocaleString(undefined, { maximumFractionDigits: 2 })} ALEO`);
+  if (totalUSDCx > 0) currencyValues.push(`${totalUSDCx.toLocaleString(undefined, { maximumFractionDigits: 2 })} USDCx`);
+  if (currencyValues.length === 0) currencyValues.push("0 ALEO");
+  const [totalValueIndex, setTotalValueIndex] = useState(0);
+  useEffect(() => {
+    if (currencyValues.length <= 1) return;
+    const id = setInterval(() => {
+      setTotalValueIndex((i) => (i + 1) % currencyValues.length);
+    }, 2500);
+    return () => clearInterval(id);
+  }, [currencyValues.length]);
 
   // Check settled status for each factored record
   useEffect(() => {
@@ -511,10 +517,16 @@ export function BusinessDashboard() {
     },
     {
       title: "Total Value",
-      value: isLoading
-        ? "…"
-        : totalValue.toLocaleString(undefined, { maximumFractionDigits: 2 }) +
-          ` ${totalValueUnit}`,
+      value: isLoading ? (
+        "…"
+      ) : (
+        <span
+          key={totalValueIndex}
+          className="animate-in fade-in slide-in-from-bottom-2 duration-300"
+        >
+          {currencyValues[totalValueIndex % currencyValues.length]}
+        </span>
+      ),
       icon: <TrendingUp className="h-5 w-5 text-primary" />,
     },
     {

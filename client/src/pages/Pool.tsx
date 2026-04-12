@@ -397,6 +397,10 @@ export default function Pool() {
           Pools
         </Button>
         <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => refetch()}>
+            <RefreshCw className="h-4 w-4 mr-1.5" />
+            Refresh
+          </Button>
           {pool && !pool.isClosed && (
             <Button
               size="sm"
@@ -407,10 +411,6 @@ export default function Pool() {
               Contribute
             </Button>
           )}
-          <Button variant="outline" size="sm" onClick={() => refetch()}>
-            <RefreshCw className="h-4 w-4 mr-1" />
-            Refresh
-          </Button>
         </div>
       </div>
 

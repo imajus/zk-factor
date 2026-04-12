@@ -512,6 +512,15 @@ export default function Pools() {
                       {pool.meta.currency}
                     </span>
                   </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Min contrib</span>
+                    <span className="font-mono">
+                      {(Number(pool.meta.minContribution) / 1_000_000).toLocaleString(undefined, {
+                        maximumFractionDigits: 6,
+                      })}{" "}
+                      {pool.meta.currency}
+                    </span>
+                  </div>
                 </div>
               </CardContent>
             </Card>

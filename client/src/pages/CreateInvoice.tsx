@@ -104,7 +104,7 @@ export default function CreateInvoice() {
 
   const generateInvoiceNumber = () => {
     const timestamp = Date.now().toString(36).toUpperCase();
-    setInvoiceNumber(`INV-${new Date().getFullYear()}-${timestamp}`);
+    setInvoiceNumber(`${new Date().getFullYear()}-${timestamp}`);
   };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -650,7 +650,7 @@ export default function CreateInvoice() {
                   <CollapsibleTrigger asChild>
                     <button
                       type="button"
-                      className="flex w-full items-center justify-between text-sm font-semibold hover:text-foreground/80 transition-colors"
+                      className="flex w-full items-center justify-between text-sm font-semibold hover:text-foreground/80 transition-colors pb-3"
                       aria-expanded={showVisibilityGuide}
                     >
                       Data visibility guide
@@ -663,7 +663,7 @@ export default function CreateInvoice() {
                       />
                     </button>
                   </CollapsibleTrigger>
-                  <CollapsibleContent className="pt-3 space-y-3 text-xs text-muted-foreground">
+                  <CollapsibleContent className="py-3 space-y-3 text-xs text-muted-foreground">
                     <p>
                       Each badge shows who can see that field and via which
                       on-chain record.

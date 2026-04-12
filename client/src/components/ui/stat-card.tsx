@@ -5,7 +5,7 @@ import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
 interface StatCardProps {
   title: string;
-  value: string | number;
+  value: ReactNode;
   subtitle?: string;
   icon?: ReactNode;
   trend?: {
