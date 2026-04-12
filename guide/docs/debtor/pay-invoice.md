@@ -9,7 +9,8 @@ When a factor sends a payment request, a **Payment Notice** record appears in yo
 1. Connect your wallet on the [Pay page](pathname:///pay)
 2. Your payment notices appear automatically after sync
 
-<!-- screenshot: payment-notices.png — the debtor's view showing pending payment notices -->
+![Debtor invoices list](/img/debtor-dashboard/debtor-invoices.png)
+
 
 ## Paying
 
@@ -21,6 +22,8 @@ When a factor sends a payment request, a **Payment Notice** record appears in yo
    - Second: the payment notice is consumed, marking the invoice as settled on-chain
 
 <!-- screenshot: pay-invoice-confirm.png — the payment confirmation dialog -->
+![Debtor pay invoice](/img/debtor-dashboard/pay-invoice.png)
+
 
 ## Why Two Transactions?
 

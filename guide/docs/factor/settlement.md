@@ -15,7 +15,6 @@ You can check whether an invoice has been paid by looking at the settlement stat
 3. Click **Settle Invoice**
 4. Confirm the action
 
-<!-- screenshot: settle-invoice.png — the settle button on a paid factored invoice -->
 
 ## What Happens
 
