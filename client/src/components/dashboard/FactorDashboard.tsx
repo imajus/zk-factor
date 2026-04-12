@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Briefcase,
   TrendingUp,
@@ -24,6 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import { AddressDisplay } from "@/components/ui/address-display";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Progress } from "@/components/ui/progress";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,6 +40,12 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { PROGRAM_ID, API_ENDPOINT, USDCX_PROGRAM_ID } from "@/lib/config";
 import { PoolShareCard } from "@/components/dashboard/PoolShareCard";
+import {
+  fetchAllPools,
+  computePoolStats,
+  fetchActiveFactorCount,
+  type OnChainPoolState,
+} from "@/lib/pool-chain";
 import {
   type AleoRecord,
   getPersistedInvoiceCurrency,
@@ -58,6 +65,7 @@ function isOverdue(dueDateRaw: string): boolean {
 }
 
 export function FactorDashboard() {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { isConnected, requestRecords } = useWallet();
   const { execute, status, error: txError, reset } = useTransaction();
@@ -105,6 +113,22 @@ export function FactorDashboard() {
     refetchOnMount: "always",
   });
 
+  const {
+    data: onChainPools = [],
+    refetch: refetchPools,
+  } = useQuery({
+    queryKey: ["all_pools"],
+    queryFn: fetchAllPools,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+
+  const { data: activeFactorCount = 1 } = useQuery({
+    queryKey: ["active_factor_count"],
+    queryFn: fetchActiveFactorCount,
+    staleTime: 60_000,
+  });
+
   const factoredRecords = ((records as AleoRecord[]) ?? []).filter(
     (r) => r.recordName === "FactoredInvoice" && !r.spent,
   );
@@ -118,6 +142,20 @@ export function FactorDashboard() {
   const poolShareRecords = ((poolRecords as AleoRecord[]) ?? []).filter(
     (r) => r.recordName === "PoolShare" && !r.spent,
   );
+
+  const poolByHash = new Map(
+    (onChainPools as OnChainPoolState[]).map((pool) => [pool.meta.invoiceHash, pool]),
+  );
+
+  const pendingVotingCount = (onChainPools as OnChainPoolState[]).filter(
+    (p) => !!p.pendingOffer && !p.pendingOffer.isExecuted && !p.isClosed,
+  ).length;
+
+  const claimableShareCount = poolShareRecords.filter((record) => {
+    const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
+    const pool = poolByHash.get(invoiceHash);
+    return pool !== undefined && pool.proceeds !== null && pool.proceeds > 0n;
+  }).length;
 
   // FactoredInvoice records that are eligible for recourse:
   //   recourse == true  AND  due_date has passed  AND  not yet settled
@@ -222,7 +260,7 @@ export function FactorDashboard() {
       }
       toast.success("Transaction confirmed!", { id: "tx-op" });
       queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
-      queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
+      queryClient.invalidateQueries({ queryKey: ["all_pools"] });
       setSettlingId(null);
       setReclaimingId(null);
       reset();
@@ -826,6 +864,213 @@ export function FactorDashboard() {
     );
   };
 
+  const renderVotingCards = () => {
+    const pendingPools = (onChainPools as OnChainPoolState[]).filter(
+      (p) => !!p.pendingOffer && !p.pendingOffer.isExecuted && !p.isClosed,
+    );
+    if (pendingPools.length === 0) {
+      return (
+        <Card className="py-16 text-center">
+          <CardContent className="space-y-2">
+            <p className="font-medium">No pools awaiting votes</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Pending offers will appear here for factor voting and execution.
+            </p>
+          </CardContent>
+        </Card>
+      );
+    }
+    return (
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {pendingPools.map((pool) => {
+          const stats = computePoolStats(pool, activeFactorCount as number);
+          const offer = pool.pendingOffer!;
+          const voteProgressPct =
+            stats.requiredVotes > 0
+              ? Math.min(
+                  100,
+                  Math.round((stats.totalVotes / stats.requiredVotes) * 100),
+                )
+              : 0;
+          return (
+            <Card
+              key={`voting-${pool.meta.invoiceHash}`}
+              className="border-slate-200/80 bg-slate-50/80 dark:border-slate-800 dark:bg-slate-950/30 cursor-pointer hover:border-primary/50 transition-colors"
+              onClick={() => navigate(`/pools/${pool.meta.invoiceHash}`)}
+            >
+              <CardContent className="pt-4 space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-medium">{pool.meta.name}</p>
+                    <p className="font-mono text-xs text-muted-foreground">
+                      {pool.meta.invoiceHash.slice(0, 14)}…
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Badge
+                      variant="secondary"
+                      className="text-[10px] uppercase tracking-wide"
+                    >
+                      New
+                    </Badge>
+                    <Badge
+                      variant="outline"
+                      className={
+                        stats.allVotesCast
+                          ? stats.isApproved
+                            ? "text-xs border-emerald-300 text-emerald-700"
+                            : "text-xs border-red-300 text-red-700"
+                          : "text-xs border-amber-300 text-amber-700"
+                      }
+                    >
+                      {stats.allVotesCast
+                        ? stats.isApproved
+                          ? "Approved"
+                          : "Rejected"
+                        : "Pending"}
+                    </Badge>
+                  </div>
+                </div>
+                <div className="rounded-md bg-slate-100/80 dark:bg-slate-900/30 border border-slate-200/80 dark:border-slate-800 px-2.5 py-2 text-xs space-y-1.5">
+                  <div className="flex justify-between text-slate-700 dark:text-slate-200">
+                    <span>Multisig votes</span>
+                    <span>
+                      {stats.totalVotes} / {stats.requiredVotes} voted
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-[11px] text-slate-600 dark:text-slate-300">
+                    <span>Approve: {stats.approveCount}</span>
+                    <span>Reject: {stats.rejectCount}</span>
+                  </div>
+                  <Progress
+                    value={voteProgressPct}
+                    className="h-1 bg-slate-200 dark:bg-slate-800"
+                  />
+                </div>
+                <div className="rounded-md border bg-card/60 px-2.5 py-2 text-xs space-y-1.5">
+                  <div className="flex justify-between gap-2 items-start">
+                    <span className="text-muted-foreground">Seller</span>
+                    <AddressDisplay
+                      address={offer.originalCreditor}
+                      chars={5}
+                      showExplorer
+                    />
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">Invoice Amount</span>
+                    <span className="font-mono">
+                      {(Number(offer.amount) / 1_000_000).toLocaleString(
+                        undefined,
+                        { maximumFractionDigits: 6 },
+                      )}{" "}
+                      ALEO
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">Requested Rate</span>
+                    <span className="font-mono">
+                      {(offer.advanceRate / 100).toFixed(2)}%
+                    </span>
+                  </div>
+                </div>
+                <p className="text-[11px] text-muted-foreground text-center">
+                  Click to open pool and vote
+                </p>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const renderClaimsCards = () => {
+    if (isLoading) {
+      return (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <Card key={i}>
+              <CardContent className="pt-4 space-y-2">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-9 w-full" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      );
+    }
+    const claimableShares = poolShareRecords.filter((record) => {
+      const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
+      const pool = poolByHash.get(invoiceHash);
+      return pool !== undefined && pool.proceeds !== null && pool.proceeds > 0n;
+    });
+    if (claimableShares.length === 0) {
+      return (
+        <Card className="py-16 text-center">
+          <CardContent className="space-y-4">
+            <Users className="h-12 w-12 mx-auto text-muted-foreground" />
+            <div>
+              <p className="font-medium">No claimable shares yet</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Claim cards appear once distribution is opened after debtor pays.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
+    return (
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {claimableShares.map((record, idx) => {
+          const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
+          const contributedRaw = getField(record.recordPlaintext, "contributed");
+          const totalPoolRaw = getField(record.recordPlaintext, "total_pool");
+          const contributed = BigInt(contributedRaw.replace(/u64$/, ""));
+          const totalPool = BigInt(totalPoolRaw.replace(/u64$/, ""));
+          const pool = poolByHash.get(invoiceHash);
+          const shareCurrency = pool?.meta.currency ?? "ALEO";
+          const livePoolTotal = pool?.totalContributed ?? totalPool;
+          const shareBps =
+            livePoolTotal > 0n ? (contributed * 10000n) / livePoolTotal : 0n;
+          return (
+            <Card
+              key={invoiceHash || idx}
+              className="hover:border-primary/50 transition-colors cursor-pointer"
+              onClick={() => navigate(`/pools/${invoiceHash}`)}
+            >
+              <CardContent className="pt-4 space-y-3">
+                <div>
+                  <p className="text-sm font-medium">{pool?.meta.name ?? "—"}</p>
+                  <p className="font-mono text-xs text-muted-foreground">
+                    {invoiceHash.slice(0, 14)}…
+                  </p>
+                </div>
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Contributed</span>
+                    <span className="font-mono font-medium">
+                      {microToAleo(contributedRaw).toLocaleString(undefined, {
+                        maximumFractionDigits: 4,
+                      })}{" "}
+                      {shareCurrency}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Share</span>
+                    <span className="font-medium">
+                      {(Number(shareBps) / 100).toFixed(2)}%
+                    </span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+    );
+  };
+
   const renderPoolShareCards = () => {
     if (isLoading) {
       return (
@@ -886,7 +1131,7 @@ export function FactorDashboard() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => refetch()}>
+          <Button variant="outline" size="sm" onClick={() => { refetch(); refetchPools(); }}>
             <RefreshCw className="h-4 w-4" />
             Refresh
           </Button>
@@ -960,6 +1205,22 @@ export function FactorDashboard() {
               </span>
             )}
           </TabsTrigger>
+          <TabsTrigger value="voting">
+            Voting
+            {pendingVotingCount > 0 && (
+              <span className="ml-1.5 text-xs opacity-70">
+                ({pendingVotingCount})
+              </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="claims">
+            Claims
+            {!isLoading && claimableShareCount > 0 && (
+              <span className="ml-1.5 text-xs opacity-70">
+                ({claimableShareCount})
+              </span>
+            )}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="portfolio" className="mt-4">
@@ -972,6 +1233,20 @@ export function FactorDashboard() {
 
         <TabsContent value="pool-shares" className="mt-4">
           {renderPoolShareCards()}
+        </TabsContent>
+
+        <TabsContent value="voting" className="mt-4">
+          {renderVotingCards()}
+          <p className="mt-3 text-xs text-muted-foreground">
+            Click a pool card to open it and cast your vote.
+          </p>
+        </TabsContent>
+
+        <TabsContent value="claims" className="mt-4">
+          {renderClaimsCards()}
+          <p className="mt-3 text-xs text-muted-foreground">
+            Claim pool proceeds after the pool is closed and the invoice is settled.
+          </p>
         </TabsContent>
       </Tabs>
     </div>

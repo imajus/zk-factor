@@ -15,11 +15,8 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Progress } from "@/components/ui/progress";
-import { AddressDisplay } from "@/components/ui/address-display";
 import {
   Select,
   SelectContent,
@@ -32,15 +29,6 @@ import { useWallet } from "@/contexts/WalletContext";
 import { useTransaction } from "@/hooks/use-transaction";
 import { toast } from "sonner";
 import { PROGRAM_ID } from "@/lib/config";
-import { type AleoRecord, getField, microToAleo } from "@/lib/aleo-records";
-import {
-  computeExpectedPoolPayout,
-  fetchPoolContributions,
-  fetchPoolClosed,
-  fetchPoolProceeds,
-  fetchInvoiceSettled,
-  buildClaimPoolProceedsInputs,
-} from "@/lib/aleo-factors";
 import {
   buildCreateOwnerlessPoolInputs,
   computePoolStats,
@@ -362,30 +350,14 @@ function PoolCreateDialog({
 
 export default function Pools() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const { isConnected, requestRecords } = useWallet();
-  const { execute, status, error: txError, reset } = useTransaction();
-
-  const [claimingShareId, setClaimingShareId] = useState<string | null>(null);
   const [optimisticPools, setOptimisticPools] = useState<OnChainPoolState[]>(
     [],
   );
 
   const {
-    data: records,
-    isLoading,
-    isError,
-    refetch,
-  } = useQuery({
-    queryKey: ["records", PROGRAM_ID, "pools"],
-    queryFn: () => requestRecords(PROGRAM_ID, true),
-    enabled: isConnected,
-    staleTime: 60_000,
-  });
-
-  const {
     data: onChainPools = [],
     isLoading: onChainPoolsLoading,
+    isError,
     refetch: refetchOnChainPools,
   } = useQuery({
     queryKey: ["all_pools"],
@@ -427,7 +399,7 @@ export default function Pools() {
       if (stats.isFullyDistributed) {
         return {
           label: "Closed",
-          className: "text-green-600 border-green-300 text-xs",
+          className: "text-amber-700 border-amber-300 text-xs",
         };
       }
       if (pool.isSettled && pool.proceeds === null) {
@@ -439,7 +411,7 @@ export default function Pools() {
       if (pool.proceeds !== null && pool.proceeds > 0n) {
         return {
           label: "Paying Out",
-          className: "text-amber-700 border-amber-300 text-xs",
+          className: "text-green-600 border-green-300 text-xs",
         };
       }
       return {
@@ -466,113 +438,6 @@ export default function Pools() {
   };
 
   const totalPools = visiblePools.length;
-  const poolShareRecords = ((records as AleoRecord[]) ?? []).filter(
-    (r) => r.recordName === "PoolShare" && !r.spent,
-  );
-
-  // Toast feedback for claim proceeds
-  useEffect(() => {
-    if (status === "submitting")
-      toast.loading("Generating proof…", { id: "pool-op" });
-    else if (status === "pending")
-      toast.loading("Broadcasting…", { id: "pool-op" });
-    else if (status === "accepted") {
-      toast.success("Transaction confirmed!", { id: "pool-op" });
-      queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
-      queryClient.invalidateQueries({ queryKey: ["all_pools"] });
-      setClaimingShareId(null);
-      reset();
-    } else if (status === "failed") {
-      toast.error(txError || "Transaction failed", { id: "pool-op" });
-      setClaimingShareId(null);
-      reset();
-    }
-  }, [status, txError, queryClient, reset]);
-
-  const handleClaimProceeds = async (share: AleoRecord) => {
-    const shareId =
-      share.commitment ?? getField(share.recordPlaintext, "invoice_hash");
-    const invoiceHash = getField(share.recordPlaintext, "invoice_hash");
-    setClaimingShareId(shareId);
-
-    try {
-      const [isClosed, isSettled, totalContributions, poolProceeds] =
-        await Promise.all([
-          fetchPoolClosed(invoiceHash),
-          fetchInvoiceSettled(invoiceHash),
-          fetchPoolContributions(invoiceHash),
-          fetchPoolProceeds(invoiceHash),
-        ]);
-
-      if (!isClosed) {
-        toast.error(
-          "Pool funding may be complete, but pool owner still needs to execute pool factoring before payouts are claimable.",
-        );
-        setClaimingShareId(null);
-        return;
-      }
-
-      if (!isSettled) {
-        toast.error(
-          "Invoice is not settled yet. Wait until debtor payment is confirmed.",
-        );
-        setClaimingShareId(null);
-        return;
-      }
-
-      if (poolProceeds === null || poolProceeds <= 0n) {
-        toast.error(
-          "Pool proceeds are not opened yet. Pool owner must open distribution first.",
-        );
-        setClaimingShareId(null);
-        return;
-      }
-
-      if (totalContributions === null || totalContributions <= 0n) {
-        toast.error("Pool contribution totals are unavailable for this pool.");
-        setClaimingShareId(null);
-        return;
-      }
-
-      const contributed = BigInt(
-        getField(share.recordPlaintext, "contributed").replace(/u64$/, ""),
-      );
-      const expectedPayout = computeExpectedPoolPayout(
-        contributed,
-        totalContributions,
-        poolProceeds,
-      );
-
-      if (expectedPayout <= 0n) {
-        toast.error("No claimable proceeds available for this share yet.");
-        setClaimingShareId(null);
-        return;
-      }
-
-      const inputs = buildClaimPoolProceedsInputs(
-        share.recordPlaintext,
-        expectedPayout,
-      );
-      const ownerlessPool = onChainPools.find(
-        (pool) => pool.meta.invoiceHash === invoiceHash,
-      );
-      const claimFunction =
-        ownerlessPool?.meta.currency === "USDCx"
-          ? "claim_pool_proceeds_token"
-          : "claim_pool_proceeds";
-
-      await execute({
-        program: PROGRAM_ID,
-        function: claimFunction,
-        inputs,
-        fee: 80_000,
-        privateFee: false,
-      });
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Claim proceeds failed");
-      setClaimingShareId(null);
-    }
-  };
 
   const renderPoolCards = () => {
     if (onChainPoolsLoading && visiblePools.length === 0) {
@@ -655,294 +520,6 @@ export default function Pools() {
     );
   };
 
-  const renderVotingCards = () => {
-    if (onChainPoolsLoading) {
-      return (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Card key={`vote-skeleton-${i}`}>
-              <CardContent className="pt-4 space-y-3">
-                <Skeleton className="h-4 w-32" />
-                <Skeleton className="h-2 w-full" />
-                <Skeleton className="h-8 w-full" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      );
-    }
-
-    const pendingPools = onChainPools.filter(
-      (p) => !!p.pendingOffer && !p.pendingOffer.isExecuted && !p.isClosed,
-    );
-
-    if (pendingPools.length === 0) {
-      return (
-        <Card className="py-12 text-center border-dashed">
-          <CardContent className="space-y-2">
-            <p className="font-medium">No pools awaiting votes</p>
-            <p className="text-sm text-muted-foreground">
-              Pending offers will appear here for factor voting and execution.
-            </p>
-          </CardContent>
-        </Card>
-      );
-    }
-
-    return (
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {pendingPools.map((pool) => {
-          const stats = computePoolStats(pool, activeFactorCount);
-          const offer = pool.pendingOffer!;
-          const voteProgressPct =
-            stats.requiredVotes > 0
-              ? Math.min(
-                  100,
-                  Math.round((stats.totalVotes / stats.requiredVotes) * 100),
-                )
-              : 0;
-
-          return (
-            <Card
-              key={`voting-${pool.meta.invoiceHash}`}
-              className="border-slate-200/80 bg-slate-50/80 dark:border-slate-800 dark:bg-slate-950/30 cursor-pointer hover:border-primary/50 transition-colors"
-              onClick={() => openPoolDetails(pool.meta.invoiceHash)}
-            >
-              <CardContent className="pt-4 space-y-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="text-sm font-medium">{pool.meta.name}</p>
-                    <p className="font-mono text-xs text-muted-foreground">
-                      {pool.meta.invoiceHash.slice(0, 14)}…
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <Badge
-                      variant="secondary"
-                      className="text-[10px] uppercase tracking-wide"
-                    >
-                      New
-                    </Badge>
-                    <Badge
-                      variant="outline"
-                      className="text-xs border-slate-300 text-slate-700 dark:border-slate-700 dark:text-slate-300"
-                    >
-                      Voting
-                    </Badge>
-                    <Badge
-                      variant="outline"
-                      className={
-                        stats.allVotesCast
-                          ? stats.isApproved
-                            ? "text-xs border-emerald-300 text-emerald-700"
-                            : "text-xs border-red-300 text-red-700"
-                          : "text-xs border-amber-300 text-amber-700"
-                      }
-                    >
-                      {stats.allVotesCast
-                        ? stats.isApproved
-                          ? "Approved"
-                          : "Rejected"
-                        : "Pending"}
-                    </Badge>
-                  </div>
-                </div>
-
-                <div className="rounded-md bg-slate-100/80 dark:bg-slate-900/30 border border-slate-200/80 dark:border-slate-800 px-2.5 py-2 text-xs space-y-1.5">
-                  <div className="flex justify-between text-slate-700 dark:text-slate-200">
-                    <span>Multisig votes</span>
-                    <span>
-                      {stats.totalVotes} / {stats.requiredVotes} voted
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-[11px] text-slate-600 dark:text-slate-300">
-                    <span>Approve: {stats.approveCount}</span>
-                    <span>Reject: {stats.rejectCount}</span>
-                  </div>
-                  <Progress
-                    value={voteProgressPct}
-                    className="h-1 bg-slate-200 dark:bg-slate-800"
-                  />
-                </div>
-
-                <div className="rounded-md border bg-card/60 px-2.5 py-2 text-xs space-y-1.5">
-                  <div className="flex justify-between gap-2 items-start">
-                    <span className="text-muted-foreground">Seller</span>
-                    <AddressDisplay
-                      address={offer.originalCreditor}
-                      chars={5}
-                      showExplorer
-                    />
-                  </div>
-                  <div className="flex justify-between gap-2">
-                    <span className="text-muted-foreground">
-                      Invoice Amount
-                    </span>
-                    <span className="font-mono">
-                      {(Number(offer.amount) / 1_000_000).toLocaleString(
-                        undefined,
-                        { maximumFractionDigits: 6 },
-                      )}{" "}
-                      ALEO
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-2">
-                    <span className="text-muted-foreground">
-                      Requested Rate
-                    </span>
-                    <span className="font-mono">
-                      {(offer.advanceRate / 100).toFixed(2)}%
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-2">
-                    <span className="text-muted-foreground">
-                      Advance Payout
-                    </span>
-                    <span className="font-mono">
-                      {(Number(offer.advanceAmount) / 1_000_000).toLocaleString(
-                        undefined,
-                        { maximumFractionDigits: 6 },
-                      )}{" "}
-                      ALEO
-                    </span>
-                  </div>
-                </div>
-
-                <p className="text-[11px] text-muted-foreground text-center">
-                  Click to open pool and vote
-                </p>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
-    );
-  };
-
-  const poolByHash = new Map(
-    visiblePools.map((pool) => [pool.meta.invoiceHash, pool]),
-  );
-
-  const claimableShareCount = poolShareRecords.filter((record) => {
-    const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
-    const pool = onChainPools.find((p) => p.meta.invoiceHash === invoiceHash);
-    return pool !== undefined && pool.proceeds !== null && pool.proceeds > 0n;
-  }).length;
-
-  const pendingVotingCount = onChainPools.filter(
-    (pool) =>
-      !!pool.pendingOffer && !pool.pendingOffer.isExecuted && !pool.isClosed,
-  ).length;
-
-  const renderShareCards = () => {
-    if (isLoading) {
-      return (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: 2 }).map((_, i) => (
-            <Card key={i}>
-              <CardContent className="pt-4 space-y-2">
-                <Skeleton className="h-4 w-32" />
-                <Skeleton className="h-4 w-24" />
-                <Skeleton className="h-9 w-full" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      );
-    }
-    if (poolShareRecords.length === 0) {
-      return (
-        <Card className="py-16 text-center">
-          <CardContent>
-            <p className="font-medium">No pool shares</p>
-            <p className="text-sm text-muted-foreground mt-1">
-              Contribute to a pool to receive PoolShare records
-            </p>
-          </CardContent>
-        </Card>
-      );
-    }
-
-    const claimableShares = poolShareRecords.filter((record) => {
-      const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
-      const pool = poolByHash.get(invoiceHash);
-      return pool !== undefined && pool.proceeds !== null && pool.proceeds > 0n;
-    });
-
-    if (claimableShares.length === 0) {
-      return (
-        <Card className="py-16 text-center">
-          <CardContent>
-            <p className="font-medium">No claimable shares yet</p>
-            <p className="text-sm text-muted-foreground mt-1">
-              Claim cards appear once distribution is opened after debtor pays.
-            </p>
-          </CardContent>
-        </Card>
-      );
-    }
-
-    return (
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {claimableShares.map((record, idx) => {
-          const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
-          const contributedRaw = getField(
-            record.recordPlaintext,
-            "contributed",
-          );
-          const totalPoolRaw = getField(record.recordPlaintext, "total_pool");
-          const contributed = BigInt(contributedRaw.replace(/u64$/, ""));
-          const totalPool = BigInt(totalPoolRaw.replace(/u64$/, ""));
-          const pool = poolByHash.get(invoiceHash);
-          const shareCurrency = pool?.meta.currency ?? "ALEO";
-          const livePoolTotal = pool?.totalContributed ?? totalPool;
-          const shareBps =
-            livePoolTotal > 0n ? (contributed * 10000n) / livePoolTotal : 0n;
-          const shareId = record.commitment ?? invoiceHash;
-          const isClaiming = claimingShareId === shareId;
-
-          return (
-            <Card
-              key={invoiceHash || idx}
-              className="hover:border-primary/50 transition-colors"
-            >
-              <CardContent className="pt-4 space-y-3">
-                <span className="font-mono text-sm text-muted-foreground block">
-                  {invoiceHash.slice(0, 14)}…
-                </span>
-                <div className="space-y-1 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Contributed</span>
-                    <span className="font-mono font-medium">
-                      {microToAleo(contributedRaw).toLocaleString(undefined, {
-                        maximumFractionDigits: 4,
-                      })}{" "}
-                      {shareCurrency}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Share</span>
-                    <span className="font-medium">
-                      {(Number(shareBps) / 100).toFixed(2)}%
-                    </span>
-                  </div>
-                </div>
-                <Button
-                  size="sm"
-                  className="w-full"
-                  onClick={() => handleClaimProceeds(record)}
-                  disabled={isClaiming}
-                >
-                  {isClaiming ? "Claiming…" : "Claim Proceeds"}
-                </Button>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
-    );
-  };
-
   return (
     <div className="container py-6 space-y-6">
       {/* Page Header */}
@@ -965,10 +542,7 @@ export default function Pools() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => {
-              refetch();
-              refetchOnChainPools();
-            }}
+            onClick={() => refetchOnChainPools()}
           >
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
@@ -998,65 +572,25 @@ export default function Pools() {
         <Card className="border-destructive/50">
           <CardContent className="pt-6 flex items-center gap-4">
             <AlertCircle className="h-5 w-5 text-destructive shrink-0" />
-            <p className="text-sm text-destructive">Failed to load records.</p>
-            <Button variant="outline" size="sm" onClick={() => refetch()}>
+            <p className="text-sm text-destructive">Failed to load pools.</p>
+            <Button variant="outline" size="sm" onClick={() => refetchOnChainPools()}>
               Retry
             </Button>
           </CardContent>
         </Card>
       )}
 
-      <Tabs defaultValue="discover">
-        <TabsList>
-          <TabsTrigger value="discover">
-            Discover Pools
-            {!isLoading && totalPools > 0 && (
-              <span className="ml-1.5 text-xs opacity-70">({totalPools})</span>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="voting">
-            Voting
-            {!onChainPoolsLoading && pendingVotingCount > 0 && (
-              <span className="ml-1.5 text-xs opacity-70">
-                ({pendingVotingCount})
-              </span>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="claims">
-            Claims
-            {!isLoading && claimableShareCount > 0 && (
-              <span className="ml-1.5 text-xs opacity-70">
-                ({claimableShareCount})
-              </span>
-            )}
-          </TabsTrigger>
-        </TabsList>
-
-        {/* Discover tab */}
-        <TabsContent value="discover" className="mt-4">
-          {renderPoolCards()}
-          <p className="mt-1 text-xs text-muted-foreground">
-            Use the Create a Pool button above to start a new pool.
-          </p>
-        </TabsContent>
-
-        {/* Voting tab */}
-        <TabsContent value="voting" className="mt-4">
-          {renderVotingCards()}
-          <p className="mt-3 text-xs text-muted-foreground">
-            Click a pool card to open it and cast your vote.
-          </p>
-        </TabsContent>
-
-        {/* Claims tab */}
-        <TabsContent value="claims" className="mt-4">
-          {renderShareCards()}
-          <p className="mt-3 text-xs text-muted-foreground">
-            Claim pool proceeds after the pool is closed and the invoice is
-            settled.
-          </p>
-        </TabsContent>
-      </Tabs>
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          {!onChainPoolsLoading && totalPools > 0 && (
+            <p className="text-sm text-muted-foreground">{totalPools} pool{totalPools !== 1 ? "s" : ""} on-chain</p>
+          )}
+        </div>
+        {renderPoolCards()}
+        <p className="text-xs text-muted-foreground">
+          Use the Create a Pool button above to start a new pool.
+        </p>
+      </div>
     </div>
   );
 }

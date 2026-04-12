@@ -32,6 +32,7 @@ import { toast } from "sonner";
 import { PROGRAM_ID, PROGRAM_ADDRESS, USDCX_PROGRAM_ID } from "@/lib/config";
 import {
   computePoolStats,
+  computePoolPayout,
   fetchActiveFactorCount,
   fetchAllPools,
   getPoolCurrentFunds,
@@ -40,9 +41,12 @@ import {
   buildPoolVoteRejectInputs,
   buildFinalizeRejectedPoolInputs,
   buildExecuteApprovedPoolInputs,
+  buildClaimPoolProceedsInputs,
   fetchPublicCreditsBalance,
   fetchPublicTokenBalance,
 } from "@/lib/pool-chain";
+import { type AleoRecord, getField } from "@/lib/aleo-records";
+import { fetchPoolContributions } from "@/lib/aleo-factors";
 import { PoolTimeline } from "@/components/pools/PoolTimeline";
 
 function formatMicro(value: bigint): string {
@@ -62,7 +66,7 @@ export default function Pool() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { poolId } = useParams<{ poolId: string }>();
-  const { activeRole, address } = useWallet();
+  const { activeRole, address, isConnected, requestRecords } = useWallet();
   const { execute, status, error: txError, reset } = useTransaction();
 
   // Contribute dialog state
@@ -107,6 +111,35 @@ export default function Pool() {
     : 0n;
   const canOpenDistribution =
     !!pool && pool.isSettled && pool.isClosed && pool.proceeds === null;
+
+  const { data: records } = useQuery({
+    queryKey: ["records", PROGRAM_ID],
+    queryFn: () => requestRecords(PROGRAM_ID, true),
+    enabled: isConnected && !!poolId,
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
+
+  const myPoolShare = ((records as AleoRecord[]) ?? []).find(
+    (r) =>
+      r.recordName === "PoolShare" &&
+      !r.spent &&
+      getField(r.recordPlaintext, "invoice_hash") === poolId,
+  );
+
+  const myPayout =
+    myPoolShare && pool?.proceeds && pool.totalContributed > 0n
+      ? computePoolPayout(
+          BigInt(
+            getField(myPoolShare.recordPlaintext, "contributed").replace(
+              /u64$/,
+              "",
+            ),
+          ),
+          pool.totalContributed,
+          pool.proceeds,
+        )
+      : 0n;
 
   // Load vote tracking from localStorage
   useEffect(() => {
@@ -310,6 +343,34 @@ export default function Pool() {
       program: PROGRAM_ID,
       function: "pool_open_distribution",
       inputs: [pool.meta.invoiceHash],
+      fee: 80_000,
+      privateFee: false,
+    });
+  };
+
+  const handleClaimProceeds = async () => {
+    if (!myPoolShare || !pool?.proceeds) return;
+    const onChainTotal = await fetchPoolContributions(poolId!);
+    if (!onChainTotal) {
+      toast.error("Could not read pool totals from chain.");
+      return;
+    }
+    const contributed = BigInt(
+      getField(myPoolShare.recordPlaintext, "contributed").replace(/u64$/, ""),
+    );
+    const payout = computePoolPayout(contributed, onChainTotal, pool.proceeds);
+    if (payout <= 0n) {
+      toast.error("No claimable proceeds available.");
+      return;
+    }
+    const claimFunction =
+      pool.meta.currency === "USDCx"
+        ? "claim_pool_proceeds_token"
+        : "claim_pool_proceeds";
+    await execute({
+      program: PROGRAM_ID,
+      function: claimFunction,
+      inputs: buildClaimPoolProceedsInputs(myPoolShare.recordPlaintext, payout),
       fee: 80_000,
       privateFee: false,
     });
@@ -618,13 +679,14 @@ export default function Pool() {
                       </div>
                     )}
 
-                    {/* Navigation shortcuts */}
-                    {activeRole === "factor" && pool.pendingOffer && (
-                      <Button asChild variant="secondary">
-                        <Link to="/pools">
-                          <ArrowRight className="h-4 w-4 mr-1.5" />
-                          Go to Pools Voting
-                        </Link>
+                    {/* Claim proceeds — shown when this user has a PoolShare and proceeds are open */}
+                    {myPayout > 0n && (
+                      <Button
+                        onClick={handleClaimProceeds}
+                        disabled={status !== "idle"}
+                      >
+                        Claim Proceeds ({formatMicro(myPayout)}{" "}
+                        {pool.meta.currency})
                       </Button>
                     )}
 
