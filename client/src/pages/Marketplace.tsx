@@ -23,7 +23,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -118,6 +117,7 @@ export default function Marketplace() {
 
   // ── misc state ─────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<"all" | "factors" | "pools">("all");
+  const [noInvoiceDialogOpen, setNoInvoiceDialogOpen] = useState(false);
 
   // ── refs (survive re-renders during async execute) ─────────────────
   const pendingActionRef = useRef<PendingAction>(null);
@@ -382,6 +382,10 @@ export default function Marketplace() {
 
   // ── action: business submits invoice to pool ───────────────────────
   const openSubmitInvoice = (pool: OnChainPoolState) => {
+    if (invoiceRecords.length === 0) {
+      setNoInvoiceDialogOpen(true);
+      return;
+    }
     setSubmitInvoicePool(pool);
     setSubmitInvoiceSelectedId("");
     setSubmitInvoiceRate("");
@@ -713,12 +717,25 @@ export default function Marketplace() {
                             }
                           }}
                         >
-                          <DialogTrigger asChild>
-                            <Button className="w-full">
-                              <Zap className="h-4 w-4 mr-1.5" />
-                              Factor
-                            </Button>
-                          </DialogTrigger>
+                          <Button
+                            className="w-full"
+                            onClick={() => {
+                              if (invoiceRecords.length === 0) {
+                                setNoInvoiceDialogOpen(true);
+                                return;
+                              }
+                              if (selectedFactor?.address !== factor.address) {
+                                setSelectedFactor(factor);
+                                setSelectedInvoiceId("");
+                                setAdvanceRateInput("");
+                                setPartialAmountInput("");
+                              }
+                              setDialogOpen(true);
+                            }}
+                          >
+                            <Zap className="h-4 w-4 mr-1.5" />
+                            Factor
+                          </Button>
                           <DialogContent className="max-w-md">
                             <DialogHeader>
                               <DialogTitle>Factor Invoice</DialogTitle>
@@ -902,38 +919,31 @@ export default function Marketplace() {
 
               <div className="space-y-2">
                 <Label>Select Invoice</Label>
-                {availableInvoicesForPool.length === 0 ? (
-                  <div className="rounded-md bg-amber-950/5 border border-amber-300/60 p-3 text-xs text-amber-700 dark:text-amber-400 space-y-1">
-                    <p className="font-medium">No available invoices</p>
-                    <p>Your invoices may already be factored or in a pool.</p>
-                  </div>
-                ) : (
-                  <Select
-                    value={submitInvoiceSelectedId}
-                    onValueChange={setSubmitInvoiceSelectedId}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Choose invoice…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableInvoicesForPool.map((r) => {
-                        const selId = getInvoiceSelectionId(r);
-                        const hash = getField(
-                          r.recordPlaintext,
-                          "invoice_hash",
-                        );
-                        const amount = (
-                          parseInvoiceAmountMicro(r) / 1_000_000
-                        ).toFixed(6);
-                        return (
-                          <SelectItem key={selId} value={selId}>
-                            {hash.slice(0, 12)}… — {amount} ALEO
-                          </SelectItem>
-                        );
-                      })}
-                    </SelectContent>
-                  </Select>
-                )}
+                <Select
+                  value={submitInvoiceSelectedId}
+                  onValueChange={setSubmitInvoiceSelectedId}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose invoice…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableInvoicesForPool.map((r) => {
+                      const selId = getInvoiceSelectionId(r);
+                      const hash = getField(
+                        r.recordPlaintext,
+                        "invoice_hash",
+                      );
+                      const amount = (
+                        parseInvoiceAmountMicro(r) / 1_000_000
+                      ).toFixed(6);
+                      return (
+                        <SelectItem key={selId} value={selId}>
+                          {hash.slice(0, 12)}… — {amount} ALEO
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2">
@@ -1000,6 +1010,33 @@ export default function Marketplace() {
               {isWorking && pendingActionRef.current === "submit-invoice-pool"
                 ? "Submitting…"
                 : "Submit Invoice"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── No invoices warning dialog ─────────────────────────────── */}
+      <Dialog open={noInvoiceDialogOpen} onOpenChange={setNoInvoiceDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>No invoices available</DialogTitle>
+          </DialogHeader>
+          <div className="rounded-md border border-amber-300/60 bg-amber-950/5 p-3 text-xs text-amber-700 dark:text-amber-400">
+            You need to create an invoice before you can factor it. Go to your
+            dashboard to create one.
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setNoInvoiceDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                setNoInvoiceDialogOpen(false);
+                navigate("/dashboard");
+              }}
+            >
+              Go to Dashboard
+              <ArrowRight className="h-4 w-4 ml-2" />
             </Button>
           </DialogFooter>
         </DialogContent>
