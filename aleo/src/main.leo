@@ -495,18 +495,28 @@ program zk_factor_22098.aleo {
         });
     }
 
-    // Step 2 — Called by: Factor (USDCx stablecoin path)
-    // PREREQUISITE: Factor must first call test_usdcx_stablecoin.aleo::approve_public
-    //   to approve this program as spender for at least advance_amount.
+    // Step 2 — Called by: Factor (USDCx stablecoin path, private record)
+    // Factor supplies a private Token record and a Credentials record obtained
+    // via test_usdcx_stablecoin.aleo/get_credentials. No public allowance required.
     // USDCx and credits.aleo both use 6 decimal places (1:1 scale for advance_amount).
     fn execute_factoring_token(
         offer: FactoringOffer,
-    ) -> (FactoredInvoice, Final) {
+        token: test_usdcx_stablecoin.aleo::Token,
+        creds: test_usdcx_stablecoin.aleo::Credentials,
+    ) -> (
+        FactoredInvoice,
+        test_usdcx_stablecoin.aleo::ComplianceRecord,
+        test_usdcx_stablecoin.aleo::Token,
+        test_usdcx_stablecoin.aleo::Token,
+        test_usdcx_stablecoin.aleo::Credentials,
+        Final,
+    ) {
         assert(offer.owner == self.caller);
         assert(offer.use_token);
 
         let product: u128 = (offer.amount as u128) * (offer.advance_rate as u128);
         let advance_amount: u64 = (product / 10000u128) as u64;
+        assert(token.amount >= advance_amount as u128);
 
         let factored: FactoredInvoice = FactoredInvoice {
             owner:              self.caller,
@@ -521,15 +531,25 @@ program zk_factor_22098.aleo {
             recourse:           offer.recourse,
         };
 
-        // Cross-program call returns a Final — composed into this entry point's final block.
-        let transfer_final: Final = test_usdcx_stablecoin.aleo::transfer_from_public(
-            self.caller, offer.original_creditor, advance_amount as u128
+        // Private cross-program call: factor's Token record → business's private Token record.
+        // Compliance verified via Credentials record (avoids passing raw Merkle proofs cross-program).
+        let (compliance, change, business_token, returned_creds, f_transfer): (
+            test_usdcx_stablecoin.aleo::ComplianceRecord,
+            test_usdcx_stablecoin.aleo::Token,
+            test_usdcx_stablecoin.aleo::Token,
+            test_usdcx_stablecoin.aleo::Credentials,
+            Final,
+        ) = test_usdcx_stablecoin.aleo::transfer_private_with_creds(
+            offer.original_creditor,
+            advance_amount as u128,
+            token,
+            creds,
         );
 
         let invoice_hash: field = offer.invoice_hash;
         let factor: address = self.caller;
-        return (factored, final {
-            transfer_final.run();
+        return (factored, compliance, change, business_token, returned_creds, final {
+            f_transfer.run();
             update_factor_stats(factor);
             if Mapping::contains(pending_offers, invoice_hash) {
                 let info: PendingOfferInfo = Mapping::get(pending_offers, invoice_hash);
@@ -595,24 +615,26 @@ program zk_factor_22098.aleo {
         return (same, notice);
     }
 
-    // Atomically transfers payment from debtor's public balance to factor AND marks settled.
-    // Uses transfer_public_as_signer so the debit comes from the signer (debtor),
-    // not from the program's escrow. Eliminates the prior racy two-tx pattern.
+    // Atomically transfers payment from debtor's PRIVATE credits record to factor AND marks settled.
+    // Uses transfer_private so the debit comes from an encrypted record, keeping the
+    // payer's source of funds and payment amount encrypted. Factor receives a private credits record.
     fn pay_invoice(
         notice: PaymentNotice,
+        credit_in: credits.aleo::credits,
         factor: address,
-    ) -> Final {
+    ) -> (credits.aleo::credits, credits.aleo::credits, Final) {
         assert(notice.owner == self.caller);
         assert(notice.factor == factor);
+        assert(credit_in.microcredits >= notice.amount);
 
-        let f_pay: Final = credits.aleo::transfer_public_as_signer(factor, notice.amount);
+        let (factor_payment, change): (credits.aleo::credits, credits.aleo::credits) =
+            credits.aleo::transfer_private(credit_in, factor, notice.amount);
 
         let invoice_hash: field = notice.invoice_hash;
         let amount: u64 = notice.amount;
-        return final {
+        return (factor_payment, change, final {
             record_settlement(invoice_hash, factor, amount);
-            f_pay.run();
-        };
+        });
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -758,24 +780,23 @@ program zk_factor_22098.aleo {
     // ─────────────────────────────────────────────────────────────
     // OWNERLESS POOL — CONTRIBUTE
     // ─────────────────────────────────────────────────────────────
-    // Pulls from the caller's PUBLIC credits balance into the program's
-    // PUBLIC escrow balance. No private record is consumed.
+    // Pulls from the caller's PRIVATE credits record into the program's
+    // PUBLIC escrow balance, keeping the payer's source of funds encrypted.
     //
-    // PREREQUISITE: Caller must have a public credits balance >= contribution.
-    //   If only holding private records, first call:
-    //   credits.aleo::transfer_private_to_public(self, amount)
-    //
+    // credit_in:      unspent credits.aleo::credits record; change returned as 2nd output.
     // program_addr:   VITE_PROGRAM_ADDRESS — verified on-chain via self.address.
     // existing_total: read pool_contributions[invoice_hash] from chain before
     //                 calling — used only to snapshot total_pool in PoolShare.
 
     fn pool_contribute(
+        credit_in: credits.aleo::credits,
         invoice_hash: field,
         program_addr: address,
         contribution: u64,
         existing_total: u64,
-    ) -> (PoolShare, Final) {
+    ) -> (PoolShare, credits.aleo::credits, Final) {
         assert(contribution > 0u64);
+        assert(credit_in.microcredits >= contribution);
 
         let share: PoolShare = PoolShare {
             owner:        self.caller,
@@ -786,8 +807,9 @@ program zk_factor_22098.aleo {
         };
 
         let contributor: address = self.caller;
-        let f: Final = credits.aleo::transfer_public_as_signer(program_addr, contribution);
-        return (share, final {
+        let (change, f): (credits.aleo::credits, Final) =
+            credits.aleo::transfer_private_to_public(credit_in, program_addr, contribution);
+        return (share, change, final {
             let use_token: bool = Mapping::get_or_use(pool_use_token, invoice_hash, false);
             assert(!use_token);
             assert(program_addr == self.address);
@@ -1097,13 +1119,16 @@ program zk_factor_22098.aleo {
 
     fn pay_pool_invoice(
         notice: PoolPaymentNotice,
+        credit_in: credits.aleo::credits,
         program_addr: address,
-    ) -> Final {
+    ) -> (credits.aleo::credits, Final) {
         assert(notice.owner == self.caller);
-        let f_pay: Final = credits.aleo::transfer_public_as_signer(program_addr, notice.amount);
+        assert(credit_in.microcredits >= notice.amount);
+        let (change, f_pay): (credits.aleo::credits, Final) =
+            credits.aleo::transfer_private_to_public(credit_in, program_addr, notice.amount);
         let invoice_hash: field = notice.invoice_hash;
         let amount: u64 = notice.amount;
-        return final {
+        return (change, final {
             let use_token: bool = Mapping::get_or_use(pool_use_token, invoice_hash, false);
             assert(!use_token);
             assert(program_addr == self.address);
@@ -1123,7 +1148,7 @@ program zk_factor_22098.aleo {
             let total_settled: u64 = Mapping::get_or_use(protocol_stats, 2u8, 0u64);
             Mapping::set(protocol_stats, 2u8, total_settled + 1u64);
             f_pay.run();
-        };
+        });
     }
 
     // Token variant of pay_pool_invoice for USDCx pools.

@@ -463,12 +463,14 @@ export function buildCreateOwnerlessPoolInputs(
 
 /** existing_total: current pool_contributions[invoiceHash] read from chain. */
 export function buildPoolContributeInputs(
+  creditPlaintext: string,
   invoiceHash: string,
   programAddr: string,
   contribution: bigint,
   existingTotal: bigint,
 ): string[] {
   return [
+    creditPlaintext,
     invoiceHash,
     programAddr,
     `${contribution}u64`,
@@ -516,9 +518,10 @@ export function buildExecuteApprovedPoolInputs(
 
 export function buildPayPoolInvoiceInputs(
   noticePlaintext: string,
+  creditPlaintext: string,
   programAddr: string,
 ): string[] {
-  return [noticePlaintext, programAddr];
+  return [noticePlaintext, creditPlaintext, programAddr];
 }
 
 /** Pool distribution is permissionless — no params beyond the hash. */
