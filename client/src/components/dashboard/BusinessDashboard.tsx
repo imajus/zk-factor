@@ -54,7 +54,14 @@ import {
   microToAleo,
   unixToDate,
 } from "@/lib/aleo-records";
-import { listPendingFactoringRequests } from "@/lib/pending-factoring";
+import {
+  listPendingFactoringRequests,
+  type PendingFactoringRequest,
+} from "@/lib/pending-factoring";
+import {
+  fetchPendingOffer,
+  type PendingOfferOnChain,
+} from "@/lib/aleo-factors";
 import {
   computePoolStats,
   fetchActiveFactorCount,
@@ -100,7 +107,9 @@ export function BusinessDashboard() {
     refetch,
   } = useQuery({
     queryKey: ["records", PROGRAM_ID],
-    queryFn: () => requestRecords(PROGRAM_ID, true),
+    // Request all records (including spent) so spent Invoice records can be
+    // used to reconstruct pending offer display data cross-device.
+    queryFn: () => requestRecords(PROGRAM_ID, false),
     enabled: isConnected,
     staleTime: 0, // Always refetch after invalidation
     refetchOnMount: "always",
@@ -119,19 +128,29 @@ export function BusinessDashboard() {
     refetchInterval: 60_000,
   });
 
-  const allInvoiceRecords = ((records as AleoRecord[]) ?? []).filter(
+  const allRecords = (records as AleoRecord[]) ?? [];
+  const allInvoiceRecords = allRecords.filter(
     (r) => r.recordName === "Invoice" && !r.spent,
   );
-  const factoredRecords = ((records as AleoRecord[]) ?? []).filter(
+  const factoredRecords = allRecords.filter(
     (r) => r.recordName === "FactoredInvoice" && !r.spent,
   );
-  const offerRecords = ((records as AleoRecord[]) ?? []).filter(
+  const offerRecords = allRecords.filter(
     (r) => r.recordName === "FactoringOffer" && !r.spent,
   );
   // RecourseNotice records sent to the business (they are the original_creditor)
-  const recourseNoticeRecords = ((records as AleoRecord[]) ?? []).filter(
+  const recourseNoticeRecords = allRecords.filter(
     (r) => r.recordName === "RecourseNotice" && !r.spent,
   );
+  // Spent Invoice records — business can use these cross-device to reconstruct
+  // display data (amount, debtor, due_date) for pending offers.
+  const spentInvoiceRecords = allRecords.filter(
+    (r) => r.recordName === "Invoice" && r.spent,
+  );
+  const spentInvoiceHashes = spentInvoiceRecords
+    .map((r) => getField(r.recordPlaintext, "invoice_hash"))
+    .filter(Boolean);
+
   const factoredInvoiceHashes = new Set(
     factoredRecords.map((record) =>
       getField(record.recordPlaintext, "invoice_hash"),
@@ -142,9 +161,80 @@ export function BusinessDashboard() {
       getField(record.recordPlaintext, "invoice_hash"),
     ),
   );
-  const pendingFactoringRequests = address
-    ? listPendingFactoringRequests(address)
-    : [];
+
+  // Query on-chain pending_offers mapping for each spent Invoice hash.
+  // This is the cross-device source of truth: written by authorize_factoring,
+  // cleared (is_executed=true) by execute_factoring.
+  const { data: onChainPendingOffers = [], isLoading: pendingOffersLoading } =
+    useQuery<PendingOfferOnChain[]>({
+      queryKey: ["pending_offers", spentInvoiceHashes],
+      queryFn: async () => {
+        const results = await Promise.all(
+          spentInvoiceHashes.map((hash) => fetchPendingOffer(hash)),
+        );
+        return results.filter((r): r is PendingOfferOnChain => r !== null);
+      },
+      enabled: isConnected && spentInvoiceHashes.length > 0,
+      staleTime: 30_000,
+      refetchInterval: 60_000,
+    });
+
+  // Build a lookup map from invoice_hash → spent Invoice record for display enrichment.
+  const spentInvoiceByHash = new Map(
+    spentInvoiceRecords.map((r) => [
+      getField(r.recordPlaintext, "invoice_hash"),
+      r,
+    ]),
+  );
+
+  // Merge on-chain pending offer info with display data from spent Invoice records.
+  // Falls back to localStorage cache for display fields (amount/debtor/dueDate) when
+  // the spent record isn't available yet (e.g. wallet still syncing).
+  const localCache = address ? listPendingFactoringRequests(address) : [];
+  const onChainPendingItems: PendingFactoringRequest[] = onChainPendingOffers.map(
+    (offer) => {
+      const spentRec = spentInvoiceByHash.get(offer.invoiceHash);
+      const cached = localCache.find((c) => c.invoiceHash === offer.invoiceHash);
+      const currency = spentRec
+        ? decodeInvoiceCurrencyFromMetadata(
+            getField(spentRec.recordPlaintext, "metadata"),
+          )
+        : (cached?.currency ?? (offer.useToken ? "USDCx" : "ALEO"));
+      return {
+        invoiceHash: offer.invoiceHash,
+        factorAddress: offer.factor,
+        debtor: spentRec
+          ? getField(spentRec.recordPlaintext, "debtor")
+          : (cached?.debtor ?? ""),
+        amountMicro: spentRec
+          ? parseInt(
+              getField(spentRec.recordPlaintext, "amount").replace(/u64$/, ""),
+              10,
+            )
+          : (cached?.amountMicro ?? 0),
+        currency,
+        dueDateUnix: spentRec
+          ? parseInt(
+              getField(spentRec.recordPlaintext, "due_date").replace(/u64$/, ""),
+              10,
+            )
+          : (cached?.dueDateUnix ?? 0),
+        requestedAt: offer.requestedAt * 1000, // seconds → ms
+      };
+    },
+  );
+
+  // Keep localStorage-only entries that aren't yet confirmed on-chain
+  // (i.e. the proof is still being generated / transaction in-flight).
+  const inFlightLocalItems = localCache.filter(
+    (req) =>
+      !onChainPendingOffers.some((o) => o.invoiceHash === req.invoiceHash),
+  );
+
+  const pendingFactoringRequests: PendingFactoringRequest[] = [
+    ...onChainPendingItems,
+    ...inFlightLocalItems,
+  ].sort((a, b) => b.requestedAt - a.requestedAt);
   const submittedPoolOffers = onChainPools.filter(
     (pool) =>
       pool.pendingOffer && pool.pendingOffer.originalCreditor === address,
@@ -442,7 +532,7 @@ export function BusinessDashboard() {
     },
     {
       title: "Pending Offers",
-      value: isLoading ? "…" : String(pendingFactoringRequests.length),
+      value: isLoading || pendingOffersLoading ? "…" : String(pendingFactoringRequests.length),
       icon: <CheckCircle2 className="h-5 w-5 text-primary" />,
     },
     {
@@ -761,7 +851,7 @@ export function BusinessDashboard() {
   };
 
   const renderPendingCards = () => {
-    if (isLoading || poolsLoading) {
+    if (isLoading || poolsLoading || pendingOffersLoading) {
       return (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 3 }).map((_, i) => (

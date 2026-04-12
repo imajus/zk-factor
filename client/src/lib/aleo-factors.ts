@@ -133,6 +133,58 @@ export async function fetchFactorStatus(
 }
 
 // ─────────────────────────────────────────────────────────────
+// PENDING INDIVIDUAL OFFERS
+// ─────────────────────────────────────────────────────────────
+
+export interface PendingOfferOnChain {
+  invoiceHash: string;
+  originalCreditor: string;
+  factor: string;
+  advanceRate: number;
+  useToken: boolean;
+  recourse: boolean;
+  requestedAt: number; // Unix seconds (block.timestamp)
+}
+
+/**
+ * Returns the on-chain pending offer for the given invoice hash, or null if
+ * no offer exists or it has already been executed by the factor.
+ */
+export async function fetchPendingOffer(
+  invoiceHash: string,
+): Promise<PendingOfferOnChain | null> {
+  try {
+    const client = new AleoNetworkClient(API_ENDPOINT);
+    const value = await client.getProgramMappingValue(
+      PROGRAM_ID,
+      "pending_offers",
+      invoiceHash,
+    );
+    const raw = String(value);
+    if (!raw || raw === "null" || raw === "undefined") return null;
+    const isExecuted = parseMappingField(raw, "is_executed") === "true";
+    if (isExecuted) return null;
+    return {
+      invoiceHash,
+      originalCreditor: parseMappingField(raw, "original_creditor"),
+      factor: parseMappingField(raw, "factor"),
+      advanceRate: parseInt(
+        parseMappingField(raw, "advance_rate").replace(/u16$/, ""),
+        10,
+      ),
+      useToken: parseMappingField(raw, "use_token") === "true",
+      recourse: parseMappingField(raw, "recourse") === "true",
+      requestedAt: parseInt(
+        parseMappingField(raw, "requested_at").replace(/u64$/, ""),
+        10,
+      ),
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
 // SETTLEMENT
 // ─────────────────────────────────────────────────────────────
 
