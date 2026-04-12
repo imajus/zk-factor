@@ -55,10 +55,6 @@ import {
   unixToDate,
 } from "@/lib/aleo-records";
 import {
-  listPendingFactoringRequests,
-  type PendingFactoringRequest,
-} from "@/lib/pending-factoring";
-import {
   fetchPendingOffer,
   type PendingOfferOnChain,
 } from "@/lib/aleo-factors";
@@ -107,9 +103,7 @@ export function BusinessDashboard() {
     refetch,
   } = useQuery({
     queryKey: ["records", PROGRAM_ID],
-    // Request all records (including spent) so spent Invoice records can be
-    // used to reconstruct pending offer display data cross-device.
-    queryFn: () => requestRecords(PROGRAM_ID, false),
+    queryFn: () => requestRecords(PROGRAM_ID, true),
     enabled: isConnected,
     staleTime: 0, // Always refetch after invalidation
     refetchOnMount: "always",
@@ -188,53 +182,33 @@ export function BusinessDashboard() {
   );
 
   // Merge on-chain pending offer info with display data from spent Invoice records.
-  // Falls back to localStorage cache for display fields (amount/debtor/dueDate) when
-  // the spent record isn't available yet (e.g. wallet still syncing).
-  const localCache = address ? listPendingFactoringRequests(address) : [];
-  const onChainPendingItems: PendingFactoringRequest[] = onChainPendingOffers.map(
-    (offer) => {
-      const spentRec = spentInvoiceByHash.get(offer.invoiceHash);
-      const cached = localCache.find((c) => c.invoiceHash === offer.invoiceHash);
-      const currency = spentRec
-        ? decodeInvoiceCurrencyFromMetadata(
-            getField(spentRec.recordPlaintext, "metadata"),
+  const pendingFactoringRequests = onChainPendingOffers.map((offer) => {
+    const spentRec = spentInvoiceByHash.get(offer.invoiceHash);
+    const currency = spentRec
+      ? decodeInvoiceCurrencyFromMetadata(
+          getField(spentRec.recordPlaintext, "metadata"),
+        )
+      : (offer.useToken ? "USDCx" : "ALEO") as "ALEO" | "USDCx";
+    return {
+      invoiceHash: offer.invoiceHash,
+      factorAddress: offer.factor,
+      debtor: spentRec ? getField(spentRec.recordPlaintext, "debtor") : "",
+      amountMicro: spentRec
+        ? parseInt(
+            getField(spentRec.recordPlaintext, "amount").replace(/u64$/, ""),
+            10,
           )
-        : (cached?.currency ?? (offer.useToken ? "USDCx" : "ALEO"));
-      return {
-        invoiceHash: offer.invoiceHash,
-        factorAddress: offer.factor,
-        debtor: spentRec
-          ? getField(spentRec.recordPlaintext, "debtor")
-          : (cached?.debtor ?? ""),
-        amountMicro: spentRec
-          ? parseInt(
-              getField(spentRec.recordPlaintext, "amount").replace(/u64$/, ""),
-              10,
-            )
-          : (cached?.amountMicro ?? 0),
-        currency,
-        dueDateUnix: spentRec
-          ? parseInt(
-              getField(spentRec.recordPlaintext, "due_date").replace(/u64$/, ""),
-              10,
-            )
-          : (cached?.dueDateUnix ?? 0),
-        requestedAt: offer.requestedAt * 1000, // seconds → ms
-      };
-    },
-  );
-
-  // Keep localStorage-only entries that aren't yet confirmed on-chain
-  // (i.e. the proof is still being generated / transaction in-flight).
-  const inFlightLocalItems = localCache.filter(
-    (req) =>
-      !onChainPendingOffers.some((o) => o.invoiceHash === req.invoiceHash),
-  );
-
-  const pendingFactoringRequests: PendingFactoringRequest[] = [
-    ...onChainPendingItems,
-    ...inFlightLocalItems,
-  ].sort((a, b) => b.requestedAt - a.requestedAt);
+        : 0,
+      currency,
+      dueDateUnix: spentRec
+        ? parseInt(
+            getField(spentRec.recordPlaintext, "due_date").replace(/u64$/, ""),
+            10,
+          )
+        : 0,
+      requestedAt: offer.requestedAt * 1000, // seconds → ms
+    };
+  }).sort((a, b) => b.requestedAt - a.requestedAt);
   const submittedPoolOffers = onChainPools.filter(
     (pool) =>
       pool.pendingOffer && pool.pendingOffer.originalCreditor === address,
