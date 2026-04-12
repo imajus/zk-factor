@@ -191,7 +191,7 @@ export function FactorDashboard() {
         // not settled yet
       }
     });
-  }, [factoredRecords]);
+  }, [records]);
 
   // Keep executing state only while the offer still appears and has not
   // materialized as a FactoredInvoice yet.
