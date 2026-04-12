@@ -182,33 +182,38 @@ export function BusinessDashboard() {
   );
 
   // Merge on-chain pending offer info with display data from spent Invoice records.
-  const pendingFactoringRequests = onChainPendingOffers.map((offer) => {
-    const spentRec = spentInvoiceByHash.get(offer.invoiceHash);
-    const currency = spentRec
-      ? decodeInvoiceCurrencyFromMetadata(
-          getField(spentRec.recordPlaintext, "metadata"),
-        )
-      : (offer.useToken ? "USDCx" : "ALEO") as "ALEO" | "USDCx";
-    return {
-      invoiceHash: offer.invoiceHash,
-      factorAddress: offer.factor,
-      debtor: spentRec ? getField(spentRec.recordPlaintext, "debtor") : "",
-      amountMicro: spentRec
-        ? parseInt(
-            getField(spentRec.recordPlaintext, "amount").replace(/u64$/, ""),
-            10,
+  const pendingFactoringRequests = onChainPendingOffers
+    .map((offer) => {
+      const spentRec = spentInvoiceByHash.get(offer.invoiceHash);
+      const currency = spentRec
+        ? decodeInvoiceCurrencyFromMetadata(
+            getField(spentRec.recordPlaintext, "metadata"),
           )
-        : 0,
-      currency,
-      dueDateUnix: spentRec
-        ? parseInt(
-            getField(spentRec.recordPlaintext, "due_date").replace(/u64$/, ""),
-            10,
-          )
-        : 0,
-      requestedAt: offer.requestedAt * 1000, // seconds → ms
-    };
-  }).sort((a, b) => b.requestedAt - a.requestedAt);
+        : ((offer.useToken ? "USDCx" : "ALEO") as "ALEO" | "USDCx");
+      return {
+        invoiceHash: offer.invoiceHash,
+        factorAddress: offer.factor,
+        debtor: spentRec ? getField(spentRec.recordPlaintext, "debtor") : "",
+        amountMicro: spentRec
+          ? parseInt(
+              getField(spentRec.recordPlaintext, "amount").replace(/u64$/, ""),
+              10,
+            )
+          : 0,
+        currency,
+        dueDateUnix: spentRec
+          ? parseInt(
+              getField(spentRec.recordPlaintext, "due_date").replace(
+                /u64$/,
+                "",
+              ),
+              10,
+            )
+          : 0,
+        requestedAt: offer.requestedAt * 1000, // seconds → ms
+      };
+    })
+    .sort((a, b) => b.requestedAt - a.requestedAt);
   const submittedPoolOffers = onChainPools.filter(
     (pool) =>
       pool.pendingOffer && pool.pendingOffer.originalCreditor === address,
@@ -506,7 +511,10 @@ export function BusinessDashboard() {
     },
     {
       title: "Pending Offers",
-      value: isLoading || pendingOffersLoading ? "…" : String(pendingFactoringRequests.length),
+      value:
+        isLoading || pendingOffersLoading
+          ? "…"
+          : String(pendingFactoringRequests.length),
       icon: <CheckCircle2 className="h-5 w-5 text-primary" />,
     },
     {
@@ -611,15 +619,11 @@ export function BusinessDashboard() {
                         asChild
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                        >
+                        <Button variant="ghost" size="icon" className="h-7 w-7">
                           <MoreHorizontal className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
+                      <DropdownMenuContent align="end" sideOffset={6}>
                         <DropdownMenuItem
                           onClick={() =>
                             window.open(
@@ -750,7 +754,7 @@ export function BusinessDashboard() {
                         <MoreHorizontal className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
+                    <DropdownMenuContent align="end" sideOffset={6}>
                       <DropdownMenuItem
                         onClick={() => handleRequestPayment(record)}
                         disabled={
@@ -862,182 +866,180 @@ export function BusinessDashboard() {
     return (
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {pendingFactoringRequests.map((request, idx) => {
-                const dueDate = new Date(request.dueDateUnix * 1000);
-                const daysUntil = getDaysUntilDue(dueDate);
-                return (
-                  <Card
-                    key={request.invoiceHash || idx}
-                    className="hover:border-primary/50 transition-colors"
-                  >
-                    <CardContent className="pt-4 space-y-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="font-mono text-sm text-muted-foreground">
-                          {request.invoiceHash.slice(0, 12)}…
-                        </span>
-                        <div className="flex items-center gap-1.5 -mt-1 -mr-1 shrink-0">
-                          <Badge
-                            variant="outline"
-                            className="text-xs text-amber-700 border-amber-300"
-                          >
-                            Awaiting Approval
-                          </Badge>
-                        </div>
-                      </div>
-                      <div className="space-y-1 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Factor</span>
-                          <AddressDisplay
-                            address={request.factorAddress}
-                            chars={4}
-                            showExplorer
-                          />
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Debtor</span>
-                          <AddressDisplay
-                            address={request.debtor}
-                            chars={4}
-                            showExplorer
-                          />
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Amount</span>
-                          <span className="font-mono font-medium">
-                            {(request.amountMicro / 1_000_000).toLocaleString(
-                              undefined,
-                              { maximumFractionDigits: 6 },
-                            )}{" "}
-                            {request.currency}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Due</span>
-                          <div className="text-right">
-                            <span>{formatDate(dueDate)}</span>
-                            <span
-                              className={cn(
-                                "ml-2 text-xs",
-                                daysUntil < 0
-                                  ? "text-destructive"
-                                  : daysUntil < 7
-                                    ? "text-warning"
-                                    : "text-muted-foreground",
-                              )}
-                            >
-                              {daysUntil > 0
-                                ? `${daysUntil}d`
-                                : daysUntil === 0
-                                  ? "today"
-                                  : `${Math.abs(daysUntil)}d overdue`}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
+          const dueDate = new Date(request.dueDateUnix * 1000);
+          const daysUntil = getDaysUntilDue(dueDate);
+          return (
+            <Card
+              key={request.invoiceHash || idx}
+              className="hover:border-primary/50 transition-colors"
+            >
+              <CardContent className="pt-4 space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="font-mono text-sm text-muted-foreground">
+                    {request.invoiceHash.slice(0, 12)}…
+                  </span>
+                  <div className="flex items-center gap-1.5 -mt-1 -mr-1 shrink-0">
+                    <Badge
+                      variant="outline"
+                      className="text-xs text-amber-700 border-amber-300"
+                    >
+                      Awaiting Approval
+                    </Badge>
+                  </div>
+                </div>
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Factor</span>
+                    <AddressDisplay
+                      address={request.factorAddress}
+                      chars={4}
+                      showExplorer
+                    />
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Debtor</span>
+                    <AddressDisplay
+                      address={request.debtor}
+                      chars={4}
+                      showExplorer
+                    />
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Amount</span>
+                    <span className="font-mono font-medium">
+                      {(request.amountMicro / 1_000_000).toLocaleString(
+                        undefined,
+                        { maximumFractionDigits: 6 },
+                      )}{" "}
+                      {request.currency}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Due</span>
+                    <div className="text-right">
+                      <span>{formatDate(dueDate)}</span>
+                      <span
+                        className={cn(
+                          "ml-2 text-xs",
+                          daysUntil < 0
+                            ? "text-destructive"
+                            : daysUntil < 7
+                              ? "text-warning"
+                              : "text-muted-foreground",
+                        )}
+                      >
+                        {daysUntil > 0
+                          ? `${daysUntil}d`
+                          : daysUntil === 0
+                            ? "today"
+                            : `${Math.abs(daysUntil)}d overdue`}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          );
         })}
         {submittedPoolOffers.map((pool) => {
-                const stats = computePoolStats(pool, activeFactorCount);
-                const decisionLabel = stats.allVotesCast
-                  ? stats.isApproved
-                    ? "Approved"
-                    : "Rejected"
-                  : "Pending";
-                const offer = pool.pendingOffer!;
-                const aleoAmount = microToAleo(`${offer.amount}u64`);
-                const dueDate = unixToDate(`${offer.dueDate}u64`);
-                const rate = offer.advanceRate / 100;
-                const poolDaysUntil = getDaysUntilDue(dueDate);
-                return (
-                  <Card
-                    key={`submitted-${pool.meta.invoiceHash}`}
-                    className="hover:border-primary/50 transition-colors"
-                  >
-                    <CardContent className="pt-4 space-y-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="font-semibold leading-tight truncate">
-                            {pool.meta.name}
-                          </p>
-                          <span className="font-mono text-xs text-muted-foreground">
-                            {pool.meta.invoiceHash.slice(0, 12)}…
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1.5 -mt-1 -mr-1 shrink-0">
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "text-xs",
-                              stats.allVotesCast && stats.isApproved
-                                ? "text-green-600 border-green-300"
-                                : stats.allVotesCast && !stats.isApproved
-                                  ? "text-destructive border-destructive/40"
-                                  : "text-yellow-600 border-yellow-300",
-                            )}
-                          >
-                            {decisionLabel}
-                          </Badge>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            asChild
-                          >
-                            <Link to="/pools">
-                              <ExternalLink className="h-4 w-4" />
-                            </Link>
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="space-y-1 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Amount</span>
-                          <span className="font-mono font-medium">
-                            {aleoAmount.toLocaleString(undefined, {
-                              maximumFractionDigits: 6,
-                            })}{" "}
-                            {pool.meta.currency}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">
-                            Advance Rate
-                          </span>
-                          <span>{rate.toFixed(2)}%</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Due</span>
-                          <div className="text-right">
-                            <span>{formatDate(dueDate)}</span>
-                            <span
-                              className={cn(
-                                "ml-2 text-xs",
-                                poolDaysUntil < 0
-                                  ? "text-destructive"
-                                  : poolDaysUntil < 7
-                                    ? "text-warning"
-                                    : "text-muted-foreground",
-                              )}
-                            >
-                              {poolDaysUntil > 0
-                                ? `${poolDaysUntil}d`
-                                : poolDaysUntil === 0
-                                  ? "today"
-                                  : `${Math.abs(poolDaysUntil)}d overdue`}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Votes</span>
-                          <span>
-                            {stats.totalVotes}/{stats.requiredVotes}
-                          </span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
+          const stats = computePoolStats(pool, activeFactorCount);
+          const decisionLabel = stats.allVotesCast
+            ? stats.isApproved
+              ? "Approved"
+              : "Rejected"
+            : "Pending";
+          const offer = pool.pendingOffer!;
+          const aleoAmount = microToAleo(`${offer.amount}u64`);
+          const dueDate = unixToDate(`${offer.dueDate}u64`);
+          const rate = offer.advanceRate / 100;
+          const poolDaysUntil = getDaysUntilDue(dueDate);
+          return (
+            <Card
+              key={`submitted-${pool.meta.invoiceHash}`}
+              className="hover:border-primary/50 transition-colors"
+            >
+              <CardContent className="pt-4 space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-semibold leading-tight truncate">
+                      {pool.meta.name}
+                    </p>
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {pool.meta.invoiceHash.slice(0, 12)}…
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 -mt-1 -mr-1 shrink-0">
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-xs",
+                        stats.allVotesCast && stats.isApproved
+                          ? "text-green-600 border-green-300"
+                          : stats.allVotesCast && !stats.isApproved
+                            ? "text-destructive border-destructive/40"
+                            : "text-yellow-600 border-yellow-300",
+                      )}
+                    >
+                      {decisionLabel}
+                    </Badge>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      asChild
+                    >
+                      <Link to="/pools">
+                        <ExternalLink className="h-4 w-4" />
+                      </Link>
+                    </Button>
+                  </div>
+                </div>
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Amount</span>
+                    <span className="font-mono font-medium">
+                      {aleoAmount.toLocaleString(undefined, {
+                        maximumFractionDigits: 6,
+                      })}{" "}
+                      {pool.meta.currency}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Advance Rate</span>
+                    <span>{rate.toFixed(2)}%</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Due</span>
+                    <div className="text-right">
+                      <span>{formatDate(dueDate)}</span>
+                      <span
+                        className={cn(
+                          "ml-2 text-xs",
+                          poolDaysUntil < 0
+                            ? "text-destructive"
+                            : poolDaysUntil < 7
+                              ? "text-warning"
+                              : "text-muted-foreground",
+                        )}
+                      >
+                        {poolDaysUntil > 0
+                          ? `${poolDaysUntil}d`
+                          : poolDaysUntil === 0
+                            ? "today"
+                            : `${Math.abs(poolDaysUntil)}d overdue`}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Votes</span>
+                    <span>
+                      {stats.totalVotes}/{stats.requiredVotes}
+                    </span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          );
         })}
       </div>
     );
@@ -1221,8 +1223,7 @@ export function BusinessDashboard() {
                 0 && (
                 <span className="ml-1.5 text-xs opacity-70">
                   (
-                  {pendingFactoringRequests.length +
-                    submittedPoolOffers.length}
+                  {pendingFactoringRequests.length + submittedPoolOffers.length}
                   )
                 </span>
               )}

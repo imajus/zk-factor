@@ -544,7 +544,7 @@ export function FactorDashboard() {
                         <MoreHorizontal className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
+                    <DropdownMenuContent align="end" sideOffset={6}>
                       <DropdownMenuItem
                         onClick={() => handleRequestPayment(record)}
                         disabled={
@@ -894,7 +894,14 @@ export function FactorDashboard() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => { refetch(); refetchPools(); }}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              refetch();
+              refetchPools();
+            }}
+          >
             <RefreshCw className="h-4 w-4" />
             Refresh
           </Button>
@@ -981,9 +988,6 @@ export function FactorDashboard() {
         <TabsContent value="pool-shares" className="mt-4">
           {renderPoolShareCards()}
         </TabsContent>
-
-
-
       </Tabs>
     </div>
   );
