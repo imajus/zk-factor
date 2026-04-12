@@ -52,11 +52,6 @@ import {
   fetchActiveFactorCount,
   type OnChainPoolState,
 } from "../lib/pool-chain";
-import {
-  removePendingFactoringRequest,
-  upsertPendingFactoringRequest,
-} from "@/lib/pending-factoring";
-
 // ── helpers ───────────────────────────────────────────────────────────
 function formatMicro(micro: bigint | number): string {
   const n = typeof micro === "bigint" ? Number(micro) : micro;
@@ -94,7 +89,7 @@ type PendingAction = "factor" | "submit-invoice-pool" | null;
 export default function Marketplace() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { isConnected, requestRecords, address } = useWallet();
+  const { isConnected, requestRecords } = useWallet();
   const { execute, status, error: txError, reset } = useTransaction();
 
   // ── general UI state ───────────────────────────────────────────────
@@ -122,7 +117,6 @@ export default function Marketplace() {
   // ── refs (survive re-renders during async execute) ─────────────────
   const pendingActionRef = useRef<PendingAction>(null);
   const pendingFactorModeRef = useRef<{ usePartial: boolean } | null>(null);
-  const pendingFactoringHashRef = useRef<string | null>(null);
 
   // ── data queries ───────────────────────────────────────────────────
   const {
@@ -252,7 +246,6 @@ export default function Marketplace() {
         toast.success("Invoice factored successfully!", { id: opId });
         setDialogOpen(false);
         pendingFactorModeRef.current = null;
-        pendingFactoringHashRef.current = null;
       } else if (action === "submit-invoice-pool") {
         toast.success("Invoice submitted to pool — factors can now vote!", {
           id: opId,
@@ -280,13 +273,6 @@ export default function Marketplace() {
       let msg = "Transaction failed";
       if (action === "factor") {
         msg = "Factoring failed";
-        if (address && pendingFactoringHashRef.current) {
-          removePendingFactoringRequest(
-            address,
-            pendingFactoringHashRef.current,
-          );
-          pendingFactoringHashRef.current = null;
-        }
         if (
           pendingFactorModeRef.current?.usePartial &&
           typeof txError === "string" &&
@@ -308,7 +294,6 @@ export default function Marketplace() {
     txError,
     queryClient,
     reset,
-    address,
     navigate,
     refetchPools,
     submitInvoiceRecord,
@@ -328,7 +313,6 @@ export default function Marketplace() {
     );
     if (!invoice) return;
 
-    const invoiceHash = getField(invoice.recordPlaintext, "invoice_hash");
     const invoiceAmountMicro = parseInvoiceAmountMicro(invoice);
     const usePartial = wantsPartial && partialAmountMicro < invoiceAmountMicro;
     const useToken = selectedInvoiceCurrency === "USDCx";
@@ -351,22 +335,6 @@ export default function Marketplace() {
           useToken ? "true" : "false",
           "false",
         ];
-
-    if (address) {
-      upsertPendingFactoringRequest(address, {
-        invoiceHash,
-        factorAddress: selectedFactor.address,
-        debtor: getField(invoice.recordPlaintext, "debtor"),
-        amountMicro: invoiceAmountMicro,
-        dueDateUnix: parseInt(
-          getField(invoice.recordPlaintext, "due_date").replace(/u64$/, ""),
-          10,
-        ),
-        currency: selectedInvoiceCurrency,
-        requestedAt: Date.now(),
-      });
-      pendingFactoringHashRef.current = invoiceHash;
-    }
 
     pendingFactorModeRef.current = { usePartial };
     pendingActionRef.current = "factor";
@@ -572,39 +540,23 @@ export default function Marketplace() {
           )}
 
           {/* ── Pools tab ── */}
-          {activeTab !== "factors" && (
+          {activeTab !== "factors" && openPools.length > 0 && (
             <div className="grid gap-4 sm:grid-cols-2">
-              {poolsLoading ? (
-                [0, 1].map((i) => (
-                  <Card key={i}>
-                    <CardHeader className="pb-3">
-                      <Skeleton className="h-5 w-48" />
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <Skeleton className="h-4 w-full" />
-                      <Skeleton className="h-9 w-full" />
-                    </CardContent>
-                  </Card>
-                ))
-              ) : openPools.length === 0 ? (
-                <div className="col-span-2">
-                  <Card className="border-dashed">
-                    <CardContent className="py-16 text-center space-y-4">
-                      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
-                        <Users className="h-8 w-8 text-primary" />
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-semibold">No open pools</h3>
-                        <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-                          There are no pools accepting submissions right now.
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              ) : (
-                openPools.map(renderPoolCard)
-              )}
+              <div className="col-span-2">
+                <Card className="border-dashed">
+                  <CardContent className="py-16 text-center space-y-4">
+                    <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+                      <Users className="h-8 w-8 text-primary" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold">No open pools</h3>
+                      <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+                        There are no pools accepting submissions right now.
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
             </div>
           )}
 
