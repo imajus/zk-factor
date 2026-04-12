@@ -10,6 +10,11 @@ import {
   X,
   Loader2,
   ExternalLink,
+  ChevronDown,
+  Lock,
+  Building2,
+  Users,
+  Globe,
 } from "lucide-react";
 import { format, addDays } from "date-fns";
 import { Button } from "@/components/ui/button";
@@ -37,6 +42,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { PrivacyBadge } from "@/components/PrivacyBadge";
 import { useWallet } from "@/contexts/WalletContext";
 import { useTransaction } from "@/hooks/use-transaction";
 import { PROGRAM_ID, PaymentCurrency } from "@/lib/config";
@@ -84,7 +90,6 @@ export default function CreateInvoice() {
   const [debtorAddress, setDebtorAddress] = useState("");
   const [amount, setAmount] = useState("");
   const [dueDate, setDueDate] = useState<Date>();
-  const [internalNotes, setInternalNotes] = useState("");
   const [showPreview, setShowPreview] = useState(false);
   const [currency, setCurrency] = useState<PaymentCurrency>("ALEO");
   const pendingInvoiceRef = useRef<{
@@ -95,6 +100,7 @@ export default function CreateInvoice() {
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [ipfsResult, setIpfsResult] = useState<IPFSUploadResult | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [showVisibilityGuide, setShowVisibilityGuide] = useState(false);
 
   const generateInvoiceNumber = () => {
     const timestamp = Date.now().toString(36).toUpperCase();
@@ -255,7 +261,10 @@ export default function CreateInvoice() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="invoiceNumber">Invoice Number *</Label>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="invoiceNumber">Invoice Number *</Label>
+                    <PrivacyBadge level="private" />
+                  </div>
                   <div className="flex gap-2">
                     <Input
                       id="invoiceNumber"
@@ -279,7 +288,10 @@ export default function CreateInvoice() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="description">Description *</Label>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="description">Description *</Label>
+                    <PrivacyBadge level="private" />
+                  </div>
                   <Textarea
                     id="description"
                     value={description}
@@ -295,7 +307,11 @@ export default function CreateInvoice() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="debtorAddress">Debtor Address *</Label>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="debtorAddress">Debtor Address *</Label>
+                    <PrivacyBadge level="factor" />
+                    <PrivacyBadge level="debtor" />
+                  </div>
                   <Input
                     id="debtorAddress"
                     value={debtorAddress}
@@ -315,7 +331,10 @@ export default function CreateInvoice() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Payment Currency</Label>
+                  <div className="flex items-center gap-2">
+                    <Label>Payment Currency</Label>
+                    <PrivacyBadge level="factor" />
+                  </div>
                   <div className="flex gap-2">
                     {(["ALEO", "USDCx"] as PaymentCurrency[]).map((c) => (
                       <Button
@@ -337,7 +356,11 @@ export default function CreateInvoice() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="amount">Invoice Amount * ({currency})</Label>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="amount">Invoice Amount * ({currency})</Label>
+                    <PrivacyBadge level="factor" />
+                    <PrivacyBadge level="debtor" />
+                  </div>
                   <Input
                     id="amount"
                     type="number"
@@ -357,7 +380,10 @@ export default function CreateInvoice() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Due Date *</Label>
+                  <div className="flex items-center gap-2">
+                    <Label>Due Date *</Label>
+                    <PrivacyBadge level="factor" />
+                  </div>
                   <div className="flex flex-wrap gap-2">
                     <Popover>
                       <PopoverTrigger asChild>
@@ -416,6 +442,7 @@ export default function CreateInvoice() {
                 <CardTitle className="flex items-center gap-2">
                   <Paperclip className="h-5 w-5" />
                   Attach Document (Optional)
+                  <PrivacyBadge level="factor" />
                 </CardTitle>
                 <CardDescription>
                   Upload supporting documents — stored on IPFS, CID recorded
@@ -517,26 +544,6 @@ export default function CreateInvoice() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Privacy & Metadata</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="internalNotes">
-                    Internal Notes (Optional)
-                  </Label>
-                  <Textarea
-                    id="internalNotes"
-                    value={internalNotes}
-                    onChange={(e) => setInternalNotes(e.target.value)}
-                    placeholder="Private notes, not recorded on-chain"
-                    maxLength={1000}
-                    rows={2}
-                  />
-                </div>
-              </CardContent>
-            </Card>
           </div>
 
           <div className="space-y-6">
@@ -632,6 +639,80 @@ export default function CreateInvoice() {
                   Cancel
                 </Button>
               </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <Collapsible
+                  open={showVisibilityGuide}
+                  onOpenChange={setShowVisibilityGuide}
+                >
+                  <CollapsibleTrigger asChild>
+                    <button
+                      type="button"
+                      className="flex w-full items-center justify-between text-sm font-semibold hover:text-foreground/80 transition-colors"
+                      aria-expanded={showVisibilityGuide}
+                    >
+                      Data visibility guide
+                      <ChevronDown
+                        className={cn(
+                          "h-4 w-4 text-muted-foreground transition-transform duration-200",
+                          showVisibilityGuide && "rotate-180",
+                        )}
+                        aria-hidden="true"
+                      />
+                    </button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="pt-3 space-y-3 text-xs text-muted-foreground">
+                    <p>
+                      Each badge shows who can see that field and via which
+                      on-chain record.
+                    </p>
+                    <div className="space-y-2">
+                      <div className="flex items-start gap-2">
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-medium leading-none shrink-0 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800">
+                          <Lock className="h-2.5 w-2.5" aria-hidden="true" />
+                          Private
+                        </span>
+                        <span>
+                          Only you (the creditor). Encrypted in the Invoice
+                          record; never shared.
+                        </span>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-medium leading-none shrink-0 text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800">
+                          <Building2
+                            className="h-2.5 w-2.5"
+                            aria-hidden="true"
+                          />
+                          Factor
+                        </span>
+                        <span>
+                          Visible to the factor you offer this invoice to, via
+                          the FactoringOffer record.
+                        </span>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-medium leading-none shrink-0 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800">
+                          <Users className="h-2.5 w-2.5" aria-hidden="true" />
+                          Debtor
+                        </span>
+                        <span>
+                          Shared with your debtor at payment time, via the
+                          PaymentNotice record.
+                        </span>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-medium leading-none shrink-0 text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-950/30 border-slate-200 dark:border-slate-700">
+                          <Globe className="h-2.5 w-2.5" aria-hidden="true" />
+                          Public
+                        </span>
+                        <span>Visible to anyone on-chain.</span>
+                      </div>
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              </CardHeader>
             </Card>
           </div>
         </div>
