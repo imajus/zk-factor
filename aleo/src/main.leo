@@ -116,7 +116,7 @@ final fn record_settlement(invoice_hash: field, factor: address, amount: u64) {
 // ─────────────────────────────────────────────────────────────────────────────
 // PROGRAM
 // ─────────────────────────────────────────────────────────────────────────────
-program zk_factor_12256.aleo {
+program zk_factor_22098.aleo {
     // IMPORTANT: Replace with actual admin address before deployment.
     // See aleo/docs/deployment.md for admin key management.
     @admin(address="aleo19rn544c49da9z2vz52q5f7lm7nsjhp890ahmre6cz94qawdscgps6kq3cu")

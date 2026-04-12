@@ -6,12 +6,16 @@ function resolveNetwork(value: string | undefined): Network {
   return Network.TESTNET;
 }
 
-export const PROGRAM_ID: string =
-  import.meta.env.VITE_PROGRAM_ID ?? "zk_factor_12256.aleo";
+if (!import.meta.env.VITE_PROGRAM_ID) {
+  throw new Error("VITE_PROGRAM_ID is not set. Add it to your .env file.");
+}
+if (!import.meta.env.VITE_PROGRAM_ADDRESS) {
+  throw new Error("VITE_PROGRAM_ADDRESS is not set. Add it to your .env file.");
+}
 
-export const PROGRAM_ADDRESS: string =
-  import.meta.env.VITE_PROGRAM_ADDRESS ??
-  "aleo1s8hgprffm0tqdc9d4q5mshu90efwcg7qfvwzyr3r9wpangazrq8s5yfww6";
+export const PROGRAM_ID: string = import.meta.env.VITE_PROGRAM_ID;
+
+export const PROGRAM_ADDRESS: string = import.meta.env.VITE_PROGRAM_ADDRESS;
 
 export const NETWORK: Network = resolveNetwork(
   import.meta.env.VITE_ALEO_NETWORK ?? "testnet",
