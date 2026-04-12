@@ -55,7 +55,7 @@ function derivePhases(
   const funding: Phase = {
     label: "Funding",
     description: "Pool receives factor contributions.",
-    status: hasFunds && (invoiceSubmitted || pool.isClosed) ? "done" : "active",
+    status: hasFunds ? "done" : "active",
     detail: `${(Number(currentFunds) / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 2 })} ALEO current funds`,
   };
 
