@@ -393,7 +393,7 @@ export default function Pool() {
     <div className="container py-6 space-y-4">
       <div className="flex flex-wrap items-center gap-2 justify-between">
         <Button variant="outline" size="sm" onClick={() => navigate(-1)}>
-          <ArrowLeft className="h-4 w-4 mr-1.5" />
+          <ArrowLeft className="h-4 w-4 mr-1" />
           Pools
         </Button>
         <div className="flex items-center gap-2">
@@ -403,12 +403,12 @@ export default function Pool() {
               onClick={openContribute}
               disabled={status !== "idle"}
             >
-              <TrendingUp className="h-4 w-4 mr-1.5" />
+              <TrendingUp className="h-4 w-4 mr-1" />
               Contribute
             </Button>
           )}
           <Button variant="outline" size="sm" onClick={() => refetch()}>
-            <RefreshCw className="h-4 w-4 mr-1.5" />
+            <RefreshCw className="h-4 w-4 mr-1" />
             Refresh
           </Button>
         </div>
@@ -628,7 +628,7 @@ export default function Pool() {
                                 onClick={handleVoteApprove}
                                 disabled={status !== "idle" || hasVoted}
                               >
-                                <Vote className="h-4 w-4 mr-1.5" />
+                                <Vote className="h-4 w-4 mr-1" />
                                 {hasVoted ? "Voted" : "Approve"}
                               </Button>
                               <Button
@@ -637,7 +637,7 @@ export default function Pool() {
                                 onClick={handleVoteReject}
                                 disabled={status !== "idle" || hasVoted}
                               >
-                                <X className="h-4 w-4 mr-1.5" />
+                                <X className="h-4 w-4 mr-1" />
                                 Reject
                               </Button>
                             </div>
@@ -655,7 +655,7 @@ export default function Pool() {
                             onClick={handleExecuteApprovedPool}
                             disabled={status !== "idle"}
                           >
-                            <Zap className="h-4 w-4 mr-1.5" />
+                            <Zap className="h-4 w-4 mr-1" />
                             Execute Approved Pool
                           </Button>
                         )}

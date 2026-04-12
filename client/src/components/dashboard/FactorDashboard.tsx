@@ -80,6 +80,9 @@ export function FactorDashboard() {
       }
     >
   >({});
+  const [completedOfferHashes, setCompletedOfferHashes] = useState<Set<string>>(
+    new Set(),
+  );
   const pendingAcceptedCurrencyRef = useRef<{
     invoiceHash: string;
     currency: "ALEO" | "USDCx";
@@ -121,7 +124,9 @@ export function FactorDashboard() {
   );
   const visibleOfferRecords = offerRecords.filter((record) => {
     const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
-    return !executingOffers[invoiceHash];
+    return (
+      !executingOffers[invoiceHash] && !completedOfferHashes.has(invoiceHash)
+    );
   });
   const poolShareRecords = ((poolRecords as AleoRecord[]) ?? []).filter(
     (r) => r.recordName === "PoolShare" && !r.spent,
@@ -177,7 +182,7 @@ export function FactorDashboard() {
         // not settled yet
       }
     });
-  }, [factoredRecords.length]);
+  }, [factoredRecords]);
 
   // Keep executing state only while the offer still appears and has not
   // materialized as a FactoredInvoice yet.
@@ -222,6 +227,7 @@ export function FactorDashboard() {
         pendingAcceptedCurrencyRef.current = null;
       }
       if (acceptedHash) {
+        setCompletedOfferHashes((prev) => new Set(prev).add(acceptedHash));
         setExecutingOffers((prev) => {
           const next = { ...prev };
           delete next[acceptedHash];
@@ -238,6 +244,11 @@ export function FactorDashboard() {
       const failedHash = pendingAcceptedCurrencyRef.current?.invoiceHash;
       pendingAcceptedCurrencyRef.current = null;
       if (failedHash) {
+        setCompletedOfferHashes((prev) => {
+          const next = new Set(prev);
+          next.delete(failedHash);
+          return next;
+        });
         setExecutingOffers((prev) => {
           const next = { ...prev };
           delete next[failedHash];
@@ -393,6 +404,11 @@ export function FactorDashboard() {
       toast.error("Insufficient credits to fund this factoring");
       setSettlingId(null);
       pendingAcceptedCurrencyRef.current = null;
+      setCompletedOfferHashes((prev) => {
+        const next = new Set(prev);
+        next.delete(invoiceHash);
+        return next;
+      });
       setExecutingOffers((prev) => {
         const next = { ...prev };
         delete next[invoiceHash];
@@ -544,21 +560,21 @@ export function FactorDashboard() {
                         <MoreHorizontal className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
+                    <DropdownMenuContent align="end" sideOffset={6}>
                       <DropdownMenuItem
                         onClick={() => handleRequestPayment(record)}
                         disabled={
                           isSettled || paymentRequestedHashes.has(invoiceHash)
                         }
                       >
-                        <Receipt className="h-4 w-4" />
+                        <Receipt className="h-4 w-4 mr-1" />
                         Request Payment from Debtor
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         onClick={() => handleSettle(record)}
                         disabled={isSettling || isSettled}
                       >
-                        <CheckCircle className="h-4 w-4" />
+                        <CheckCircle className="h-4 w-4 mr-1" />
                         {isSettling ? "Settling…" : "Settle"}
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
@@ -570,7 +586,7 @@ export function FactorDashboard() {
                           )
                         }
                       >
-                        <ExternalLink className="h-4 w-4" />
+                        <ExternalLink className="h-4 w-4 mr-1" />
                         View on Explorer
                       </DropdownMenuItem>
                     </DropdownMenuContent>
@@ -894,7 +910,14 @@ export function FactorDashboard() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => { refetch(); refetchPools(); }}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              refetch();
+              refetchPools();
+            }}
+          >
             <RefreshCw className="h-4 w-4" />
             Refresh
           </Button>
@@ -981,9 +1004,6 @@ export function FactorDashboard() {
         <TabsContent value="pool-shares" className="mt-4">
           {renderPoolShareCards()}
         </TabsContent>
-
-
-
       </Tabs>
     </div>
   );
