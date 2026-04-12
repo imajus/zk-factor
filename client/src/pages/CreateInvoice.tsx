@@ -90,7 +90,6 @@ export default function CreateInvoice() {
   const [debtorAddress, setDebtorAddress] = useState("");
   const [amount, setAmount] = useState("");
   const [dueDate, setDueDate] = useState<Date>();
-  const [internalNotes, setInternalNotes] = useState("");
   const [showPreview, setShowPreview] = useState(false);
   const [currency, setCurrency] = useState<PaymentCurrency>("ALEO");
   const pendingInvoiceRef = useRef<{
@@ -545,29 +544,6 @@ export default function CreateInvoice() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Privacy & Metadata</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Label htmlFor="internalNotes">
-                      Internal Notes (Optional)
-                    </Label>
-                    <PrivacyBadge level="private" />
-                  </div>
-                  <Textarea
-                    id="internalNotes"
-                    value={internalNotes}
-                    onChange={(e) => setInternalNotes(e.target.value)}
-                    placeholder="Private notes, not recorded on-chain"
-                    maxLength={1000}
-                    rows={2}
-                  />
-                </div>
-              </CardContent>
-            </Card>
           </div>
 
           <div className="space-y-6">
