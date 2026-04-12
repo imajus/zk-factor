@@ -19,15 +19,18 @@ When a business authorizes factoring with you, a **Factoring Offer** record appe
 1. Review the offer details
 2. Click **Execute Factoring**
 3. Confirm the advance amount that will be sent to the business
-   ![Factor accepts offer](/img/factor-dashboard/accept-offer.png)
 4. The proof generates (30-60 seconds)
-   ![Accept offer proof generating](/img/factor-dashboard/proof-generating.png)
+
+![Accept offer](/img/factor-dashboard/proof-generating.png)
 
 ## What Happens
 
 - Your credits (or USDCx) are sent to the business as the advance
 - You receive a **Factored Invoice** record — proof of your purchase
 - The deal is recorded in protocol statistics
+
+![Factor portfolio](/img/factor-dashboard/portfolio.png)
+
 
 ## After Acceptance
 

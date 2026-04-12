@@ -48,3 +48,5 @@ The selected factor will be notified of your request. Once they review and appro
 
 You can track the status of your request on your dashboard.
 
+![Pending offers](/img/business-dashboard/pending-offers.png)
+

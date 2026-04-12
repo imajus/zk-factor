@@ -44,6 +44,7 @@ Once approved, the app generates a zero-knowledge proof. This takes **30-60 seco
 - Nobody else can see the amount, debtor, or any details
 - The invoice appears on your dashboard once the transaction confirms
 
+
 ## Next Step
 
 Ready to get cash for this invoice? [Factor it](factor-invoice.md).
