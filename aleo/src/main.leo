@@ -54,6 +54,20 @@ struct VoteId {
     voter: address,
 }
 
+// On-chain record of an outstanding individual factoring offer.
+// Written by authorize_factoring / authorize_partial_factoring so the business
+// can discover their pending offers from any device without relying on localStorage.
+// is_executed is flipped to true by execute_factoring / execute_factoring_token.
+struct PendingOfferInfo {
+    original_creditor: address,
+    factor: address,
+    advance_rate: u16,
+    use_token: bool,
+    recourse: bool,
+    requested_at: u64,
+    is_executed: bool,
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // SHARED FINAL FN HELPERS
 //
@@ -112,6 +126,10 @@ program zk_factor_12256.aleo {
     mapping active_factors:    address => FactorInfo;
     mapping settled_invoices:  field   => SettlementInfo;
     mapping protocol_stats:    u8      => u64;
+
+    // Tracks individual factoring offers so businesses can see them cross-device.
+    // Key: invoice_hash. Written by authorize_factoring; is_executed set true by execute_factoring.
+    mapping pending_offers: field => PendingOfferInfo;
 
     // ── Recourse ─────────────────────────────────────────────────────────────
     // invoice_hash => claimed (true = recourse active, false = settled/cleared)
@@ -342,8 +360,20 @@ program zk_factor_12256.aleo {
             recourse:           recourse,
         };
 
+        let invoice_hash: field = invoice.invoice_hash;
+        let original_creditor: address = self.caller;
+
         return (offer, final {
             verify_factor_active(factor);
+            Mapping::set(pending_offers, invoice_hash, PendingOfferInfo {
+                original_creditor: original_creditor,
+                factor:            factor,
+                advance_rate:      advance_rate,
+                use_token:         use_token,
+                recourse:          recourse,
+                requested_at:      (block.timestamp as u64),
+                is_executed:       false,
+            });
         });
     }
 
@@ -396,8 +426,20 @@ program zk_factor_12256.aleo {
             document_cid: invoice.document_cid,
         };
 
+        let invoice_hash: field = invoice.invoice_hash;
+        let original_creditor: address = self.caller;
+
         return (offer, remaining, final {
             verify_factor_active(factor);
+            Mapping::set(pending_offers, invoice_hash, PendingOfferInfo {
+                original_creditor: original_creditor,
+                factor:            factor,
+                advance_rate:      advance_rate,
+                use_token:         use_token,
+                recourse:          recourse,
+                requested_at:      (block.timestamp as u64),
+                is_executed:       false,
+            });
         });
     }
 
@@ -434,9 +476,22 @@ program zk_factor_12256.aleo {
         let (business_payment, change): (credits.aleo::credits, credits.aleo::credits) =
             credits.aleo::transfer_private(payment, offer.original_creditor, advance_amount);
 
+        let invoice_hash: field = offer.invoice_hash;
         let factor: address = self.caller;
         return (factored, business_payment, change, final {
             update_factor_stats(factor);
+            if Mapping::contains(pending_offers, invoice_hash) {
+                let info: PendingOfferInfo = Mapping::get(pending_offers, invoice_hash);
+                Mapping::set(pending_offers, invoice_hash, PendingOfferInfo {
+                    original_creditor: info.original_creditor,
+                    factor:            info.factor,
+                    advance_rate:      info.advance_rate,
+                    use_token:         info.use_token,
+                    recourse:          info.recourse,
+                    requested_at:      info.requested_at,
+                    is_executed:       true,
+                });
+            }
         });
     }
 
@@ -471,10 +526,23 @@ program zk_factor_12256.aleo {
             self.caller, offer.original_creditor, advance_amount as u128
         );
 
+        let invoice_hash: field = offer.invoice_hash;
         let factor: address = self.caller;
         return (factored, final {
             transfer_final.run();
             update_factor_stats(factor);
+            if Mapping::contains(pending_offers, invoice_hash) {
+                let info: PendingOfferInfo = Mapping::get(pending_offers, invoice_hash);
+                Mapping::set(pending_offers, invoice_hash, PendingOfferInfo {
+                    original_creditor: info.original_creditor,
+                    factor:            info.factor,
+                    advance_rate:      info.advance_rate,
+                    use_token:         info.use_token,
+                    recourse:          info.recourse,
+                    requested_at:      info.requested_at,
+                    is_executed:       true,
+                });
+            }
         });
     }
 
