@@ -88,9 +88,6 @@ export function PoolShareCard({ record }: PoolShareCardProps) {
             ) : (
               <p className="text-sm font-medium">{poolState?.meta.name ?? "—"}</p>
             )}
-            <p className="font-mono text-xs text-muted-foreground">
-              {invoiceHash.slice(0, 12)}…
-            </p>
           </div>
           {poolStateLoading ? (
             <Skeleton className="h-5 w-16" />
