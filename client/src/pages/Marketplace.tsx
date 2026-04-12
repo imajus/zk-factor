@@ -83,7 +83,6 @@ function getInvoiceCurrency(
   return cached ?? fromMetadata;
 }
 
-
 // ── types ─────────────────────────────────────────────────────────────
 type PendingAction = "factor" | "submit-invoice-pool" | null;
 
@@ -112,7 +111,9 @@ export default function Marketplace() {
   const [submitInvoiceRate, setSubmitInvoiceRate] = useState("");
 
   // ── misc state ─────────────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState<"all" | "factors" | "pools">("all");
+  const [activeTab, setActiveTab] = useState<"all" | "factors" | "pools">(
+    "all",
+  );
   const [noInvoiceDialogOpen, setNoInvoiceDialogOpen] = useState(false);
 
   // ── refs (survive re-renders during async execute) ─────────────────
@@ -173,7 +174,9 @@ export default function Marketplace() {
   });
 
   // ── invoice dialog computed values ────────────────────────────────
-  const advanceRatePercent = advanceRateInput ? parseFloat(advanceRateInput) : 0;
+  const advanceRatePercent = advanceRateInput
+    ? parseFloat(advanceRateInput)
+    : 0;
   const advanceRateBps = Math.round(advanceRatePercent * 100);
   const factorMinRate = selectedFactor?.min_advance_rate ?? 5000;
   const factorMaxRate = selectedFactor?.max_advance_rate ?? 9900;
@@ -212,7 +215,9 @@ export default function Marketplace() {
 
   // ── pool submit dialog computed values ────────────────────────────
   // submitInvoiceRate stores a percentage string (e.g. "75" for 75%)
-  const submitRatePercent = submitInvoiceRate ? parseFloat(submitInvoiceRate) : 0;
+  const submitRatePercent = submitInvoiceRate
+    ? parseFloat(submitInvoiceRate)
+    : 0;
   const submitRateBps = Math.round(submitRatePercent * 100);
   const submitRateValid =
     Number.isFinite(submitRatePercent) &&
@@ -412,7 +417,10 @@ export default function Marketplace() {
         <CardHeader className="pb-3">
           <div className="space-y-1">
             <CardTitle className="text-base">{pool.meta.name}</CardTitle>
-            <Badge variant="outline" className="text-xs text-blue-600 border-blue-300/60 w-fit">
+            <Badge
+              variant="outline"
+              className="text-xs text-blue-600 border-blue-300/60 w-fit"
+            >
               Pool
             </Badge>
           </div>
@@ -453,7 +461,7 @@ export default function Marketplace() {
                 openSubmitInvoice(pool);
               }}
             >
-              <Zap className="h-4 w-4 mr-1.5" />
+              <Zap className="h-4 w-4 mr-1" />
               Factor
             </Button>
           )}
@@ -687,7 +695,7 @@ export default function Marketplace() {
                               setDialogOpen(true);
                             }}
                           >
-                            <Zap className="h-4 w-4 mr-1.5" />
+                            <Zap className="h-4 w-4 mr-1" />
                             Factor
                           </Button>
                           <DialogContent className="max-w-md">
@@ -763,7 +771,8 @@ export default function Marketplace() {
                               </div>
                               <div className="space-y-2">
                                 <Label>
-                                  Advance Rate (%, {formatAdvanceRate(factorMinRate)}–
+                                  Advance Rate (%,{" "}
+                                  {formatAdvanceRate(factorMinRate)}–
                                   {formatAdvanceRate(factorMaxRate)})
                                 </Label>
                                 <Input
@@ -883,10 +892,7 @@ export default function Marketplace() {
                   <SelectContent>
                     {availableInvoicesForPool.map((r) => {
                       const selId = getInvoiceSelectionId(r);
-                      const hash = getField(
-                        r.recordPlaintext,
-                        "invoice_hash",
-                      );
+                      const hash = getField(r.recordPlaintext, "invoice_hash");
                       const amount = (
                         parseInvoiceAmountMicro(r) / 1_000_000
                       ).toFixed(6);
@@ -919,9 +925,12 @@ export default function Marketplace() {
                   submitRateValid &&
                   !submitRateInRange && (
                     <p className="text-xs text-destructive">
-                      Rate {formatAdvanceRate(submitRateBps)} is outside pool range (
-                      {formatAdvanceRate(submitInvoicePool.meta.minAdvanceRate)}–
-                      {formatAdvanceRate(submitInvoicePool.meta.maxAdvanceRate)})
+                      Rate {formatAdvanceRate(submitRateBps)} is outside pool
+                      range (
+                      {formatAdvanceRate(submitInvoicePool.meta.minAdvanceRate)}
+                      –
+                      {formatAdvanceRate(submitInvoicePool.meta.maxAdvanceRate)}
+                      )
                     </p>
                   )}
                 {submitInvoiceRecord &&
@@ -969,7 +978,10 @@ export default function Marketplace() {
             dashboard to create one.
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setNoInvoiceDialogOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setNoInvoiceDialogOpen(false)}
+            >
               Cancel
             </Button>
             <Button

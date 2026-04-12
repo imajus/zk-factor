@@ -214,22 +214,39 @@ export function BusinessDashboard() {
       };
     })
     .sort((a, b) => b.requestedAt - a.requestedAt);
-  const submittedPoolOffers = onChainPools.filter(
-    (pool) =>
-      pool.pendingOffer && pool.pendingOffer.originalCreditor === address,
-  );
+  const submittedPoolOffers = onChainPools.filter((pool) => {
+    if (!pool.pendingOffer || pool.pendingOffer.originalCreditor !== address) {
+      return false;
+    }
+
+    const stats = computePoolStats(pool, activeFactorCount);
+    return !pool.pendingOffer.isExecuted && !stats.allVotesCast;
+  });
   const submittedPoolInvoiceHashes = new Set(
     submittedPoolOffers.map((pool) => pool.meta.invoiceHash),
   );
-  const invoiceRecords = allInvoiceRecords.filter(
+  const activeInvoiceRecords = allInvoiceRecords.filter((record) => {
+    const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
+    return (
+      !factoredInvoiceHashes.has(invoiceHash) &&
+      !offeredInvoiceHashes.has(invoiceHash) &&
+      !persistedFactoredInvoiceHashes.has(invoiceHash)
+    );
+  });
+  const historicalInvoiceRecords = spentInvoiceRecords.filter((record) => {
+    const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
+    return (
+      submittedPoolInvoiceHashes.has(invoiceHash) ||
+      factoredInvoiceHashes.has(invoiceHash) ||
+      persistedFactoredInvoiceHashes.has(invoiceHash)
+    );
+  });
+  const visibleInvoiceRecords = [
+    ...activeInvoiceRecords,
+    ...historicalInvoiceRecords,
+  ].filter(
     (record) =>
-      !factoredInvoiceHashes.has(
-        getField(record.recordPlaintext, "invoice_hash"),
-      ) &&
-      !offeredInvoiceHashes.has(
-        getField(record.recordPlaintext, "invoice_hash"),
-      ) &&
-      !persistedFactoredInvoiceHashes.has(
+      !hiddenInvoiceHashes.has(
         getField(record.recordPlaintext, "invoice_hash"),
       ),
   );
@@ -253,15 +270,6 @@ export function BusinessDashboard() {
       window.removeEventListener("storage", syncPersistedFactoredHashes);
     };
   }, []);
-  const visibleInvoiceRecords = invoiceRecords.filter(
-    (record) =>
-      !hiddenInvoiceHashes.has(
-        getField(record.recordPlaintext, "invoice_hash"),
-      ) &&
-      !submittedPoolInvoiceHashes.has(
-        getField(record.recordPlaintext, "invoice_hash"),
-      ),
-  );
 
   const getInvoiceCurrency = (record: AleoRecord): "ALEO" | "USDCx" => {
     const invoiceHash = getField(record.recordPlaintext, "invoice_hash");
@@ -282,11 +290,11 @@ export function BusinessDashboard() {
     }
   };
 
-  const totalValue = invoiceRecords.reduce((sum, r) => {
+  const totalValue = visibleInvoiceRecords.reduce((sum, r) => {
     return sum + microToAleo(getField(r.recordPlaintext, "amount") || "0u64");
   }, 0);
   const invoiceCurrencies = new Set(
-    invoiceRecords.map((r) => getInvoiceCurrency(r)),
+    visibleInvoiceRecords.map((r) => getInvoiceCurrency(r)),
   );
   const totalValueUnit =
     invoiceCurrencies.size === 1
@@ -498,7 +506,7 @@ export function BusinessDashboard() {
   const dynamicStats = [
     {
       title: "Total Invoices",
-      value: isLoading ? "…" : String(invoiceRecords.length),
+      value: isLoading ? "…" : String(visibleInvoiceRecords.length),
       icon: <FileText className="h-5 w-5 text-primary" />,
     },
     {
@@ -575,6 +583,25 @@ export function BusinessDashboard() {
           );
           const debtor = getField(invoice.recordPlaintext, "debtor");
           const daysUntil = getDaysUntilDue(dueDate);
+          const isPaid = settledHashes.has(invoiceHash);
+          const isSubmittedToPool = submittedPoolInvoiceHashes.has(invoiceHash);
+          const isFactored =
+            factoredInvoiceHashes.has(invoiceHash) ||
+            persistedFactoredInvoiceHashes.has(invoiceHash);
+          const statusLabel = isPaid
+            ? "Paid"
+            : isSubmittedToPool
+              ? "Submitted to Pool"
+              : isFactored
+                ? "Factored"
+                : "Open";
+          const statusClassName = isPaid
+            ? "text-emerald-600 border-emerald-300"
+            : isSubmittedToPool
+              ? "text-blue-600 border-blue-300"
+              : isFactored
+                ? "text-violet-600 border-violet-300"
+                : "text-amber-700 border-amber-300";
           return (
             <Card
               key={invoiceHash || idx}
@@ -598,6 +625,12 @@ export function BusinessDashboard() {
                     {invoiceHash.slice(0, 12)}…
                   </span>
                   <div className="flex items-center gap-1.5 -mt-1 -mr-1">
+                    <Badge
+                      variant="outline"
+                      className={cn("text-xs", statusClassName)}
+                    >
+                      {statusLabel}
+                    </Badge>
                     {daysUntil < 0 && (
                       <Badge
                         variant="outline"
@@ -761,14 +794,14 @@ export function BusinessDashboard() {
                           isSettled || paymentRequestedHashes.has(invoiceHash)
                         }
                       >
-                        <Receipt className="h-4 w-4" />
+                        <Receipt className="h-4 w-4 mr-1" />
                         Request Payment from Debtor
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         onClick={() => handleSettle(record)}
                         disabled={isSettling || isSettled}
                       >
-                        <CheckCircle className="h-4 w-4" />
+                        <CheckCircle className="h-4 w-4 mr-1" />
                         {isSettling ? "Settling…" : "Settle"}
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
@@ -780,7 +813,7 @@ export function BusinessDashboard() {
                           )
                         }
                       >
-                        <ExternalLink className="h-4 w-4" />
+                        <ExternalLink className="h-4 w-4 mr-1" />
                         View on Explorer
                       </DropdownMenuItem>
                     </DropdownMenuContent>
