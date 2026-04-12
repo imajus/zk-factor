@@ -1,5 +1,5 @@
 {
-  "program": "zk_factor_12256.aleo",
+  "program": "zk_factor_22098.aleo",
   "structs": [
     {
       "path": [
@@ -181,6 +181,59 @@
           "name": "nonce",
           "ty": {
             "Primitive": "Field"
+          }
+        },
+        {
+          "name": "is_executed",
+          "ty": {
+            "Primitive": "Boolean"
+          }
+        }
+      ]
+    },
+    {
+      "path": [
+        "PendingOfferInfo"
+      ],
+      "fields": [
+        {
+          "name": "original_creditor",
+          "ty": {
+            "Primitive": "Address"
+          }
+        },
+        {
+          "name": "factor",
+          "ty": {
+            "Primitive": "Address"
+          }
+        },
+        {
+          "name": "advance_rate",
+          "ty": {
+            "Primitive": {
+              "UInt": "U16"
+            }
+          }
+        },
+        {
+          "name": "use_token",
+          "ty": {
+            "Primitive": "Boolean"
+          }
+        },
+        {
+          "name": "recourse",
+          "ty": {
+            "Primitive": "Boolean"
+          }
+        },
+        {
+          "name": "requested_at",
+          "ty": {
+            "Primitive": {
+              "UInt": "U64"
+            }
           }
         },
         {
@@ -621,7 +674,7 @@
           "path": [
             "FactorInfo"
           ],
-          "program": "zk_factor_12256.aleo"
+          "program": "zk_factor_22098.aleo"
         }
       }
     },
@@ -635,7 +688,7 @@
           "path": [
             "SettlementInfo"
           ],
-          "program": "zk_factor_12256.aleo"
+          "program": "zk_factor_22098.aleo"
         }
       }
     },
@@ -649,6 +702,20 @@
       "value": {
         "Primitive": {
           "UInt": "U64"
+        }
+      }
+    },
+    {
+      "name": "pending_offers",
+      "key": {
+        "Primitive": "Field"
+      },
+      "value": {
+        "Struct": {
+          "path": [
+            "PendingOfferInfo"
+          ],
+          "program": "zk_factor_22098.aleo"
         }
       }
     },
@@ -713,7 +780,7 @@
           "path": [
             "PoolMeta"
           ],
-          "program": "zk_factor_12256.aleo"
+          "program": "zk_factor_22098.aleo"
         }
       }
     },
@@ -736,7 +803,7 @@
           "path": [
             "PendingPoolOffer"
           ],
-          "program": "zk_factor_12256.aleo"
+          "program": "zk_factor_22098.aleo"
         }
       }
     },
@@ -887,7 +954,7 @@
               "path": [
                 "Invoice"
               ],
-              "program": "zk_factor_12256.aleo"
+              "program": "zk_factor_22098.aleo"
             }
           },
           "mode": "None"
@@ -954,7 +1021,7 @@
               "path": [
                 "Invoice"
               ],
-              "program": "zk_factor_12256.aleo"
+              "program": "zk_factor_22098.aleo"
             }
           },
           "mode": "None"
@@ -1005,7 +1072,7 @@
               "path": [
                 "FactoringOffer"
               ],
-              "program": "zk_factor_12256.aleo"
+              "program": "zk_factor_22098.aleo"
             }
           },
           "mode": "None"
@@ -1027,7 +1094,7 @@
               "path": [
                 "Invoice"
               ],
-              "program": "zk_factor_12256.aleo"
+              "program": "zk_factor_22098.aleo"
             }
           },
           "mode": "None"
@@ -1089,7 +1156,7 @@
               "path": [
                 "FactoringOffer"
               ],
-              "program": "zk_factor_12256.aleo"
+              "program": "zk_factor_22098.aleo"
             }
           },
           "mode": "None"
@@ -1100,7 +1167,7 @@
               "path": [
                 "Invoice"
               ],
-              "program": "zk_factor_12256.aleo"
+              "program": "zk_factor_22098.aleo"
             }
           },
           "mode": "None"
@@ -1122,7 +1189,7 @@
               "path": [
                 "FactoringOffer"
               ],
-              "program": "zk_factor_12256.aleo"
+              "program": "zk_factor_22098.aleo"
             }
           },
           "mode": "None"
@@ -1147,7 +1214,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_12256.aleo"
+              "program": "zk_factor_22098.aleo"
             }
           },
           "mode": "None"
@@ -1191,7 +1258,7 @@
               "path": [
                 "FactoringOffer"
               ],
-              "program": "zk_factor_12256.aleo"
+              "program": "zk_factor_22098.aleo"
             }
           },
           "mode": "None"
@@ -1204,7 +1271,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_12256.aleo"
+              "program": "zk_factor_22098.aleo"
             }
           },
           "mode": "None"
@@ -1226,7 +1293,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_12256.aleo"
+              "program": "zk_factor_22098.aleo"
             }
           },
           "mode": "None"
@@ -1250,7 +1317,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_12256.aleo"
+              "program": "zk_factor_22098.aleo"
             }
           },
           "mode": "None"
@@ -1263,7 +1330,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_12256.aleo"
+              "program": "zk_factor_22098.aleo"
             }
           },
           "mode": "None"
@@ -1274,7 +1341,7 @@
               "path": [
                 "PaymentNotice"
               ],
-              "program": "zk_factor_12256.aleo"
+              "program": "zk_factor_22098.aleo"
             }
           },
           "mode": "None"
@@ -1292,7 +1359,7 @@
               "path": [
                 "PaymentNotice"
               ],
-              "program": "zk_factor_12256.aleo"
+              "program": "zk_factor_22098.aleo"
             }
           },
           "mode": "None"
@@ -1325,7 +1392,7 @@
               "path": [
                 "FactoredInvoice"
               ],
-              "program": "zk_factor_12256.aleo"
+              "program": "zk_factor_22098.aleo"
             }
           },
           "mode": "None"
@@ -1338,7 +1405,7 @@
               "path": [
                 "RecourseNotice"
               ],
-              "program": "zk_factor_12256.aleo"
+              "program": "zk_factor_22098.aleo"
             }
           },
           "mode": "None"
@@ -1360,7 +1427,7 @@
               "path": [
                 "RecourseNotice"
               ],
-              "program": "zk_factor_12256.aleo"
+              "program": "zk_factor_22098.aleo"
             }
           },
           "mode": "None"
@@ -1418,7 +1485,7 @@
               "path": [
                 "PoolShare"
               ],
-              "program": "zk_factor_12256.aleo"
+              "program": "zk_factor_22098.aleo"
             }
           },
           "mode": "None"
@@ -1579,7 +1646,7 @@
               "path": [
                 "PoolShare"
               ],
-              "program": "zk_factor_12256.aleo"
+              "program": "zk_factor_22098.aleo"
             }
           },
           "mode": "None"
@@ -1642,7 +1709,7 @@
               "path": [
                 "PoolShare"
               ],
-              "program": "zk_factor_12256.aleo"
+              "program": "zk_factor_22098.aleo"
             }
           },
           "mode": "None"
@@ -1664,7 +1731,7 @@
               "path": [
                 "Invoice"
               ],
-              "program": "zk_factor_12256.aleo"
+              "program": "zk_factor_22098.aleo"
             }
           },
           "mode": "None"
@@ -1832,7 +1899,7 @@
               "path": [
                 "PoolPaymentNotice"
               ],
-              "program": "zk_factor_12256.aleo"
+              "program": "zk_factor_22098.aleo"
             }
           },
           "mode": "None"
@@ -1915,7 +1982,7 @@
               "path": [
                 "PoolPaymentNotice"
               ],
-              "program": "zk_factor_12256.aleo"
+              "program": "zk_factor_22098.aleo"
             }
           },
           "mode": "None"
@@ -1937,7 +2004,7 @@
               "path": [
                 "PoolPaymentNotice"
               ],
-              "program": "zk_factor_12256.aleo"
+              "program": "zk_factor_22098.aleo"
             }
           },
           "mode": "None"
@@ -1970,7 +2037,7 @@
               "path": [
                 "PoolPaymentNotice"
               ],
-              "program": "zk_factor_12256.aleo"
+              "program": "zk_factor_22098.aleo"
             }
           },
           "mode": "None"
@@ -2024,7 +2091,7 @@
               "path": [
                 "PoolShare"
               ],
-              "program": "zk_factor_12256.aleo"
+              "program": "zk_factor_22098.aleo"
             }
           },
           "mode": "None"

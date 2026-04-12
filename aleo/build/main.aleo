@@ -3,7 +3,7 @@ import merkle_tree.aleo;
 import test_usdcx_multisig_core.aleo;
 import test_usdcx_freezelist.aleo;
 import test_usdcx_stablecoin.aleo;
-program zk_factor_12256.aleo;
+program zk_factor_22098.aleo;
 
 record Invoice:
     owner as address.private;
@@ -100,6 +100,15 @@ struct VoteId:
     invoice_hash as field;
     voter as address;
 
+struct PendingOfferInfo:
+    original_creditor as address;
+    factor as address;
+    advance_rate as u16;
+    use_token as boolean;
+    recourse as boolean;
+    requested_at as u64;
+    is_executed as boolean;
+
 mapping active_factors:
     key as address.public;
     value as FactorInfo.public;
@@ -111,6 +120,10 @@ mapping settled_invoices:
 mapping protocol_stats:
     key as u8.public;
     value as u64.public;
+
+mapping pending_offers:
+    key as field.public;
+    value as PendingOfferInfo.public;
 
 mapping recourse_claims:
     key as field.public;
@@ -195,7 +208,7 @@ function mint_invoice:
     cast self.caller r0 r1 r2 r3 r8 r4 r5 into r9 as Invoice.record;
     async mint_invoice r2 into r10;
     output r9 as Invoice.record;
-    output r10 as zk_factor_12256.aleo/mint_invoice.future;
+    output r10 as zk_factor_22098.aleo/mint_invoice.future;
 
 finalize mint_invoice:
     input r0 as u64.public;
@@ -217,7 +230,7 @@ function register_factor:
     and r6 r7 into r8;
     assert.eq r8 true;
     async register_factor self.caller r0 r1 into r9;
-    output r9 as zk_factor_12256.aleo/register_factor.future;
+    output r9 as zk_factor_22098.aleo/register_factor.future;
 
 finalize register_factor:
     input r0 as address.public;
@@ -240,7 +253,7 @@ finalize register_factor:
 
 function deregister_factor:
     async deregister_factor self.caller into r0;
-    output r0 as zk_factor_12256.aleo/deregister_factor.future;
+    output r0 as zk_factor_22098.aleo/deregister_factor.future;
 
 finalize deregister_factor:
     input r0 as address.public;
@@ -269,14 +282,22 @@ function authorize_factoring:
     and r6 r7 into r8;
     assert.eq r8 true;
     cast r1 self.caller r0.debtor r0.amount r0.due_date r2 r0.invoice_hash r0.nonce r0.metadata r3 r4 into r9 as FactoringOffer.record;
-    async authorize_factoring r1 into r10;
+    async authorize_factoring r1 r0.invoice_hash self.caller r2 r3 r4 into r10;
     output r9 as FactoringOffer.record;
-    output r10 as zk_factor_12256.aleo/authorize_factoring.future;
+    output r10 as zk_factor_22098.aleo/authorize_factoring.future;
 
 finalize authorize_factoring:
     input r0 as address.public;
-    get active_factors[r0] into r1;
-    assert.eq r1.is_active true;
+    input r1 as field.public;
+    input r2 as address.public;
+    input r3 as u16.public;
+    input r4 as boolean.public;
+    input r5 as boolean.public;
+    get active_factors[r0] into r6;
+    assert.eq r6.is_active true;
+    cast block.timestamp into r7 as u64;
+    cast r2 r0 r3 r4 r5 r7 false into r8 as PendingOfferInfo;
+    set r8 into pending_offers[r1];
 
 function authorize_partial_factoring:
     input r0 as Invoice.record;
@@ -302,15 +323,23 @@ function authorize_partial_factoring:
     hash.psd2 r15 into r16 as field;
     cast r1 self.caller r0.debtor r2 r0.due_date r3 r0.invoice_hash r0.nonce r0.metadata r4 r5 into r17 as FactoringOffer.record;
     cast self.caller r0.debtor r12 r0.due_date r15 r16 r0.metadata r0.document_cid into r18 as Invoice.record;
-    async authorize_partial_factoring r1 into r19;
+    async authorize_partial_factoring r1 r0.invoice_hash self.caller r3 r4 r5 into r19;
     output r17 as FactoringOffer.record;
     output r18 as Invoice.record;
-    output r19 as zk_factor_12256.aleo/authorize_partial_factoring.future;
+    output r19 as zk_factor_22098.aleo/authorize_partial_factoring.future;
 
 finalize authorize_partial_factoring:
     input r0 as address.public;
-    get active_factors[r0] into r1;
-    assert.eq r1.is_active true;
+    input r1 as field.public;
+    input r2 as address.public;
+    input r3 as u16.public;
+    input r4 as boolean.public;
+    input r5 as boolean.public;
+    get active_factors[r0] into r6;
+    assert.eq r6.is_active true;
+    cast block.timestamp into r7 as u64;
+    cast r2 r0 r3 r4 r5 r7 false into r8 as PendingOfferInfo;
+    set r8 into pending_offers[r1];
 
 function execute_factoring:
     input r0 as FactoringOffer.record;
@@ -328,22 +357,31 @@ function execute_factoring:
     assert.eq r9 true;
     cast self.caller r0.original_creditor r0.debtor r0.amount r8 r0.due_date 0u64 r0.advance_rate r0.invoice_hash r0.recourse into r10 as FactoredInvoice.record;
     call credits.aleo/transfer_private r1 r0.original_creditor r8 into r11 r12;
-    async execute_factoring self.caller into r13;
+    async execute_factoring self.caller r0.invoice_hash into r13;
     output r10 as FactoredInvoice.record;
     output r11 as credits.aleo/credits.record;
     output r12 as credits.aleo/credits.record;
-    output r13 as zk_factor_12256.aleo/execute_factoring.future;
+    output r13 as zk_factor_22098.aleo/execute_factoring.future;
 
 finalize execute_factoring:
     input r0 as address.public;
-    get active_factors[r0] into r1;
-    assert.eq r1.is_active true;
-    get.or_use protocol_stats[1u8] 0u64 into r2;
-    add r2 1u64 into r3;
-    set r3 into protocol_stats[1u8];
-    add r1.total_factored 1u64 into r4;
-    cast r1.is_active r1.min_advance_rate r1.max_advance_rate r4 r1.registration_date into r5 as FactorInfo;
-    set r5 into active_factors[r0];
+    input r1 as field.public;
+    get active_factors[r0] into r2;
+    assert.eq r2.is_active true;
+    get.or_use protocol_stats[1u8] 0u64 into r3;
+    add r3 1u64 into r4;
+    set r4 into protocol_stats[1u8];
+    add r2.total_factored 1u64 into r5;
+    cast r2.is_active r2.min_advance_rate r2.max_advance_rate r5 r2.registration_date into r6 as FactorInfo;
+    set r6 into active_factors[r0];
+    contains pending_offers[r1] into r7;
+    branch.eq r7 false to end_then_0_2;
+    get pending_offers[r1] into r8;
+    cast r8.original_creditor r8.factor r8.advance_rate r8.use_token r8.recourse r8.requested_at true into r9 as PendingOfferInfo;
+    set r9 into pending_offers[r1];
+    branch.eq true true to end_otherwise_0_3;
+    position end_then_0_2;
+    position end_otherwise_0_3;
 
 function execute_factoring_token:
     input r0 as FactoringOffer.record;
@@ -358,29 +396,38 @@ function execute_factoring_token:
     cast self.caller r0.original_creditor r0.debtor r0.amount r6 r0.due_date 0u64 r0.advance_rate r0.invoice_hash r0.recourse into r7 as FactoredInvoice.record;
     cast r6 into r8 as u128;
     call test_usdcx_stablecoin.aleo/transfer_from_public self.caller r0.original_creditor r8 into r9;
-    async execute_factoring_token r9 self.caller into r10;
+    async execute_factoring_token r9 self.caller r0.invoice_hash into r10;
     output r7 as FactoredInvoice.record;
-    output r10 as zk_factor_12256.aleo/execute_factoring_token.future;
+    output r10 as zk_factor_22098.aleo/execute_factoring_token.future;
 
 finalize execute_factoring_token:
     input r0 as test_usdcx_stablecoin.aleo/transfer_from_public.future;
     input r1 as address.public;
+    input r2 as field.public;
     await r0;
-    get active_factors[r1] into r2;
-    assert.eq r2.is_active true;
-    get.or_use protocol_stats[1u8] 0u64 into r3;
-    add r3 1u64 into r4;
-    set r4 into protocol_stats[1u8];
-    add r2.total_factored 1u64 into r5;
-    cast r2.is_active r2.min_advance_rate r2.max_advance_rate r5 r2.registration_date into r6 as FactorInfo;
-    set r6 into active_factors[r1];
+    get active_factors[r1] into r3;
+    assert.eq r3.is_active true;
+    get.or_use protocol_stats[1u8] 0u64 into r4;
+    add r4 1u64 into r5;
+    set r5 into protocol_stats[1u8];
+    add r3.total_factored 1u64 into r6;
+    cast r3.is_active r3.min_advance_rate r3.max_advance_rate r6 r3.registration_date into r7 as FactorInfo;
+    set r7 into active_factors[r1];
+    contains pending_offers[r2] into r8;
+    branch.eq r8 false to end_then_0_4;
+    get pending_offers[r2] into r9;
+    cast r9.original_creditor r9.factor r9.advance_rate r9.use_token r9.recourse r9.requested_at true into r10 as PendingOfferInfo;
+    set r10 into pending_offers[r2];
+    branch.eq true true to end_otherwise_0_5;
+    position end_then_0_4;
+    position end_otherwise_0_5;
 
 function settle_invoice:
     input r0 as FactoredInvoice.record;
     is.eq r0.owner self.caller into r1;
     assert.eq r1 true;
     async settle_invoice r0.invoice_hash self.caller r0.amount into r2;
-    output r2 as zk_factor_12256.aleo/settle_invoice.future;
+    output r2 as zk_factor_22098.aleo/settle_invoice.future;
 
 finalize settle_invoice:
     input r0 as field.public;
@@ -414,7 +461,7 @@ function pay_invoice:
     assert.eq r3 true;
     call credits.aleo/transfer_public_as_signer r1 r0.amount into r4;
     async pay_invoice r0.invoice_hash r1 r0.amount r4 into r5;
-    output r5 as zk_factor_12256.aleo/pay_invoice.future;
+    output r5 as zk_factor_22098.aleo/pay_invoice.future;
 
 finalize pay_invoice:
     input r0 as field.public;
@@ -440,7 +487,7 @@ function initiate_recourse:
     cast r0.original_creditor self.caller r0.advance_amount r0.invoice_hash into r2 as RecourseNotice.record;
     async initiate_recourse r0.due_date r0.invoice_hash into r3;
     output r2 as RecourseNotice.record;
-    output r3 as zk_factor_12256.aleo/initiate_recourse.future;
+    output r3 as zk_factor_22098.aleo/initiate_recourse.future;
 
 finalize initiate_recourse:
     input r0 as u64.public;
@@ -467,7 +514,7 @@ function settle_recourse:
     async settle_recourse r0.invoice_hash into r6;
     output r4 as credits.aleo/credits.record;
     output r5 as credits.aleo/credits.record;
-    output r6 as zk_factor_12256.aleo/settle_recourse.future;
+    output r6 as zk_factor_22098.aleo/settle_recourse.future;
 
 finalize settle_recourse:
     input r0 as field.public;
@@ -485,7 +532,7 @@ function claim_pool_proceeds:
     call credits.aleo/transfer_public_to_private r0.owner r1 into r4 r5;
     async claim_pool_proceeds r0.invoice_hash r0.contributed r1 r5 into r6;
     output r4 as credits.aleo/credits.record;
-    output r6 as zk_factor_12256.aleo/claim_pool_proceeds.future;
+    output r6 as zk_factor_22098.aleo/claim_pool_proceeds.future;
 
 finalize claim_pool_proceeds:
     input r0 as field.public;
@@ -537,7 +584,7 @@ function create_ownerless_pool:
     gt r4 0u64 into r13;
     assert.eq r13 true;
     async create_ownerless_pool self.caller r0 r1 r2 r3 r4 r5 into r14;
-    output r14 as zk_factor_12256.aleo/create_ownerless_pool.future;
+    output r14 as zk_factor_22098.aleo/create_ownerless_pool.future;
 
 finalize create_ownerless_pool:
     input r0 as address.public;
@@ -580,7 +627,7 @@ function pool_contribute:
     call credits.aleo/transfer_public_as_signer r1 r2 into r7;
     async pool_contribute r0 r1 self.caller r2 r7 into r8;
     output r6 as PoolShare.record;
-    output r8 as zk_factor_12256.aleo/pool_contribute.future;
+    output r8 as zk_factor_22098.aleo/pool_contribute.future;
 
 finalize pool_contribute:
     input r0 as field.public;
@@ -591,7 +638,7 @@ finalize pool_contribute:
     get.or_use pool_use_token[r0] false into r5;
     not r5 into r6;
     assert.eq r6 true;
-    is.eq r1 zk_factor_12256.aleo into r7;
+    is.eq r1 zk_factor_22098.aleo into r7;
     assert.eq r7 true;
     get active_factors[r2] into r8;
     assert.eq r8.is_active true;
@@ -619,7 +666,7 @@ function pool_contribute_token:
     call test_usdcx_stablecoin.aleo/transfer_from_public self.caller r1 r7 into r8;
     async pool_contribute_token r0 r1 self.caller r2 r8 into r9;
     output r6 as PoolShare.record;
-    output r9 as zk_factor_12256.aleo/pool_contribute_token.future;
+    output r9 as zk_factor_22098.aleo/pool_contribute_token.future;
 
 finalize pool_contribute_token:
     input r0 as field.public;
@@ -629,7 +676,7 @@ finalize pool_contribute_token:
     input r4 as test_usdcx_stablecoin.aleo/transfer_from_public.future;
     get.or_use pool_use_token[r0] false into r5;
     assert.eq r5 true;
-    is.eq r1 zk_factor_12256.aleo into r6;
+    is.eq r1 zk_factor_22098.aleo into r6;
     assert.eq r6 true;
     get active_factors[r2] into r7;
     assert.eq r7.is_active true;
@@ -656,7 +703,7 @@ function pool_submit_invoice:
     div r6 10000u128 into r7;
     cast r7 into r8 as u64;
     async pool_submit_invoice r1 r2 r8 self.caller r0.debtor r0.amount r0.due_date r0.nonce into r9;
-    output r9 as zk_factor_12256.aleo/pool_submit_invoice.future;
+    output r9 as zk_factor_22098.aleo/pool_submit_invoice.future;
 
 finalize pool_submit_invoice:
     input r0 as field.public;
@@ -672,12 +719,12 @@ finalize pool_submit_invoice:
     not r9 into r10;
     assert.eq r10 true;
     contains pool_pending_offer[r0] into r11;
-    branch.eq r11 false to end_then_0_2;
+    branch.eq r11 false to end_then_0_6;
     get pool_pending_offer[r0] into r12;
     assert.eq r12.is_executed true;
-    branch.eq true true to end_otherwise_0_3;
-    position end_then_0_2;
-    position end_otherwise_0_3;
+    branch.eq true true to end_otherwise_0_7;
+    position end_then_0_6;
+    position end_otherwise_0_7;
     gte r1 r8.min_advance_rate into r13;
     assert.eq r13 true;
     lte r1 r8.max_advance_rate into r14;
@@ -693,7 +740,7 @@ finalize pool_submit_invoice:
 function pool_vote:
     input r0 as field.private;
     async pool_vote self.caller r0 into r1;
-    output r1 as zk_factor_12256.aleo/pool_vote.future;
+    output r1 as zk_factor_22098.aleo/pool_vote.future;
 
 finalize pool_vote:
     input r0 as address.public;
@@ -716,7 +763,7 @@ finalize pool_vote:
 function pool_vote_reject:
     input r0 as field.private;
     async pool_vote_reject self.caller r0 into r1;
-    output r1 as zk_factor_12256.aleo/pool_vote_reject.future;
+    output r1 as zk_factor_22098.aleo/pool_vote_reject.future;
 
 finalize pool_vote_reject:
     input r0 as address.public;
@@ -739,7 +786,7 @@ finalize pool_vote_reject:
 function finalize_rejected_pool:
     input r0 as field.private;
     async finalize_rejected_pool self.caller r0 into r1;
-    output r1 as zk_factor_12256.aleo/finalize_rejected_pool.future;
+    output r1 as zk_factor_22098.aleo/finalize_rejected_pool.future;
 
 finalize finalize_rejected_pool:
     input r0 as address.public;
@@ -775,7 +822,7 @@ function execute_approved_pool:
     call credits.aleo/transfer_public r1 r3 into r8;
     async execute_approved_pool r0 r1 r2 r3 r4 self.caller r8 into r9;
     output r7 as PoolPaymentNotice.record;
-    output r9 as zk_factor_12256.aleo/execute_approved_pool.future;
+    output r9 as zk_factor_22098.aleo/execute_approved_pool.future;
 
 finalize execute_approved_pool:
     input r0 as field.public;
@@ -837,7 +884,7 @@ function execute_approved_pool_token:
     call test_usdcx_stablecoin.aleo/transfer_public r1 r8 into r9;
     async execute_approved_pool_token r0 r1 r2 r3 r4 self.caller r9 into r10;
     output r7 as PoolPaymentNotice.record;
-    output r10 as zk_factor_12256.aleo/execute_approved_pool_token.future;
+    output r10 as zk_factor_22098.aleo/execute_approved_pool_token.future;
 
 finalize execute_approved_pool_token:
     input r0 as field.public;
@@ -891,7 +938,7 @@ function pay_pool_invoice:
     assert.eq r2 true;
     call credits.aleo/transfer_public_as_signer r1 r0.amount into r3;
     async pay_pool_invoice r0.invoice_hash r1 r0.amount r3 into r4;
-    output r4 as zk_factor_12256.aleo/pay_pool_invoice.future;
+    output r4 as zk_factor_22098.aleo/pay_pool_invoice.future;
 
 finalize pay_pool_invoice:
     input r0 as field.public;
@@ -901,7 +948,7 @@ finalize pay_pool_invoice:
     get.or_use pool_use_token[r0] false into r4;
     not r4 into r5;
     assert.eq r5 true;
-    is.eq r1 zk_factor_12256.aleo into r6;
+    is.eq r1 zk_factor_22098.aleo into r6;
     assert.eq r6 true;
     contains settled_invoices[r0] into r7;
     not r7 into r8;
@@ -929,7 +976,7 @@ function pay_pool_invoice_token:
     cast r0.amount into r3 as u128;
     call test_usdcx_stablecoin.aleo/transfer_public_as_signer r1 r3 into r4;
     async pay_pool_invoice_token r0.invoice_hash r1 r0.amount r4 into r5;
-    output r5 as zk_factor_12256.aleo/pay_pool_invoice_token.future;
+    output r5 as zk_factor_22098.aleo/pay_pool_invoice_token.future;
 
 finalize pay_pool_invoice_token:
     input r0 as field.public;
@@ -938,7 +985,7 @@ finalize pay_pool_invoice_token:
     input r3 as test_usdcx_stablecoin.aleo/transfer_public_as_signer.future;
     get.or_use pool_use_token[r0] false into r4;
     assert.eq r4 true;
-    is.eq r1 zk_factor_12256.aleo into r5;
+    is.eq r1 zk_factor_22098.aleo into r5;
     assert.eq r5 true;
     contains settled_invoices[r0] into r6;
     not r6 into r7;
@@ -961,7 +1008,7 @@ finalize pay_pool_invoice_token:
 function pool_open_distribution:
     input r0 as field.private;
     async pool_open_distribution r0 into r1;
-    output r1 as zk_factor_12256.aleo/pool_open_distribution.future;
+    output r1 as zk_factor_22098.aleo/pool_open_distribution.future;
 
 finalize pool_open_distribution:
     input r0 as field.public;
@@ -993,7 +1040,7 @@ function claim_pool_proceeds_token:
     async claim_pool_proceeds_token r0.invoice_hash r0.contributed r1 r7 into r8;
     output r5 as test_usdcx_stablecoin.aleo/ComplianceRecord.record;
     output r6 as test_usdcx_stablecoin.aleo/Token.record;
-    output r8 as zk_factor_12256.aleo/claim_pool_proceeds_token.future;
+    output r8 as zk_factor_22098.aleo/claim_pool_proceeds_token.future;
 
 finalize claim_pool_proceeds_token:
     input r0 as field.public;

@@ -155,7 +155,7 @@ Manages wallet connection state and user roles:
 
 - `isConnected`, `address`, `connect`, `disconnect` — Shield wallet
 - `activeRole` — `'business' | 'factor' | 'observer'`
-- `requestRecords(programId, filterSpent)` — fetch records from Shield
+- `requestRecords(programId, includePlaintext)` — fetch records from Shield; pass `true` to receive decrypted `recordPlaintext` on each record (required for field access). Returns all records (spent + unspent) regardless of the flag — always filter by `!r.spent` when you only want active records.
 
 **Current State**: Integrated with Shield wallet only.
 
