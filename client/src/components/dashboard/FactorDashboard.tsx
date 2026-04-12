@@ -39,6 +39,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { PROGRAM_ID, API_ENDPOINT, USDCX_PROGRAM_ID } from "@/lib/config";
 import { PoolShareCard } from "@/components/dashboard/PoolShareCard";
+import { fetchAllPools } from "@/lib/pool-chain";
 import {
   type AleoRecord,
   getPersistedInvoiceCurrency,
@@ -103,6 +104,13 @@ export function FactorDashboard() {
     enabled: isConnected,
     staleTime: 0,
     refetchOnMount: "always",
+  });
+
+  const { refetch: refetchPools } = useQuery({
+    queryKey: ["all_pools"],
+    queryFn: fetchAllPools,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
   });
 
   const factoredRecords = ((records as AleoRecord[]) ?? []).filter(
@@ -222,7 +230,7 @@ export function FactorDashboard() {
       }
       toast.success("Transaction confirmed!", { id: "tx-op" });
       queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
-      queryClient.invalidateQueries({ queryKey: ["records", PROGRAM_ID] });
+      queryClient.invalidateQueries({ queryKey: ["all_pools"] });
       setSettlingId(null);
       setReclaimingId(null);
       reset();
@@ -886,7 +894,7 @@ export function FactorDashboard() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => refetch()}>
+          <Button variant="outline" size="sm" onClick={() => { refetch(); refetchPools(); }}>
             <RefreshCw className="h-4 w-4" />
             Refresh
           </Button>
@@ -973,6 +981,9 @@ export function FactorDashboard() {
         <TabsContent value="pool-shares" className="mt-4">
           {renderPoolShareCards()}
         </TabsContent>
+
+
+
       </Tabs>
     </div>
   );
