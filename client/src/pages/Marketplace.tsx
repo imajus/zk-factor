@@ -35,6 +35,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useWallet } from "@/contexts/WalletContext";
 import { useTransaction } from "@/hooks/use-transaction";
 import { cn } from "@/lib/utils";
+import { formatAdvanceRate } from "@/lib/format";
 import { toast } from "sonner";
 import { PROGRAM_ID } from "@/lib/config";
 import {
@@ -178,11 +179,12 @@ export default function Marketplace() {
   });
 
   // ── invoice dialog computed values ────────────────────────────────
-  const advanceRateBps = advanceRateInput ? parseInt(advanceRateInput, 10) : 0;
+  const advanceRatePercent = advanceRateInput ? parseFloat(advanceRateInput) : 0;
+  const advanceRateBps = Math.round(advanceRatePercent * 100);
   const factorMinRate = selectedFactor?.min_advance_rate ?? 5000;
   const factorMaxRate = selectedFactor?.max_advance_rate ?? 9900;
   const advanceRateValid =
-    Number.isFinite(advanceRateBps) &&
+    Number.isFinite(advanceRatePercent) &&
     advanceRateBps >= factorMinRate &&
     advanceRateBps <= factorMaxRate;
 
@@ -215,11 +217,13 @@ export default function Marketplace() {
   const availableInvoicesForPool = submitInvoicePool ? invoiceRecords : [];
 
   // ── pool submit dialog computed values ────────────────────────────
-  const submitRateBps = submitInvoiceRate ? parseInt(submitInvoiceRate, 10) : 0;
+  // submitInvoiceRate stores a percentage string (e.g. "75" for 75%)
+  const submitRatePercent = submitInvoiceRate ? parseFloat(submitInvoiceRate) : 0;
+  const submitRateBps = Math.round(submitRatePercent * 100);
   const submitRateValid =
-    Number.isFinite(submitRateBps) &&
-    submitRateBps >= 5000 &&
-    submitRateBps <= 9900;
+    Number.isFinite(submitRatePercent) &&
+    submitRatePercent >= 50 &&
+    submitRatePercent <= 99;
 
   const submitInvoiceRecord = availableInvoicesForPool.find(
     (r) => getInvoiceSelectionId(r) === submitInvoiceSelectedId,
@@ -396,9 +400,7 @@ export default function Marketplace() {
     if (!submitInvoicePool || !submitInvoiceRecord || !submitRateValid) return;
     if (!submitRateInRange) {
       toast.error(
-        `Advance rate ${(submitRateBps / 100).toFixed(1)}% is outside pool range ${
-          submitInvoicePool.meta.minAdvanceRate / 100
-        }%-${submitInvoicePool.meta.maxAdvanceRate / 100}%`,
+        `Advance rate ${formatAdvanceRate(submitRateBps)} is outside pool range ${formatAdvanceRate(submitInvoicePool.meta.minAdvanceRate)}–${formatAdvanceRate(submitInvoicePool.meta.maxAdvanceRate)}`,
       );
       return;
     }
@@ -809,15 +811,15 @@ export default function Marketplace() {
                               </div>
                               <div className="space-y-2">
                                 <Label>
-                                  Advance Rate (bps,{" "}
-                                  {selectedFactor?.min_advance_rate ?? 5000}–
-                                  {selectedFactor?.max_advance_rate ?? 9900})
+                                  Advance Rate (%, {formatAdvanceRate(factorMinRate)}–
+                                  {formatAdvanceRate(factorMaxRate)})
                                 </Label>
                                 <Input
                                   type="number"
-                                  placeholder={`e.g. ${selectedFactor?.max_advance_rate ?? 9000}`}
-                                  min={selectedFactor?.min_advance_rate ?? 5000}
-                                  max={selectedFactor?.max_advance_rate ?? 9900}
+                                  placeholder={`e.g. ${(factorMaxRate / 100).toFixed(0)}`}
+                                  min={factorMinRate / 100}
+                                  max={factorMaxRate / 100}
+                                  step="0.01"
                                   value={advanceRateInput}
                                   onChange={(e) =>
                                     setAdvanceRateInput(e.target.value)
@@ -833,8 +835,8 @@ export default function Marketplace() {
                                     )}
                                   >
                                     {advanceRateValid
-                                      ? `${(advanceRateBps / 100).toFixed(2)}% advance`
-                                      : `Must be between ${factorMinRate} and ${factorMaxRate} bps`}
+                                      ? `${formatAdvanceRate(advanceRateBps)} advance`
+                                      : `Must be between ${formatAdvanceRate(factorMinRate)} and ${formatAdvanceRate(factorMaxRate)}`}
                                   </p>
                                 )}
                               </div>
@@ -949,36 +951,25 @@ export default function Marketplace() {
               <div className="space-y-2">
                 <Label>
                   Advance Rate (%) — must be within pool range (
-                  {submitInvoicePool?.meta.minAdvanceRate / 100}%-
-                  {submitInvoicePool?.meta.maxAdvanceRate / 100}%)
+                  {formatAdvanceRate(submitInvoicePool.meta.minAdvanceRate)}–
+                  {formatAdvanceRate(submitInvoicePool.meta.maxAdvanceRate)})
                 </Label>
                 <Input
                   type="number"
-                  placeholder="e.g. 75 for 75%"
+                  placeholder="e.g. 75"
                   min="50"
                   max="99"
-                  value={
-                    submitInvoiceRate
-                      ? String(Math.floor(Number(submitInvoiceRate) / 100))
-                      : ""
-                  }
-                  onChange={(e) => {
-                    if (e.target.value === "") {
-                      setSubmitInvoiceRate("");
-                      return;
-                    }
-                    const percent = Number(e.target.value);
-                    const bps = percent * 100;
-                    if (!isNaN(bps)) setSubmitInvoiceRate(bps.toString());
-                  }}
+                  step="0.01"
+                  value={submitInvoiceRate}
+                  onChange={(e) => setSubmitInvoiceRate(e.target.value)}
                 />
                 {submitInvoiceRecord &&
                   submitRateValid &&
                   !submitRateInRange && (
                     <p className="text-xs text-destructive">
-                      Rate {submitRateBps / 100}% is outside pool range (
-                      {submitInvoicePool?.meta.minAdvanceRate / 100}%-
-                      {submitInvoicePool?.meta.maxAdvanceRate / 100}%)
+                      Rate {formatAdvanceRate(submitRateBps)} is outside pool range (
+                      {formatAdvanceRate(submitInvoicePool.meta.minAdvanceRate)}–
+                      {formatAdvanceRate(submitInvoicePool.meta.maxAdvanceRate)})
                     </p>
                   )}
                 {submitInvoiceRecord &&

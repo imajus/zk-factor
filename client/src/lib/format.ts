@@ -33,3 +33,8 @@ export function getDaysUntilDue(date: Date): number {
   const diff = date.getTime() - now.getTime();
   return Math.ceil(diff / (1000 * 60 * 60 * 24));
 }
+
+/** Converts a basis-point advance rate (e.g. 7000) to a display string like "70.00%". */
+export function formatAdvanceRate(bps: number): string {
+  return `${(bps / 100).toFixed(2)}%`;
+}

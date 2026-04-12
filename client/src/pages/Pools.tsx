@@ -29,6 +29,7 @@ import { useWallet } from "@/contexts/WalletContext";
 import { useTransaction } from "@/hooks/use-transaction";
 import { toast } from "sonner";
 import { PROGRAM_ID } from "@/lib/config";
+import { formatAdvanceRate } from "@/lib/format";
 import {
   buildCreateOwnerlessPoolInputs,
   computePoolStats,
@@ -498,8 +499,8 @@ export default function Pools() {
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Rate range</span>
                     <span className="font-mono">
-                      {pool.meta.minAdvanceRate / 100}% -{" "}
-                      {pool.meta.maxAdvanceRate / 100}%
+                      {formatAdvanceRate(pool.meta.minAdvanceRate)} –{" "}
+                      {formatAdvanceRate(pool.meta.maxAdvanceRate)}
                     </span>
                   </div>
                   <div className="flex justify-between">
